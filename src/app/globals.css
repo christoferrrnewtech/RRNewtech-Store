@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+/*
+  R&R Newtech Dental — brand system (Tailwind v4 CSS config).
+  Aligned to the R&R Brand Manual: Primary Blue #2D3791 as the brand/action color, Charcoal
+  #151515 for text, Clinical White surfaces, deep brand-blue for dark sections, and a warm amber
+  reserved for SALE/savings badges only. Typeface is Kumbh Sans (manual's digital typeface).
+  No hardcoded hex in components — use these tokens everywhere.
+*/
+@theme {
+  /* Surfaces */
+  --color-bg: #f7f8fc;        /* page base — soft off-white so white cards read as raised */
+  --color-surface: #ffffff;   /* cards — Clinical White */
+  --color-surface-2: #eef0f9; /* blue-tinted fills, selected chips */
+  --color-elevated: #f0f2f9;  /* hover surface on light */
+
+  /* Dark surfaces (footer, emphasis bands, hero) — deep brand blue */
+  --color-ink: #1d2460;       /* Blue Dark — footer / dark sections */
+  --color-card-dark: #252d78; /* cards on dark */
+
+  /* Text — Charcoal per manual */
+  --color-fg: #151515;        /* primary text on light */
+  --color-muted: #5a5f6e;     /* secondary text */
+  --color-muted-light: #8a8f9c;
+
+  /* Borders / hairlines — blue-grey tint */
+  --color-line: #e2e4ec;
+  --color-line-strong: #cbd0dd;
+
+  /* Blue brand scale — anchored on Primary Blue #2D3791 */
+  --color-brand-50: #eef0f9;
+  --color-brand-100: #dadef2;
+  --color-brand-200: #b6bde6;
+  --color-brand-300: #8b95d4; /* light accents on dark hero */
+  --color-brand-400: #5c68bd;
+  --color-brand-500: #3d49a6;
+  --color-brand-600: #2d3791; /* PRIMARY — Primary Blue, white text ≈ 8:1 ✓ */
+  --color-brand-700: #252d78; /* primary hover */
+  --color-brand-800: #1d2460; /* Blue Dark */
+  --color-brand-900: #151a45;
+
+  /* Amber accent — SALE / savings badges only, never decorative */
+  --color-accent: #d97706;
+  --color-accent-light: #fef3e2;
+
+  /* Status — functional only */
+  --color-warn: #d97706;
+  --color-danger: #dc2626;
+  --color-success: #059669;
+
+  --font-sans:
+    var(--font-kumbh), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display:
+    var(--font-kumbh), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: light;
+  background: var(--color-bg);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Form controls inherit the light scheme (native selects, autofill, etc.) */
+input,
+select,
+textarea {
+  color-scheme: light;
+}
+
+/* Visible, on-brand focus ring for keyboard users */
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
