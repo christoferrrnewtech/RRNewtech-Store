@@ -4,9 +4,9 @@ import { ShopControls } from "@/components/shop/ShopControls";
 import { ShopBanner } from "@/components/shop/ShopBanner";
 import { CategoryCircles } from "@/components/shop/CategoryCircles";
 import { DigitalDentistryPromo } from "@/components/home/DigitalDentistryPromo";
+import { BrandShowcase } from "@/components/home/BrandShowcase";
 import {
   CATEGORY_MAP,
-  BRANDS,
   getAllProducts,
   brandSlug,
   searchProducts,
@@ -14,7 +14,8 @@ import {
   type CategorySlug,
   type SortKey,
 } from "@/lib/products";
-import { SITE } from "@/lib/constants";
+import { getBrandBySlug } from "@/lib/content";
+import { SECTIONS, SITE } from "@/lib/constants";
 
 const VALID_CATEGORIES = new Set(Object.keys(CATEGORY_MAP));
 const VALID_SORTS = new Set<SortKey>([
@@ -43,7 +44,7 @@ export default async function HomePage({
   const activeSort: SortKey =
     sort && VALID_SORTS.has(sort as SortKey) ? (sort as SortKey) : "featured";
   const query = q?.trim() ?? "";
-  const activeBrand = brand ? BRANDS.find((b) => b.slug === brand) : undefined;
+  const activeBrand = brand ? getBrandBySlug(brand) : undefined;
 
   // Apply filters in sequence (AND): category → brand → keyword search.
   let list = getAllProducts();
@@ -51,6 +52,9 @@ export default async function HomePage({
   if (activeBrand) list = list.filter((p) => brandSlug(p.brand) === activeBrand.slug);
   if (query) list = searchProducts(list, query);
   const products = sortProducts(list, activeSort);
+
+  // Merchandising sections only belong on the plain landing view, not on a filtered result set.
+  const isUnfiltered = activeCategory === "all" && !query && !activeBrand;
 
   const heading = query
     ? `Results for “${query}”`
@@ -71,45 +75,50 @@ export default async function HomePage({
     <>
       <ShopBanner />
 
-      <CategoryCircles activeCategory={activeCategory} />
+      {SECTIONS.categoryCircles && <CategoryCircles activeCategory={activeCategory} />}
 
-      {activeCategory === "all" && !query && !activeBrand && <DigitalDentistryPromo />}
+      {isUnfiltered && <BrandShowcase />}
 
-      <section id="catalog" className="scroll-mt-24">
-        <Container className="py-12">
-          <header className="mb-6">
-            <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
-              {heading}
-            </h2>
-            <p className="mt-2 max-w-2xl text-muted">{blurb}</p>
-          </header>
+      {isUnfiltered && <DigitalDentistryPromo />}
 
-          <ShopControls activeSort={activeSort} />
+      {/* A filtered/search view always shows its results — the flag only hides the plain catalog. */}
+      {(SECTIONS.allProducts || !isUnfiltered) && (
+        <section id="catalog" className="scroll-mt-24">
+          <Container className="py-12">
+            <header className="mb-6">
+              <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
+                {heading}
+              </h2>
+              <p className="mt-2 max-w-2xl text-muted">{blurb}</p>
+            </header>
 
-          <p className="mt-5 text-sm text-muted">
-            {products.length} product{products.length === 1 ? "" : "s"}
-          </p>
+            <ShopControls activeSort={activeSort} />
 
-          {products.length === 0 ? (
-            <p className="mt-10 text-muted">
-              {query
-                ? `No products match “${query}”. Try a different keyword.`
-                : "No products in this selection yet — check back soon."}
+            <p className="mt-5 text-sm text-muted">
+              {products.length} product{products.length === 1 ? "" : "s"}
             </p>
-          ) : (
-            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {products.map((p) => (
-                <ProductCard key={p.slug} product={p} />
-              ))}
-            </div>
-          )}
 
-          <p className="mt-12 text-xs text-muted-light">
-            Prices are in Philippine pesos. Availability and lead times confirmed at order.{" "}
-            Questions? Email {SITE.email}.
-          </p>
-        </Container>
-      </section>
+            {products.length === 0 ? (
+              <p className="mt-10 text-muted">
+                {query
+                  ? `No products match “${query}”. Try a different keyword.`
+                  : "No products in this selection yet — check back soon."}
+              </p>
+            ) : (
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                {products.map((p) => (
+                  <ProductCard key={p.slug} product={p} />
+                ))}
+              </div>
+            )}
+
+            <p className="mt-12 text-xs text-muted-light">
+              Prices are in Philippine pesos. Availability and lead times confirmed at order.{" "}
+              Questions? Email {SITE.email}.
+            </p>
+          </Container>
+        </section>
+      )}
     </>
   );
 }

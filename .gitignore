@@ -30,3 +30,7 @@ next-env.d.ts
 
 # vercel
 .vercel
+
+# admin image uploads (local content, not source)
+/public/uploads/*
+!/public/uploads/.gitkeep

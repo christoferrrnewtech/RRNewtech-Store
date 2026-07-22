@@ -3,25 +3,41 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { AddToCartButton } from "@/components/shop/AddToCartButton";
 import { CATEGORY_MAP, productImageUrl, type Product } from "@/lib/products";
+import { productBrandLogo } from "@/lib/content";
 import { discountPercent, formatPHP } from "@/lib/format";
 
 export function ProductCard({ product }: { product: Product }) {
   const off = discountPercent(product.price, product.compareAtPrice);
   const category = CATEGORY_MAP[product.category];
+  // Products with no photo yet show the brand wordmark on a white plate instead.
+  const logo = productBrandLogo(product);
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface transition-shadow hover:shadow-lg">
       <Link
         href={`/products/${product.slug}`}
-        className="relative block aspect-square overflow-hidden bg-elevated"
+        className={[
+          "relative block aspect-square overflow-hidden",
+          logo ? "bg-white" : "bg-elevated",
+        ].join(" ")}
       >
-        <Image
-          src={productImageUrl(product, 600)}
-          alt={product.name}
-          fill
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px"
-          className="object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+        {logo ? (
+          <Image
+            src={logo}
+            alt={product.brand}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px"
+            className="object-contain p-6 transition-transform duration-300 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <Image
+            src={productImageUrl(product, 600)}
+            alt={product.name}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        )}
         <div className="absolute left-3 top-3 flex flex-col gap-1.5">
           {off && <Badge tone="sale">-{off}%</Badge>}
           {!product.inStock && <Badge tone="muted">Out of stock</Badge>}
@@ -60,7 +76,7 @@ export function ProductCard({ product }: { product: Product }) {
             unit: product.unit,
             sku: product.sku,
             category: category.name,
-            image: productImageUrl(product, 300),
+            image: logo ?? productImageUrl(product, 300),
           }}
         />
       </div>

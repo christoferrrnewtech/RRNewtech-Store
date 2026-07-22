@@ -8,13 +8,13 @@ import { Container } from "@/components/ui/Container";
 import { CartButton } from "@/components/cart/CartButton";
 import { SearchBar } from "@/components/layout/SearchBar";
 import { CategoryMenu } from "@/components/layout/CategoryMenu";
-import { BrandMenu } from "@/components/layout/BrandMenu";
-import { NAV_LINKS, SITE, FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
+import { BrandMenu, type BrandLink } from "@/components/layout/BrandMenu";
+import { NAV_LINKS, SECTIONS, SITE, FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 import { formatPHP } from "@/lib/format";
 
 type MenuKey = "category" | "brand";
 
-export function SiteHeader() {
+export function SiteHeader({ brands }: { brands: BrandLink[] }) {
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSection, setMobileSection] = useState<MenuKey | null>(null);
@@ -84,12 +84,14 @@ export function SiteHeader() {
                   {link.label}
                 </Link>
               ))}
-              <MenuTrigger
-                label="Category"
-                menuKey="category"
-                activeMenu={activeMenu}
-                setActiveMenu={setActiveMenu}
-              />
+              {SECTIONS.categoryNav && (
+                <MenuTrigger
+                  label="Category"
+                  menuKey="category"
+                  activeMenu={activeMenu}
+                  setActiveMenu={setActiveMenu}
+                />
+              )}
               <MenuTrigger
                 label="Brand"
                 menuKey="brand"
@@ -140,7 +142,7 @@ export function SiteHeader() {
               {activeMenu === "category" ? (
                 <CategoryMenu onNavigate={closeAll} />
               ) : (
-                <BrandMenu onNavigate={closeAll} />
+                <BrandMenu brands={brands} onNavigate={closeAll} />
               )}
             </Container>
           </div>
@@ -163,22 +165,24 @@ export function SiteHeader() {
                 </Link>
               ))}
 
-              <MobileAccordion
-                label="Category"
-                open={mobileSection === "category"}
-                onToggle={() =>
-                  setMobileSection((s) => (s === "category" ? null : "category"))
-                }
-              >
-                <CategoryMenu onNavigate={closeAll} />
-              </MobileAccordion>
+              {SECTIONS.categoryNav && (
+                <MobileAccordion
+                  label="Category"
+                  open={mobileSection === "category"}
+                  onToggle={() =>
+                    setMobileSection((s) => (s === "category" ? null : "category"))
+                  }
+                >
+                  <CategoryMenu onNavigate={closeAll} />
+                </MobileAccordion>
+              )}
 
               <MobileAccordion
                 label="Brand"
                 open={mobileSection === "brand"}
                 onToggle={() => setMobileSection((s) => (s === "brand" ? null : "brand"))}
               >
-                <BrandMenu onNavigate={closeAll} />
+                <BrandMenu brands={brands} onNavigate={closeAll} />
               </MobileAccordion>
 
               <Link

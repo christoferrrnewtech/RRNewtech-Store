@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SITE } from "@/lib/constants";
 import { CATEGORIES, getAllProducts } from "@/lib/products";
+import { getBrands } from "@/lib/content";
 
 /**
  * Dynamic sitemap — regenerates from the catalog so every product & category is discoverable.
@@ -12,6 +13,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: SITE.url, lastModified: now, changeFrequency: "daily", priority: 1.0 },
     { url: `${SITE.url}/discover`, lastModified: now, changeFrequency: "weekly", priority: 0.6 },
+    { url: `${SITE.url}/brands`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE.url}/about`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE.url}/contact`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE.url}/faq`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
@@ -27,6 +29,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
+  const brandRoutes: MetadataRoute.Sitemap = getBrands().map((b) => ({
+    url: `${SITE.url}/brands/${b.slug}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+
   const productRoutes: MetadataRoute.Sitemap = getAllProducts().map((p) => ({
     url: `${SITE.url}/products/${p.slug}`,
     lastModified: now,
@@ -34,5 +43,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
-  return [...staticRoutes, ...categoryRoutes, ...productRoutes];
+  return [...staticRoutes, ...categoryRoutes, ...brandRoutes, ...productRoutes];
 }

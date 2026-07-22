@@ -14,6 +14,7 @@ import {
   getRelatedProducts,
   productImageUrl,
 } from "@/lib/products";
+import { productBrandLogo } from "@/lib/content";
 import { discountPercent, formatPHP } from "@/lib/format";
 
 // Pre-render every product page at build time (ISR-ready, fully indexable HTML).
@@ -56,6 +57,8 @@ export default async function ProductPage({
   const category = CATEGORY_MAP[product.category];
   const off = discountPercent(product.price, product.compareAtPrice);
   const related = getRelatedProducts(product, 4);
+  // Products with no photo yet show the brand wordmark on a white plate instead.
+  const logo = productBrandLogo(product);
 
   return (
     <>
@@ -71,15 +74,31 @@ export default async function ProductPage({
 
         <div className="grid gap-10 lg:grid-cols-2">
           {/* Gallery */}
-          <div className="relative aspect-square overflow-hidden rounded-2xl border border-line bg-surface">
-            <Image
-              src={productImageUrl(product, 900)}
-              alt={product.name}
-              fill
-              sizes="(max-width: 1024px) 100vw, 500px"
-              className="object-cover"
-              priority
-            />
+          <div
+            className={[
+              "relative aspect-square overflow-hidden rounded-2xl border border-line",
+              logo ? "bg-white" : "bg-surface",
+            ].join(" ")}
+          >
+            {logo ? (
+              <Image
+                src={logo}
+                alt={product.brand}
+                fill
+                sizes="(max-width: 1024px) 100vw, 500px"
+                className="object-contain p-12"
+                priority
+              />
+            ) : (
+              <Image
+                src={productImageUrl(product, 900)}
+                alt={product.name}
+                fill
+                sizes="(max-width: 1024px) 100vw, 500px"
+                className="object-cover"
+                priority
+              />
+            )}
             <div className="absolute left-4 top-4 flex flex-col gap-2">
               {off && <Badge tone="sale">-{off}% OFF</Badge>}
               {!product.inStock && <Badge tone="muted">Out of stock</Badge>}
@@ -132,7 +151,7 @@ export default async function ProductPage({
                   unit: product.unit,
                   sku: product.sku,
                   category: category.name,
-                  image: productImageUrl(product, 300),
+                  image: logo ?? productImageUrl(product, 300),
                 }}
               />
             </div>

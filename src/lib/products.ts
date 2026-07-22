@@ -98,6 +98,11 @@ export type Product = {
   featured?: boolean;
   /** Deterministic seed for the placeholder image (picsum). Replace with real images later. */
   imageSeed: string;
+  /**
+   * No product photo exists yet: show the brand wordmark on a white plate instead of the
+   * picsum placeholder. Drop the flag once a real image is available.
+   */
+  useBrandLogo?: boolean;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -492,6 +497,7 @@ export const PRODUCTS: Product[] = [
     sku: "DIG-IOS-ELF",
     inStock: true,
     imageSeed: "intraoral-scanner-elf",
+    useBrandLogo: true,
   },
   {
     slug: "intraoral-scanner-elite",
@@ -509,6 +515,7 @@ export const PRODUCTS: Product[] = [
     sku: "DIG-IOS-ELITE",
     inStock: true,
     imageSeed: "intraoral-scanner-elite",
+    useBrandLogo: true,
   },
   {
     slug: "intraoral-scanner-lync-pro",
@@ -527,6 +534,7 @@ export const PRODUCTS: Product[] = [
     sku: "DIG-IOS-LYNC",
     inStock: true,
     imageSeed: "intraoral-scanner-lync",
+    useBrandLogo: true,
   },
   {
     slug: "face-scanner-metismile",
@@ -544,6 +552,7 @@ export const PRODUCTS: Product[] = [
     sku: "DIG-FACE-METI",
     inStock: true,
     imageSeed: "face-scanner-metismile",
+    useBrandLogo: true,
   },
 ];
 
@@ -570,22 +579,6 @@ export function brandSlug(brand: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
-
-/**
- * Canonical brand list shown in the Brand menu & validated for `?brand=` filtering.
- * Sorted A–Z. All brands appear even if they currently have no products.
- */
-export const BRANDS: { name: string; slug: string }[] = [
-  "Curaprox",
-  "Herculite",
-  "Kavoo",
-  "Kerr",
-  "Lasotronix",
-  "Philips Zoom",
-  "Rundeer",
-  "SOL Laser",
-  "Sprintray",
-].map((name) => ({ name, slug: brandSlug(name) }));
 
 /** Unique brands present in the catalog, sorted A–Z, with URL slugs. */
 export function getAllBrands(): { name: string; slug: string }[] {

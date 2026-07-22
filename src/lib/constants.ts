@@ -31,6 +31,17 @@ export const SITE = {
 export const FREE_SHIPPING_THRESHOLD = 3000;
 
 /**
+ * Temporary visibility switches for the soft launch — the landing page is cut back to
+ * banner → Our Brands → Digital Dentistry while the catalog is still being built out.
+ * Flip a flag to true to bring that section back; the components themselves are untouched.
+ */
+export const SECTIONS = {
+  categoryCircles: false, // "Shop by category" row under the banner
+  categoryNav: false, // "Category" mega-menu in the header (desktop + mobile)
+  allProducts: false, // "All Products" catalog on the *unfiltered* landing view
+} as const;
+
+/**
  * Primary top-nav links (plain links). "Category" and "Brand" are mega-menu triggers handled
  * in SiteHeader, not listed here. About/Contact/FAQ live in the footer.
  */

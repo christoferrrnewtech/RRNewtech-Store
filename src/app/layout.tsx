@@ -1,10 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Kumbh_Sans } from "next/font/google";
 import { SITE } from "@/lib/constants";
-import { CartProvider } from "@/lib/cart";
-import { SiteHeader } from "@/components/layout/SiteHeader";
-import { SiteFooter } from "@/components/layout/SiteFooter";
-import { CartDrawer } from "@/components/cart/CartDrawer";
 import { MetaPixel } from "@/components/analytics/MetaPixel";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { StructuredData } from "@/components/analytics/StructuredData";
@@ -63,6 +59,10 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+/**
+ * Root layout: document shell only. The storefront chrome (header, footer, cart) lives in
+ * src/app/(store)/layout.tsx so that the admin route group can opt out of it entirely.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -72,22 +72,7 @@ export default function RootLayout({
         <MetaPixel />
         <GoogleAnalytics />
         <StructuredData />
-        <a
-          href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-white"
-        >
-          Skip to content
-        </a>
-        <CartProvider>
-          <div className="flex min-h-full flex-col">
-            <SiteHeader />
-            <main id="main" className="flex-1">
-              {children}
-            </main>
-            <SiteFooter />
-          </div>
-          <CartDrawer />
-        </CartProvider>
+        {children}
       </body>
     </html>
   );
