@@ -8,10 +8,14 @@ import { getBrands } from "@/lib/content";
  * Storefront chrome. Brands are read here (server) and passed into the client header, since the
  * content store touches the filesystem and can't be imported from a client component.
  */
-export default function StoreLayout({
+export default async function StoreLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const brands = getBrands().map((b) => ({ slug: b.slug, name: b.name }));
+  // The header's brand menu. If Firestore is unreachable (e.g. a build with no credentials), fall
+  // back to an empty menu rather than failing every page that renders this shared chrome.
+  const brands = await getBrands()
+    .then((list) => list.map((b) => ({ slug: b.slug, name: b.name })))
+    .catch(() => []);
 
   return (
     <>

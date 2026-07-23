@@ -11,12 +11,17 @@ import {
   getFeaturedProductsForBrand,
   youtubeEmbedId,
 } from "@/lib/content";
-import { getProductsByBrand } from "@/lib/products";
+import { getProductsByBrand } from "@/lib/catalog";
 import { SITE } from "@/lib/constants";
 
-// Pre-render every published brand page at build time (indexable HTML, no runtime data fetch).
-export function generateStaticParams() {
-  return getBrands().map((b) => ({ slug: b.slug }));
+// Pre-render every published brand page at build time (indexable HTML). Falls back to on-demand
+// rendering if Firestore isn't reachable at build (e.g. before credentials are configured).
+export async function generateStaticParams() {
+  try {
+    return (await getBrands()).map((b) => ({ slug: b.slug }));
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({
@@ -25,7 +30,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const brand = getBrandBySlug(slug);
+  const brand = await getBrandBySlug(slug);
   if (!brand) return { title: "Brand not found" };
 
   const title = `${brand.name} — Dental Products in the Philippines`;
@@ -53,11 +58,11 @@ export default async function BrandPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const brand = getBrandBySlug(slug);
+  const brand = await getBrandBySlug(slug);
   if (!brand) notFound();
 
-  const featured = getFeaturedProductsForBrand(brand);
-  const catalog = getProductsByBrand(brand.slug);
+  const featured = await getFeaturedProductsForBrand(brand);
+  const catalog = await getProductsByBrand(brand.slug);
   const videoId = youtubeEmbedId(brand.youtubeUrl);
 
   return (

@@ -40,7 +40,7 @@ export function UserRow({
   user,
   brands,
 }: {
-  user: { id: string; name: string; email: string; brandSlugs: string[] };
+  user: { uid: string; name: string; email: string; brandSlugs: string[] };
   brands: BrandOption[];
 }) {
   const [state, action] = useActionState<ActionState, FormData>(updateUserBrandsAction, {});
@@ -53,13 +53,13 @@ export function UserRow({
           <p className="text-sm text-muted">{user.email}</p>
         </div>
         <form action={deleteUserAction}>
-          <input type="hidden" name="id" value={user.id} />
+          <input type="hidden" name="uid" value={user.uid} />
           <SubmitButton variant="danger">Remove</SubmitButton>
         </form>
       </div>
 
       <form action={action} className="mt-5 space-y-4 border-t border-line pt-5">
-        <input type="hidden" name="id" value={user.id} />
+        <input type="hidden" name="uid" value={user.uid} />
         <Field label="Brands this person can edit">
           <BrandCheckboxes brands={brands} selected={user.brandSlugs} />
         </Field>
@@ -86,7 +86,7 @@ export function NewUserForm({ brands }: { brands: BrandOption[] }) {
         <Field label="Email">
           <TextInput name="email" type="email" required />
         </Field>
-        <Field label="Password" hint="At least 8 characters. Share it with them directly — it's stored hashed and can't be read back.">
+        <Field label="Password" hint="At least 8 characters. Share it with them directly — the account is created in Firebase Authentication.">
           <TextInput name="password" type="password" required minLength={8} />
         </Field>
         <Field label="Brands this person can edit">

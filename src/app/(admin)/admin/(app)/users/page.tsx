@@ -8,8 +8,8 @@ export const metadata: Metadata = { title: "Marketing team" };
 export default async function AdminUsersPage() {
   await requireAdmin();
 
-  const users = getUsers();
-  const brands = getAllBrandsForAdmin().map((b) => ({ slug: b.slug, name: b.name }));
+  const users = await getUsers();
+  const brands = (await getAllBrandsForAdmin()).map((b) => ({ slug: b.slug, name: b.name }));
 
   return (
     <div className="max-w-3xl">
@@ -29,9 +29,9 @@ export default async function AdminUsersPage() {
         <ul className="mt-8 space-y-4">
           {users.map((u) => (
             <UserRow
-              key={u.id}
+              key={u.uid}
               user={{
-                id: u.id,
+                uid: u.uid,
                 name: u.name,
                 email: u.email,
                 brandSlugs: u.brandSlugs,

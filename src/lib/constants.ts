@@ -31,6 +31,25 @@ export const SITE = {
 export const FREE_SHIPPING_THRESHOLD = 3000;
 
 /**
+ * Brand grouping — drives the category tag chip on each brand card and the filter chips in the
+ * "Shop by Brand" section. Client-safe (no fs), so both the client grid and content.ts import it.
+ * `label` is the filter-chip text; `tag` is the shorter badge shown on the card.
+ */
+export type BrandGroup = "equipment" | "consumables" | "laser-whitening";
+
+export const BRAND_GROUPS: { key: BrandGroup; label: string; tag: string }[] = [
+  { key: "equipment", label: "Equipment & Devices", tag: "Equipment" },
+  { key: "consumables", label: "Consumables & Materials", tag: "Consumables" },
+  { key: "laser-whitening", label: "Laser & Whitening", tag: "Laser & Whitening" },
+];
+
+export const BRAND_GROUP_MAP: Record<BrandGroup, { label: string; tag: string }> =
+  Object.fromEntries(BRAND_GROUPS.map((g) => [g.key, { label: g.label, tag: g.tag }])) as Record<
+    BrandGroup,
+    { label: string; tag: string }
+  >;
+
+/**
  * Temporary visibility switches for the soft launch — the landing page is cut back to
  * banner → Our Brands → Digital Dentistry while the catalog is still being built out.
  * Flip a flag to true to bring that section back; the components themselves are untouched.

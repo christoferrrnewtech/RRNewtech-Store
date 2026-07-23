@@ -7,16 +7,29 @@
  * directly callable HTTP endpoints — the layout guard in (app)/layout.tsx does not protect them.
  * Never remove a `requireUser` / `requireAdmin` / `canEditBrand` call from an action because
  * "the UI already hides it".
+ *
+ * Persistence is Firestore (+ Firebase Auth for users, Firebase Storage for images) via the
+ * helpers in `@/lib/content`, `@/lib/auth`, and `@/lib/firebase`.
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
-  getContent,
-  updateContent,
+  addBanner,
+  updateBanner,
+  deleteBanner,
+  reorderBanners,
+  brandExists,
+  createBrand,
+  saveBrand,
+  deleteBrand,
+  getBrandForAdmin,
+  getUserByEmail,
+  upsertAdminUser,
+  updateUserBrands,
+  deleteAdminUserDoc,
+  nextBrandOrder,
   type Brand,
   type GalleryImage,
 } from "@/lib/content";
@@ -25,15 +38,17 @@ import {
   canEditBrand,
   createSession,
   destroySession,
-  hashPassword,
+  createFirebaseUser,
+  deleteFirebaseUser,
   requireAdmin,
   requireUser,
 } from "@/lib/auth";
+import { getBucket } from "@/lib/firebase";
 import { brandSlug } from "@/lib/products";
+import { BRAND_GROUPS } from "@/lib/constants";
 
 export type ActionState = { ok?: string; error?: string };
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 // SVG is deliberately excluded — it can carry script and would be served from our own origin.
 const ALLOWED_TYPES: Record<string, string> = {
@@ -51,8 +66,8 @@ function revalidateStorefront(slug?: string) {
 }
 
 /**
- * Persist an uploaded image under public/uploads and return its public path.
- * Returns undefined when no file was supplied (an unchanged image field).
+ * Upload an image to Firebase Storage and return its public URL.
+ * Returns "" when no file was supplied (an unchanged image field).
  */
 async function storeUpload(file: FormDataEntryValue | null, prefix: string): Promise<string> {
   if (!(file instanceof File) || file.size === 0) return "";
@@ -61,10 +76,15 @@ async function storeUpload(file: FormDataEntryValue | null, prefix: string): Pro
   if (!ext) throw new Error("Only PNG, JPG and WebP images are allowed.");
   if (file.size > MAX_UPLOAD_BYTES) throw new Error("Image must be 5 MB or smaller.");
 
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  const name = `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
-  fs.writeFileSync(path.join(UPLOAD_DIR, name), Buffer.from(await file.arrayBuffer()));
-  return `/uploads/${name}`;
+  const bucket = getBucket();
+  const name = `uploads/${prefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
+  const blob = bucket.file(name);
+  await blob.save(Buffer.from(await file.arrayBuffer()), {
+    contentType: file.type,
+    resumable: false,
+  });
+  await blob.makePublic();
+  return `https://storage.googleapis.com/${bucket.name}/${name}`;
 }
 
 function text(form: FormData, key: string): string {
@@ -89,7 +109,12 @@ export async function loginAction(
   _prev: ActionState,
   form: FormData,
 ): Promise<ActionState> {
-  const user = authenticate(text(form, "email"), String(form.get("password") ?? ""));
+  let user;
+  try {
+    user = await authenticate(text(form, "email"), String(form.get("password") ?? ""));
+  } catch {
+    return { error: "Sign-in is temporarily unavailable. Please try again." };
+  }
   if (!user) return { error: "Incorrect email or password." };
   await createSession(user);
   redirect("/admin");
@@ -104,25 +129,61 @@ export async function logoutAction(): Promise<void> {
 // Banner (admin only)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function saveBannerAction(
+export async function addBannerAction(
   _prev: ActionState,
   form: FormData,
 ): Promise<ActionState> {
   await requireAdmin();
 
   try {
+    const image = await storeUpload(form.get("image"), "banner");
+    if (!image) return { error: "Choose an image for the banner." };
+    await addBanner({ image, alt: text(form, "alt"), href: text(form, "href") });
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not add the banner." };
+  }
+
+  revalidateStorefront();
+  return { ok: "Banner added." };
+}
+
+export async function updateBannerAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const id = text(form, "id");
+
+  try {
     const uploaded = await storeUpload(form.get("image"), "banner");
-    updateContent((draft) => {
-      if (uploaded) draft.banner.image = uploaded;
-      draft.banner.alt = text(form, "alt");
-      draft.banner.href = text(form, "href");
-    });
+    const patch: { alt: string; href: string; image?: string } = {
+      alt: text(form, "alt"),
+      href: text(form, "href"),
+    };
+    if (uploaded) patch.image = uploaded;
+    await updateBanner(id, patch);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not save the banner." };
   }
 
   revalidateStorefront();
   return { ok: "Banner saved." };
+}
+
+export async function deleteBannerAction(form: FormData): Promise<void> {
+  await requireAdmin();
+  await deleteBanner(text(form, "id"));
+  revalidateStorefront();
+}
+
+/**
+ * Set the carousel order to the given id sequence. Plain-arg action so the client can call it
+ * imperatively (drag-drop and the arrow buttons both submit the full desired order).
+ */
+export async function reorderBannersAction(ids: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderBanners(ids);
+  revalidateStorefront();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -140,7 +201,7 @@ export async function createBrandAction(
 
   const slug = brandSlug(name);
   if (!slug) return { error: "That name doesn't produce a usable URL." };
-  if (getContent().brands.some((b) => b.slug === slug)) {
+  if (await brandExists(slug)) {
     return { error: `A brand with the URL /brands/${slug} already exists.` };
   }
 
@@ -152,7 +213,8 @@ export async function createBrandAction(
       slug,
       name,
       status: "draft",
-      order: getContent().brands.length,
+      order: await nextBrandOrder(),
+      group: "consumables",
       tagline: "",
       blurb: "",
       logo: logo || "/brand/logo.png",
@@ -167,9 +229,7 @@ export async function createBrandAction(
         websiteUrl: "",
       },
     };
-    updateContent((draft) => {
-      draft.brands.push(brand);
-    });
+    await createBrand(brand);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not create the brand." };
   }
@@ -181,22 +241,14 @@ export async function createBrandAction(
 export async function deleteBrandAction(form: FormData): Promise<void> {
   await requireAdmin();
   const slug = text(form, "slug");
-
-  updateContent((draft) => {
-    draft.brands = draft.brands.filter((b) => b.slug !== slug);
-    // Drop the deleted brand from any marketing user's assignments.
-    for (const user of draft.users) {
-      user.brandSlugs = user.brandSlugs.filter((s) => s !== slug);
-    }
-  });
-
+  await deleteBrand(slug);
   revalidateStorefront(slug);
   redirect("/admin/brands");
 }
 
 /**
  * Every brand-section save funnels through here so the ownership check exists in exactly one
- * place. `apply` receives the brand draft and the submitted form.
+ * place. `apply` receives the brand object and the submitted form.
  */
 async function saveBrandSection(
   form: FormData,
@@ -209,18 +261,13 @@ async function saveBrandSection(
   if (!canEditBrand(user, slug)) {
     return { error: "You don't have access to this brand." };
   }
-  if (!getContent().brands.some((b) => b.slug === slug)) {
-    return { error: "That brand no longer exists." };
-  }
+
+  const brand = await getBrandForAdmin(slug);
+  if (!brand) return { error: "That brand no longer exists." };
 
   try {
-    const draft = structuredClone(getContent());
-    const brand = draft.brands.find((b) => b.slug === slug)!;
     await apply(brand, form);
-    updateContent((d) => {
-      const target = d.brands.findIndex((b) => b.slug === slug);
-      d.brands[target] = brand;
-    });
+    await saveBrand(brand);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not save changes." };
   }
@@ -273,6 +320,10 @@ export async function saveBrandAboutAction(_prev: ActionState, form: FormData) {
       brand.tagline = text(form, "tagline");
       brand.blurb = text(form, "blurb");
       brand.about = textList(form, "about");
+      const group = text(form, "group");
+      if (BRAND_GROUPS.some((g) => g.key === group)) {
+        brand.group = group as (typeof BRAND_GROUPS)[number]["key"];
+      }
     },
     "About section saved.",
   );
@@ -373,22 +424,16 @@ export async function createUserAction(
 
   if (!email || !name) return { error: "Name and email are required." };
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
-  if (getContent().users.some((u) => u.email.toLowerCase() === email)) {
+  if (await getUserByEmail(email)) {
     return { error: "That email already has an account." };
   }
 
-  const { passwordHash, salt } = hashPassword(password);
-  updateContent((draft) => {
-    draft.users.push({
-      id: crypto.randomUUID(),
-      email,
-      name,
-      role: "marketing",
-      passwordHash,
-      salt,
-      brandSlugs,
-    });
-  });
+  try {
+    const uid = await createFirebaseUser(email, password, name);
+    await upsertAdminUser({ uid, email, name, role: "marketing", brandSlugs });
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not create the user." };
+  }
 
   return { ok: `${name} can now sign in.` };
 }
@@ -398,25 +443,14 @@ export async function updateUserBrandsAction(
   form: FormData,
 ): Promise<ActionState> {
   await requireAdmin();
-
-  const id = text(form, "id");
-  const brandSlugs = form.getAll("brandSlugs").map(String);
-
-  updateContent((draft) => {
-    const user = draft.users.find((u) => u.id === id);
-    if (user) user.brandSlugs = brandSlugs;
-  });
-
+  await updateUserBrands(text(form, "uid"), form.getAll("brandSlugs").map(String));
   return { ok: "Brand access updated." };
 }
 
 export async function deleteUserAction(form: FormData): Promise<void> {
   await requireAdmin();
-  const id = text(form, "id");
-
-  updateContent((draft) => {
-    draft.users = draft.users.filter((u) => u.id !== id);
-  });
-
+  const uid = text(form, "uid");
+  await deleteFirebaseUser(uid).catch(() => {});
+  await deleteAdminUserDoc(uid);
   redirect("/admin/users");
 }

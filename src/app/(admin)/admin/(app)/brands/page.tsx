@@ -13,12 +13,12 @@ export default async function AdminBrandsPage() {
   const isAdmin = user.role === "admin";
 
   // A marketing user only ever sees the brands assigned to them.
-  const brands = getAllBrandsForAdmin().filter(
+  const brands = (await getAllBrandsForAdmin()).filter(
     (b) => isAdmin || user.brandSlugs.includes(b.slug),
   );
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">Brands</h1>
       <p className="mt-2 text-muted">
         {isAdmin
@@ -31,7 +31,7 @@ export default async function AdminBrandsPage() {
           No brands are assigned to your account yet. Ask an admin for access.
         </p>
       ) : (
-        <ul className="mt-8 grid gap-4 sm:grid-cols-2">
+        <ul className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {brands.map((b) => (
             <li
               key={b.slug}

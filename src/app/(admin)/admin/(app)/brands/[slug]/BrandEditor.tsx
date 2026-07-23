@@ -25,8 +25,8 @@ import {
   TextInput,
 } from "@/components/admin/Form";
 import type { Brand } from "@/lib/content";
-
-type ProductOption = { slug: string; name: string };
+import { BRAND_GROUPS } from "@/lib/constants";
+import type { ProductOption } from "./sections";
 
 /**
  * The brand page editor. One <form> per section, each bound to its own server action, so a
@@ -74,18 +74,20 @@ export function BrandEditor({
 
 /** Consistent section frame: number, title, blurb, body. */
 function Section({
+  id,
   step,
   title,
   hint,
   children,
 }: {
+  id: string;
   step: number | string;
   title: string;
   hint?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-line bg-surface p-6">
+    <section id={id} className="scroll-mt-6 rounded-2xl border border-line bg-surface p-6">
       <div className="mb-5 flex items-baseline gap-3">
         <span className="text-xs font-bold text-brand-600">{step}</span>
         <div>
@@ -104,6 +106,7 @@ function StatusSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandStatusAction, {});
   return (
     <Section
+      id="sec-visibility"
       step="—"
       title="Visibility"
       hint="Drafts are hidden everywhere on the storefront and the page returns 404."
@@ -130,7 +133,7 @@ function StatusSection({ brand }: { brand: Brand }) {
 function HeroSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandHeroAction, {});
   return (
-    <Section step="1" title="Hero banner" hint="Wide image across the top of the brand page. Optional.">
+    <Section id="sec-hero" step="1" title="Hero banner" hint="Wide image across the top of the brand page. Optional.">
       {brand.heroImage && (
         <div className="relative mb-4 aspect-[3/1] overflow-hidden rounded-xl border border-line bg-elevated">
           <Image src={brand.heroImage} alt="" fill sizes="640px" className="object-cover" />
@@ -158,7 +161,7 @@ function HeroSection({ brand }: { brand: Brand }) {
 function LogoSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandLogoAction, {});
   return (
-    <Section step="2" title="Brand logo" hint="Shown on the brand card, the brand page and product cards.">
+    <Section id="sec-logo" step="2" title="Brand logo" hint="Shown on the brand card, the brand page and product cards.">
       <div className="relative mb-4 aspect-[16/9] overflow-hidden rounded-xl border border-line bg-white">
         <Image src={brand.logo} alt={brand.name} fill sizes="640px" className="object-contain p-8" />
       </div>
@@ -177,7 +180,7 @@ function LogoSection({ brand }: { brand: Brand }) {
 function AboutSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandAboutAction, {});
   return (
-    <Section step="3" title="About the brand" hint="The name, headline and body copy for this brand.">
+    <Section id="sec-about" step="3" title="About the brand" hint="The name, headline and body copy for this brand.">
       <form action={action} className="space-y-5">
         <input type="hidden" name="slug" value={brand.slug} />
         <Field label="Brand name">
@@ -185,6 +188,19 @@ function AboutSection({ brand }: { brand: Brand }) {
         </Field>
         <Field label="Tagline" hint="One line on the brand card and hero — the reason a clinic cares.">
           <TextInput name="tagline" defaultValue={brand.tagline} />
+        </Field>
+        <Field label="Group" hint="Drives the category tag on the brand card and the Shop-by-Brand filters.">
+          <select
+            name="group"
+            defaultValue={brand.group}
+            className="rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+          >
+            {BRAND_GROUPS.map((g) => (
+              <option key={g.key} value={g.key}>
+                {g.label}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="Short blurb" hint="1–2 sentences under the hero. Also used as the page description in search results.">
           <TextArea name="blurb" rows={2} defaultValue={brand.blurb} />
@@ -208,6 +224,7 @@ function VideoSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandVideoAction, {});
   return (
     <Section
+      id="sec-video"
       step="4"
       title="Embedded YouTube video"
       hint="Paste any YouTube link. Leave empty to hide the section."
@@ -231,7 +248,7 @@ function VideoSection({ brand }: { brand: Brand }) {
 function GallerySection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandGalleryAction, {});
   return (
-    <Section step="5" title="Image gallery" hint="Product shots, clinic photos, before/afters.">
+    <Section id="sec-gallery" step="5" title="Image gallery" hint="Product shots, clinic photos, before/afters.">
       <form action={action} className="space-y-5">
         <input type="hidden" name="slug" value={brand.slug} />
 
@@ -284,29 +301,30 @@ function ProductsSection({
   const selected = new Set(brand.featuredProductSlugs);
 
   return (
-    <Section step="6" title="Featured products" hint="Which products appear on this brand's page.">
-      <form action={action} className="space-y-5">
+    <Section
+      id="sec-products"
+      step="6"
+      title="Featured products"
+      hint="Tick the products to showcase on this brand's page. They render in the Featured Products section."
+    >
+      <form action={action} className="space-y-6">
         <input type="hidden" name="slug" value={brand.slug} />
 
         {own.length > 0 && (
           <fieldset>
-            <legend className="text-sm font-semibold text-fg">{brand.name} products</legend>
-            <div className="mt-2 space-y-2">
-              {own.map((p) => (
-                <Checkbox key={p.slug} value={p.slug} label={p.name} checked={selected.has(p.slug)} />
-              ))}
-            </div>
+            <legend className="mb-3 text-sm font-semibold text-fg">
+              {brand.name} products ({own.length})
+            </legend>
+            <ProductGrid products={own} selected={selected} />
           </fieldset>
         )}
 
         <details className="rounded-xl border border-line bg-bg p-4">
           <summary className="cursor-pointer text-sm font-semibold text-fg">
-            Other brands&rsquo; products ({others.length})
+            Add products from other brands ({others.length})
           </summary>
-          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
-            {others.map((p) => (
-              <Checkbox key={p.slug} value={p.slug} label={p.name} checked={selected.has(p.slug)} />
-            ))}
+          <div className="mt-4">
+            <ProductGrid products={others} selected={selected} />
           </div>
         </details>
 
@@ -317,26 +335,38 @@ function ProductsSection({
   );
 }
 
-function Checkbox({
-  value,
-  label,
-  checked,
+/** Selectable product cards — the whole card is the label; checked cards get a brand-blue ring. */
+function ProductGrid({
+  products,
+  selected,
 }: {
-  value: string;
-  label: string;
-  checked: boolean;
+  products: ProductOption[];
+  selected: Set<string>;
 }) {
   return (
-    <label className="flex items-start gap-2.5 text-sm text-fg">
-      <input
-        type="checkbox"
-        name="productSlug"
-        value={value}
-        defaultChecked={checked}
-        className="mt-0.5"
-      />
-      {label}
-    </label>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      {products.map((p) => (
+        <label
+          key={p.slug}
+          className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-line bg-surface transition hover:border-brand-300 has-[:checked]:border-brand-600 has-[:checked]:ring-2 has-[:checked]:ring-brand-600/30"
+        >
+          <input
+            type="checkbox"
+            name="productSlug"
+            value={p.slug}
+            defaultChecked={selected.has(p.slug)}
+            className="peer absolute right-2 top-2 z-10 h-4 w-4"
+          />
+          <div className="relative aspect-square bg-white">
+            <Image src={p.image} alt="" fill sizes="160px" className="object-contain p-3" />
+          </div>
+          <div className="border-t border-line p-2.5">
+            <p className="line-clamp-2 text-xs font-medium leading-snug text-fg">{p.name}</p>
+            <p className="mt-1 text-xs font-semibold text-brand-700">{p.price}</p>
+          </div>
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -344,6 +374,7 @@ function ReasonsSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandReasonsAction, {});
   return (
     <Section
+      id="sec-reasons"
       step="7"
       title="Why choose this brand?"
       hint="Three works best. A row with an empty headline is dropped on save."
@@ -362,6 +393,7 @@ function CtaSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandCtaAction, {});
   return (
     <Section
+      id="sec-cta"
       step="8"
       title="Contact sales / book demo"
       hint="The closing block, plus the link to the manufacturer's own site."

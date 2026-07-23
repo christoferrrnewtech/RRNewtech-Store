@@ -1,13 +1,15 @@
 import type { MetadataRoute } from "next";
 import { SITE } from "@/lib/constants";
-import { CATEGORIES, getAllProducts } from "@/lib/products";
+import { CATEGORIES } from "@/lib/products";
+import { getAllProducts } from "@/lib/catalog";
 import { getBrands } from "@/lib/content";
 
 /**
  * Dynamic sitemap — regenerates from the catalog so every product & category is discoverable.
- * When the catalog moves to a DB (Phase 4), this keeps working unchanged.
+ * Brands and products come from Firestore; if it isn't reachable (e.g. before credentials are
+ * configured) the sitemap still lists the static + category routes.
  */
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -29,19 +31,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  const brandRoutes: MetadataRoute.Sitemap = getBrands().map((b) => ({
-    url: `${SITE.url}/brands/${b.slug}`,
-    lastModified: now,
-    changeFrequency: "monthly",
-    priority: 0.7,
-  }));
-
-  const productRoutes: MetadataRoute.Sitemap = getAllProducts().map((p) => ({
-    url: `${SITE.url}/products/${p.slug}`,
-    lastModified: now,
-    changeFrequency: "weekly",
-    priority: 0.8,
-  }));
+  let brandRoutes: MetadataRoute.Sitemap = [];
+  let productRoutes: MetadataRoute.Sitemap = [];
+  try {
+    const [brands, products] = await Promise.all([getBrands(), getAllProducts()]);
+    brandRoutes = brands.map((b) => ({
+      url: `${SITE.url}/brands/${b.slug}`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    }));
+    productRoutes = products.map((p) => ({
+      url: `${SITE.url}/products/${p.slug}`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.8,
+    }));
+  } catch {
+    // Firestore unavailable — fall back to the static + category routes only.
+  }
 
   return [...staticRoutes, ...categoryRoutes, ...brandRoutes, ...productRoutes];
 }

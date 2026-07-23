@@ -6,11 +6,11 @@ import { CATEGORY_MAP, productImageUrl, type Product } from "@/lib/products";
 import { productBrandLogo } from "@/lib/content";
 import { discountPercent, formatPHP } from "@/lib/format";
 
-export function ProductCard({ product }: { product: Product }) {
+export async function ProductCard({ product }: { product: Product }) {
   const off = discountPercent(product.price, product.compareAtPrice);
   const category = CATEGORY_MAP[product.category];
   // Products with no photo yet show the brand wordmark on a white plate instead.
-  const logo = productBrandLogo(product);
+  const logo = await productBrandLogo(product);
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface transition-shadow hover:shadow-lg">

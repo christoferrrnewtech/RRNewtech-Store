@@ -1,18 +1,24 @@
 /**
  * Editable site content — the data the /admin area writes and the storefront reads.
  *
- * SERVER ONLY. This module touches the filesystem, so it must never be imported from a
- * "use client" component (or from `@/lib/products`, which client components do import).
- * Client components receive brand data as props from a server layout/page instead.
+ * SERVER ONLY. This module talks to Firestore (via `@/lib/firebase`), so it must never be
+ * imported from a `"use client"` component. Client components receive brand data as props from a
+ * server layout/page instead.
  *
- * PHASE 1 (now): a JSON file on disk. Reads are synchronous with a module-level cache so every
- * helper below stays synchronous and call sites read like plain data access.
- * PHASE 4: swap the read/write pair for Firestore behind these same helper signatures.
+ * Data lives in three prefixed, top-level ("sibling") collections in the `rnr-dental-clinics`
+ * project, alongside the existing `R&RLandingPage` collection:
+ *   storeBanners/{id}      storeBrands/{slug}      storeAdminUsers/{uid}
+ *
+ * All reads/writes are async (Firestore). The helper *names* match the previous file-backed
+ * version so call sites only had to add `await`.
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { PRODUCTS, brandSlug, type Product } from "@/lib/products";
+import "server-only";
+import { FieldValue } from "firebase-admin/firestore";
+import { getDb, COLLECTIONS } from "@/lib/firebase";
+import { getProductBySlug } from "@/lib/catalog";
+import { type Product } from "@/lib/products";
+import type { BrandGroup } from "@/lib/constants";
 
 export type BrandStatus = "draft" | "published";
 
@@ -34,6 +40,8 @@ export type Brand = {
   status: BrandStatus;
   /** Display order in the Brand Showcase and /brands index. */
   order: number;
+  /** Category grouping — drives the card tag chip and the "Shop by Brand" filter chips. */
+  group: BrandGroup;
   /** One line on the brand card. */
   tagline: string;
   /** 1–2 sentences under the hero (also the meta description). */
@@ -54,92 +62,105 @@ export type Brand = {
   cta: BrandCta;
 };
 
-export type Banner = { image: string; alt: string; href: string };
+export type Banner = { id: string; image: string; alt: string; href: string; order: number };
 
 export type UserRole = "admin" | "marketing";
 
+/**
+ * Admin user profile. Credentials are held by Firebase Authentication — this doc only carries
+ * identity + authorization. `uid` is the Firebase Auth uid and the Firestore document id.
+ */
 export type AdminUser = {
-  id: string;
+  uid: string;
   email: string;
   name: string;
   role: UserRole;
-  /** scrypt hash + salt, both hex. Never sent to the client. */
-  passwordHash: string;
-  salt: string;
   /** Brands a marketing user may edit. Ignored for admins (they get everything). */
   brandSlugs: string[];
 };
 
-export type SiteContent = { banner: Banner; brands: Brand[]; users: AdminUser[] };
+// ─────────────────────────────────────────────────────────────────────────────
+// Firestore converters. Document id carries the natural key (banner id / brand slug / uid),
+// so it isn't duplicated inside the stored fields.
+// ─────────────────────────────────────────────────────────────────────────────
 
-const CONTENT_PATH = path.join(process.cwd(), "data", "site-content.json");
+type Doc = FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot;
 
-let cache: SiteContent | null = null;
-
-/** Full content document. Cached until a write invalidates it. */
-export function getContent(): SiteContent {
-  if (!cache) {
-    cache = JSON.parse(fs.readFileSync(CONTENT_PATH, "utf8")) as SiteContent;
-  }
-  return cache;
+function toBanner(doc: Doc): Banner {
+  const d = doc.data() as Omit<Banner, "id">;
+  return { id: doc.id, image: d.image, alt: d.alt, href: d.href, order: d.order ?? 0 };
 }
 
-/** Persist the document. Writes to a temp file first so a crash can't truncate the real one. */
-export function saveContent(next: SiteContent): void {
-  const tmp = `${CONTENT_PATH}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-  fs.renameSync(tmp, CONTENT_PATH);
-  cache = next;
+function toBrand(doc: Doc): Brand {
+  const { slug, ...rest } = doc.data() as Brand & { updatedAt?: unknown };
+  void slug; // slug comes from the document id, not the stored fields
+  return { ...(rest as Omit<Brand, "slug">), slug: doc.id };
 }
 
-/** Read, mutate in place, save. The callback gets a deep copy, so a throw leaves disk untouched. */
-export function updateContent(mutate: (draft: SiteContent) => void): SiteContent {
-  const draft = structuredClone(getContent());
-  mutate(draft);
-  saveContent(draft);
-  return draft;
+function toUser(doc: Doc): AdminUser {
+  const d = doc.data() as Omit<AdminUser, "uid">;
+  return {
+    uid: doc.id,
+    email: d.email,
+    name: d.name,
+    role: d.role,
+    brandSlugs: Array.isArray(d.brandSlugs) ? d.brandSlugs : [],
+  };
+}
+
+/** Strip the id-carrying key and stamp updatedAt before writing a brand document. */
+function brandToDoc(brand: Brand) {
+  const { slug, ...rest } = brand;
+  void slug; // stored as the document id, not a field
+  return { ...rest, updatedAt: FieldValue.serverTimestamp() };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Storefront reads — published content only.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function getBanner(): Banner {
-  return getContent().banner;
+/** Carousel banners in display order. */
+export async function getBanners(): Promise<Banner[]> {
+  const snap = await getDb().collection(COLLECTIONS.banners).get();
+  return snap.docs.map(toBanner).sort((a, b) => a.order - b.order);
 }
 
 /** Published brands in display order. This is what the storefront should always call. */
-export function getBrands(): Brand[] {
-  return getContent()
-    .brands.filter((b) => b.status === "published")
+export async function getBrands(): Promise<Brand[]> {
+  const snap = await getDb().collection(COLLECTIONS.brands).get();
+  return snap.docs
+    .map(toBrand)
+    .filter((b) => b.status === "published")
     .sort((a, b) => a.order - b.order);
 }
 
 /** Published brand by slug, or undefined — drafts are invisible here on purpose. */
-export function getBrandBySlug(slug: string): Brand | undefined {
-  return getBrands().find((b) => b.slug === slug);
+export async function getBrandBySlug(slug: string): Promise<Brand | undefined> {
+  const doc = await getDb().collection(COLLECTIONS.brands).doc(slug).get();
+  if (!doc.exists) return undefined;
+  const brand = toBrand(doc);
+  return brand.status === "published" ? brand : undefined;
 }
 
 /**
  * Brand wordmark to show in place of a product photo, for products flagged `useBrandLogo`.
  * Callers render it contained on a white plate — these logos carry their own backgrounds.
  */
-export function productBrandLogo(product: Product): string | undefined {
+export async function productBrandLogo(product: Product): Promise<string | undefined> {
   if (!product.useBrandLogo) return undefined;
-  return getBrandBySlug(brandSlug(product.brand))?.logo;
+  const { brandSlug } = await import("@/lib/products");
+  return (await getBrandBySlug(brandSlug(product.brand)))?.logo;
 }
 
 /** Featured products for a brand, resolved and de-duplicated. Unknown slugs are dropped. */
-export function getFeaturedProductsForBrand(brand: Brand): Product[] {
+export async function getFeaturedProductsForBrand(brand: Brand): Promise<Product[]> {
   const seen = new Set<string>();
   const out: Product[] = [];
   for (const slug of brand.featuredProductSlugs) {
     if (seen.has(slug)) continue;
-    const product = PRODUCTS.find((p) => p.slug === slug);
-    if (product) {
-      seen.add(slug);
-      out.push(product);
-    }
+    seen.add(slug);
+    const product = await getProductBySlug(slug);
+    if (product) out.push(product);
   }
   return out;
 }
@@ -148,22 +169,119 @@ export function getFeaturedProductsForBrand(brand: Brand): Product[] {
 // Admin reads — include drafts. Never call these from a storefront page.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function getAllBrandsForAdmin(): Brand[] {
-  return [...getContent().brands].sort((a, b) => a.order - b.order);
+export async function getAllBrandsForAdmin(): Promise<Brand[]> {
+  const snap = await getDb().collection(COLLECTIONS.brands).get();
+  return snap.docs.map(toBrand).sort((a, b) => a.order - b.order);
 }
 
-export function getBrandForAdmin(slug: string): Brand | undefined {
-  return getContent().brands.find((b) => b.slug === slug);
+export async function getBrandForAdmin(slug: string): Promise<Brand | undefined> {
+  const doc = await getDb().collection(COLLECTIONS.brands).doc(slug).get();
+  return doc.exists ? toBrand(doc) : undefined;
 }
 
-export function getUsers(): AdminUser[] {
-  return getContent().users;
+export async function brandExists(slug: string): Promise<boolean> {
+  const doc = await getDb().collection(COLLECTIONS.brands).doc(slug).get();
+  return doc.exists;
 }
 
-export function getUserByEmail(email: string): AdminUser | undefined {
+export async function getUsers(): Promise<AdminUser[]> {
+  const snap = await getDb().collection(COLLECTIONS.adminUsers).get();
+  return snap.docs.map(toUser).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getUserByEmail(email: string): Promise<AdminUser | undefined> {
   const needle = email.trim().toLowerCase();
-  return getContent().users.find((u) => u.email.toLowerCase() === needle);
+  const snap = await getDb()
+    .collection(COLLECTIONS.adminUsers)
+    .where("email", "==", needle)
+    .limit(1)
+    .get();
+  return snap.empty ? undefined : toUser(snap.docs[0]);
 }
+
+export async function getUserByUid(uid: string): Promise<AdminUser | undefined> {
+  const doc = await getDb().collection(COLLECTIONS.adminUsers).doc(uid).get();
+  return doc.exists ? toUser(doc) : undefined;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin writes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function addBanner(data: Omit<Banner, "id" | "order">): Promise<void> {
+  const db = getDb();
+  const existing = await getBanners();
+  const order = existing.length; // append to the end of the carousel
+  await db.collection(COLLECTIONS.banners).add({ ...data, order });
+}
+
+export async function updateBanner(
+  id: string,
+  patch: Partial<Omit<Banner, "id" | "order">>,
+): Promise<void> {
+  await getDb().collection(COLLECTIONS.banners).doc(id).set(patch, { merge: true });
+}
+
+export async function deleteBanner(id: string): Promise<void> {
+  await getDb().collection(COLLECTIONS.banners).doc(id).delete();
+}
+
+/** Write the carousel order from a full id sequence. Ids not listed keep their old order. */
+export async function reorderBanners(ids: string[]): Promise<void> {
+  const db = getDb();
+  const batch = db.batch();
+  ids.forEach((id, order) => {
+    batch.set(db.collection(COLLECTIONS.banners).doc(id), { order }, { merge: true });
+  });
+  await batch.commit();
+}
+
+export async function createBrand(brand: Brand): Promise<void> {
+  await getDb().collection(COLLECTIONS.brands).doc(brand.slug).set(brandToDoc(brand));
+}
+
+/** Persist a full brand document (used by every brand-section save). */
+export async function saveBrand(brand: Brand): Promise<void> {
+  await getDb().collection(COLLECTIONS.brands).doc(brand.slug).set(brandToDoc(brand));
+}
+
+export async function deleteBrand(slug: string): Promise<void> {
+  const db = getDb();
+  const batch = db.batch();
+  batch.delete(db.collection(COLLECTIONS.brands).doc(slug));
+  // Drop the deleted brand from any marketing user's assignments.
+  const users = await db
+    .collection(COLLECTIONS.adminUsers)
+    .where("brandSlugs", "array-contains", slug)
+    .get();
+  for (const u of users.docs) {
+    batch.update(u.ref, { brandSlugs: FieldValue.arrayRemove(slug) });
+  }
+  await batch.commit();
+}
+
+/** Next display order for a new brand (count of existing brands). */
+export async function nextBrandOrder(): Promise<number> {
+  const snap = await getDb().collection(COLLECTIONS.brands).get();
+  return snap.size;
+}
+
+export async function upsertAdminUser(user: AdminUser): Promise<void> {
+  const { uid, ...rest } = user;
+  await getDb().collection(COLLECTIONS.adminUsers).doc(uid).set(rest, { merge: true });
+}
+
+export async function updateUserBrands(uid: string, brandSlugs: string[]): Promise<void> {
+  await getDb().collection(COLLECTIONS.adminUsers).doc(uid).set({ brandSlugs }, { merge: true });
+}
+
+export async function deleteAdminUserDoc(uid: string): Promise<void> {
+  await getDb().collection(COLLECTIONS.adminUsers).doc(uid).delete();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility (pure).
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Extract a YouTube video id from any of the usual URL shapes (watch, youtu.be, embed, shorts).

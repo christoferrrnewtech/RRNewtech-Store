@@ -2,15 +2,15 @@ import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
 import { ProductCard } from "@/components/shop/ProductCard";
-import { getProductsByCategory } from "@/lib/products";
+import { getProductsByCategory } from "@/lib/catalog";
 
 /**
  * Merchandising section that promotes the Digital Dentistry category: a brand-blue feature
  * panel beside a rail of product cards (reusing ProductCard for a consistent look). Renders
  * nothing if the category has no products yet.
  */
-export function DigitalDentistryPromo() {
-  const products = getProductsByCategory("digital-dentistry").slice(0, 3);
+export async function DigitalDentistryPromo() {
+  const products = (await getProductsByCategory("digital-dentistry")).slice(0, 3);
   if (products.length === 0) return null;
 
   return (
