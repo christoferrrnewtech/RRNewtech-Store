@@ -1,29 +1,18 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { getBrands } from "@/lib/content";
-import { getAllProducts } from "@/lib/catalog";
-import { brandSlug } from "@/lib/products";
 import { BrandFilterGrid, type BrandCard } from "@/components/home/BrandFilterGrid";
 
 /** Map published brands → serializable card data for the client grid. Server-only data lives here. */
 async function brandCards(): Promise<BrandCard[]> {
-  const [brands, products] = await Promise.all([
-    getBrands().catch(() => []),
-    getAllProducts().catch(() => []),
-  ]);
-  // One product read, counted per brand in memory (avoids a query per brand).
-  const counts = new Map<string, number>();
-  for (const p of products) {
-    const slug = brandSlug(p.brand);
-    counts.set(slug, (counts.get(slug) ?? 0) + 1);
-  }
+  const brands = await getBrands().catch(() => []);
   return brands.map((b) => ({
     slug: b.slug,
     name: b.name,
     logo: b.logo,
     tagline: b.tagline,
     group: b.group ?? "consumables",
-    count: counts.get(b.slug) ?? 0,
+    count: b.products.length,
   }));
 }
 

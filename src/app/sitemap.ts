@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { SITE } from "@/lib/constants";
-import { CATEGORIES } from "@/lib/products";
+import { CATEGORIES, brandProductHref } from "@/lib/products";
 import { getAllProducts } from "@/lib/catalog";
 import { getBrands } from "@/lib/content";
 
@@ -32,6 +32,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }));
 
   let brandRoutes: MetadataRoute.Sitemap = [];
+  let brandProductRoutes: MetadataRoute.Sitemap = [];
   let productRoutes: MetadataRoute.Sitemap = [];
   try {
     const [brands, products] = await Promise.all([getBrands(), getAllProducts()]);
@@ -41,6 +42,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly",
       priority: 0.7,
     }));
+    brandProductRoutes = brands.flatMap((b) =>
+      b.products.map((p) => ({
+        url: `${SITE.url}${brandProductHref(b.slug, p)}`,
+        lastModified: now,
+        changeFrequency: "monthly" as const,
+        priority: 0.6,
+      })),
+    );
     productRoutes = products.map((p) => ({
       url: `${SITE.url}/products/${p.slug}`,
       lastModified: now,
@@ -51,5 +60,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Firestore unavailable — fall back to the static + category routes only.
   }
 
-  return [...staticRoutes, ...categoryRoutes, ...brandRoutes, ...productRoutes];
+  return [...staticRoutes, ...categoryRoutes, ...brandRoutes, ...brandProductRoutes, ...productRoutes];
 }

@@ -8,9 +8,10 @@
  * Credentials come from a service account (Firebase console → Project settings → Service
  * accounts → Generate new private key), supplied via env vars — see `.env.example`.
  *
- * The store's data lives in prefixed, top-level ("sibling") collections next to the existing
- * `R&RLandingPage` collection. Collection names are centralised in COLLECTIONS below so every
- * caller uses the same string.
+ * The store's data lives as documents INSIDE the existing `R&RLandingPage` collection — one
+ * document per type, each holding its items as a map keyed by the natural id (banner id / slug /
+ * uid). This matches how that collection already works (its `banner` doc holds data as fields).
+ * Document ids are centralised in DOCS below so every caller uses the same string.
  */
 
 import "server-only";
@@ -19,13 +20,16 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 
-/** Prefixed sibling collections for the store. `R&RLandingPage` is left untouched. */
-export const COLLECTIONS = {
-  banners: "storeBanners",
-  brands: "storeBrands",
-  products: "storeProducts",
-  categories: "storeCategories",
-  adminUsers: "storeAdminUsers",
+/** The collection the store's documents live inside. */
+export const LANDING = "R&RLandingPage";
+
+/** Document ids inside `R&RLandingPage`, one per content type. */
+export const DOCS = {
+  banner: "banner",
+  brand: "brand",
+  product: "product",
+  categories: "categories",
+  users: "users",
 } as const;
 
 function requireEnv(name: string): string {
@@ -74,6 +78,11 @@ export function getDb(): Firestore {
 export function getAdminAuth(): Auth {
   if (!_auth) _auth = getAuth(initAdminApp());
   return _auth;
+}
+
+/** A store document inside `R&RLandingPage` (e.g. storeDoc(DOCS.brand)). */
+export function storeDoc(name: string) {
+  return getDb().collection(LANDING).doc(name);
 }
 
 /** Storage bucket for uploaded images. Requires FIREBASE_STORAGE_BUCKET. */

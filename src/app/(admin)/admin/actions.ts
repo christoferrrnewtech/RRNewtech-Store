@@ -13,6 +13,7 @@
  */
 
 import crypto from "node:crypto";
+import sharp from "sharp";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
@@ -24,6 +25,7 @@ import {
   createBrand,
   saveBrand,
   deleteBrand,
+  reorderBrands,
   getBrandForAdmin,
   getUserByEmail,
   upsertAdminUser,
@@ -31,6 +33,7 @@ import {
   deleteAdminUserDoc,
   nextBrandOrder,
   type Brand,
+  type BrandProduct,
   type GalleryImage,
 } from "@/lib/content";
 import {
@@ -44,7 +47,7 @@ import {
   requireUser,
 } from "@/lib/auth";
 import { getBucket } from "@/lib/firebase";
-import { brandSlug } from "@/lib/products";
+import { brandSlug, brandProductSlugify } from "@/lib/products";
 import { BRAND_GROUPS } from "@/lib/constants";
 
 export type ActionState = { ok?: string; error?: string };
@@ -61,30 +64,46 @@ const ALLOWED_TYPES: Record<string, string> = {
 function revalidateStorefront(slug?: string) {
   revalidatePath("/", "layout");
   revalidatePath("/brands");
-  if (slug) revalidatePath(`/brands/${slug}`);
+  // "layout" so the brand page AND its nested product detail pages both refresh.
+  if (slug) revalidatePath(`/brands/${slug}`, "layout");
   revalidatePath("/sitemap.xml");
 }
 
 /**
- * Upload an image to Firebase Storage and return its public URL.
+ * Upload an image to Firebase Storage and return a public download URL.
  * Returns "" when no file was supplied (an unchanged image field).
+ *
+ * The upload is downscaled to a max 1600px edge and re-encoded to WebP (quality 80), so banners and
+ * logos land at tens of KB instead of multi-MB. Uses Firebase's download-token URL rather than
+ * `makePublic()`: it works with uniform bucket-level access and doesn't expose the whole bucket.
  */
 async function storeUpload(file: FormDataEntryValue | null, prefix: string): Promise<string> {
   if (!(file instanceof File) || file.size === 0) return "";
 
-  const ext = ALLOWED_TYPES[file.type];
-  if (!ext) throw new Error("Only PNG, JPG and WebP images are allowed.");
+  if (!ALLOWED_TYPES[file.type]) throw new Error("Only PNG, JPG and WebP images are allowed.");
   if (file.size > MAX_UPLOAD_BYTES) throw new Error("Image must be 5 MB or smaller.");
 
+  // Resize (never upscale) and re-encode to WebP so Storage stays small. `rotate()` bakes in EXIF
+  // orientation so phone photos aren't saved sideways.
+  const compressed = await sharp(Buffer.from(await file.arrayBuffer()))
+    .rotate()
+    .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toBuffer();
+
   const bucket = getBucket();
-  const name = `uploads/${prefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
-  const blob = bucket.file(name);
-  await blob.save(Buffer.from(await file.arrayBuffer()), {
-    contentType: file.type,
+  const token = crypto.randomUUID();
+  const name = `uploads/${prefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.webp`;
+  await bucket.file(name).save(compressed, {
     resumable: false,
+    metadata: {
+      contentType: "image/webp",
+      metadata: { firebaseStorageDownloadTokens: token },
+    },
   });
-  await blob.makePublic();
-  return `https://storage.googleapis.com/${bucket.name}/${name}`;
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(
+    name,
+  )}?alt=media&token=${token}`;
 }
 
 function text(form: FormData, key: string): string {
@@ -220,7 +239,7 @@ export async function createBrandAction(
       logo: logo || "/brand/logo.png",
       about: [],
       gallery: [],
-      featuredProductSlugs: [],
+      products: [],
       whyChoose: [],
       cta: {
         heading: "Interested in learning more?",
@@ -244,6 +263,16 @@ export async function deleteBrandAction(form: FormData): Promise<void> {
   await deleteBrand(slug);
   revalidateStorefront(slug);
   redirect("/admin/brands");
+}
+
+/**
+ * Set the storefront display order from a full slug sequence. Plain-arg action so the rail can call
+ * it imperatively from drag-drop and the arrow buttons (admin only — marketing users see a subset).
+ */
+export async function reorderBrandsAction(slugs: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderBrands(slugs);
+  revalidateStorefront();
 }
 
 /**
@@ -364,13 +393,100 @@ export async function saveBrandGalleryAction(_prev: ActionState, form: FormData)
   );
 }
 
+/** Split a textarea value into trimmed, non-empty lines (one paragraph / bullet per line). */
+function linesOf(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+/** Parse a `productGalleryJson` hidden value into the kept (already-uploaded) gallery images. */
+function parseGalleryJson(raw: string): GalleryImage[] {
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((g) => g && typeof g.src === "string" && g.src)
+      .map((g) => (g.caption ? { src: String(g.src), caption: String(g.caption) } : { src: String(g.src) }));
+  } catch {
+    return [];
+  }
+}
+
 export async function saveBrandProductsAction(_prev: ActionState, form: FormData) {
   return saveBrandSection(
     form,
-    (brand) => {
-      brand.featuredProductSlugs = form.getAll("productSlug").map(String);
+    async (brand) => {
+      // Parallel per-row arrays (kept aligned by the client), plus per-row file inputs.
+      const ids = form.getAll("productId").map(String);
+      const names = form.getAll("productName").map(String);
+      const prices = form.getAll("productPrice").map(String);
+      const compareAts = form.getAll("productCompareAt").map(String);
+      const summaries = form.getAll("productSummary").map(String);
+      const descriptions = form.getAll("productDescription").map(String);
+      const highlightsRaw = form.getAll("productHighlights").map(String);
+      const galleryJson = form.getAll("productGalleryJson").map(String);
+      const inStocks = form.getAll("productInStock").map(String);
+      const contactSalesFlags = form.getAll("productContactSales").map(String);
+      const existingImages = form.getAll("productImage").map(String);
+      const files = form.getAll("productImageFile");
+
+      const usedSlugs = new Set<string>();
+      const out: BrandProduct[] = [];
+      for (let i = 0; i < names.length; i++) {
+        const name = (names[i] ?? "").trim();
+        if (!name) continue; // a blank name means the row was cleared/removed
+
+        const id = ids[i] || crypto.randomUUID();
+
+        // Slug always follows the current name (deduped within the brand); the read path recomputes
+        // it too, so URLs never drift from a renamed product.
+        let slug = brandProductSlugify(name, id);
+        if (usedSlugs.has(slug)) {
+          let n = 2;
+          while (usedSlugs.has(`${slug}-${n}`)) n++;
+          slug = `${slug}-${n}`;
+        }
+        usedSlugs.add(slug);
+
+        // "Price on request" products hide the price on the storefront, so we don't retain a figure.
+        const contactSales = contactSalesFlags[i] === "1";
+        const price = contactSales ? 0 : Math.max(0, Math.round(Number(prices[i]) || 0));
+        const compareAt = contactSales ? 0 : Math.round(Number(compareAts[i]) || 0);
+
+        // A newly chosen file uploads (and compresses); otherwise keep the prior image URL.
+        const uploaded = await storeUpload(files[i] ?? null, `product-${brand.slug}`);
+        const image = uploaded || (existingImages[i] ?? "");
+
+        // Gallery: kept images come back as JSON; new files (keyed by row id) upload and append.
+        const gallery = parseGalleryJson(galleryJson[i] ?? "");
+        for (const file of form.getAll(`productGalleryFiles_${id}`)) {
+          const galleryUrl = await storeUpload(file, `bp-${brand.slug}`);
+          if (galleryUrl) gallery.push({ src: galleryUrl });
+        }
+
+        const description = linesOf(descriptions[i] ?? "");
+        const highlights = linesOf(highlightsRaw[i] ?? "");
+
+        out.push({
+          id,
+          slug,
+          name,
+          price,
+          compareAtPrice: compareAt > price ? compareAt : undefined,
+          summary: (summaries[i] ?? "").trim() || undefined,
+          description: description.length ? description : undefined,
+          highlights: highlights.length ? highlights : undefined,
+          gallery: gallery.length ? gallery : undefined,
+          image,
+          inStock: inStocks[i] === "1",
+          contactSales,
+        });
+      }
+      brand.products = out;
     },
-    "Featured products saved.",
+    "Products saved.",
   );
 }
 

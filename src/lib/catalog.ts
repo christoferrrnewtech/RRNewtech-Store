@@ -1,92 +1,65 @@
 /**
  * Product catalog reads — SERVER ONLY, Firestore-backed.
  *
- * These are the async replacements for the in-code query helpers that used to live in
- * `products.ts`. They read the `storeProducts` collection in the `rnr-dental-clinics` project.
- * Pages/components that used `getAllProducts` etc. import them from here now and `await` them.
+ * Products live in a single document `R&RLandingPage/product`, holding a map keyed by product slug.
+ * These async helpers replace the in-code query functions that used to live in `products.ts`; pages
+ * that used `getAllProducts` etc. import them from here and `await` them.
  *
  * The pure, client-safe helpers (`brandSlug`, `productImageUrl`, `searchProducts`, `sortProducts`,
  * `CATEGORIES`, `CATEGORY_MAP`) still live in `products.ts` and are unaffected.
  *
- * Collections are tiny (tens of docs), so we fetch with a single-field filter and sort in memory —
- * that keeps Firestore from ever needing a composite index.
+ * The whole catalog is one document read, so every helper reads it once and filters in memory.
  */
 
 import "server-only";
-import { getDb, COLLECTIONS } from "@/lib/firebase";
+import { storeDoc, DOCS } from "@/lib/firebase";
 import { brandSlug, type CategorySlug, type Product } from "@/lib/products";
 
-function toProduct(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): Product {
-  // The doc stores every Product field; `order`/`updatedAt` are storage-only and dropped here.
-  const data = doc.data() as Product & { order?: number; updatedAt?: unknown };
-  const { order, updatedAt, ...rest } = data;
-  void order;
-  void updatedAt;
-  return { ...(rest as Product), slug: doc.id };
-}
+type StoredProduct = Product & { order?: number };
 
-function byOrderThenName(a: Product & { order?: number }, b: Product & { order?: number }): number {
-  const ao = (a as { order?: number }).order ?? 0;
-  const bo = (b as { order?: number }).order ?? 0;
-  return ao - bo || a.name.localeCompare(b.name);
-}
-
-async function allDocs(): Promise<(Product & { order?: number })[]> {
-  const snap = await getDb().collection(COLLECTIONS.products).get();
-  return snap.docs
-    .map((d) => ({ ...toProduct(d), order: (d.data() as { order?: number }).order ?? 0 }))
-    .sort(byOrderThenName);
+/** Read every product from the `product` document's map, sorted by stored order then name. */
+async function readProducts(): Promise<StoredProduct[]> {
+  const snap = await storeDoc(DOCS.product).get();
+  const data = (snap.exists ? snap.data() : undefined) ?? {};
+  const list: StoredProduct[] = [];
+  for (const [slug, v] of Object.entries(data)) {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      list.push({ ...(v as StoredProduct), slug });
+    }
+  }
+  return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
 }
 
 export async function getAllProducts(): Promise<Product[]> {
-  return allDocs();
+  return readProducts();
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | undefined> {
-  const doc = await getDb().collection(COLLECTIONS.products).doc(slug).get();
-  return doc.exists ? toProduct(doc) : undefined;
+  return (await readProducts()).find((p) => p.slug === slug);
 }
 
 export async function getProductsByCategory(category: CategorySlug): Promise<Product[]> {
-  const snap = await getDb()
-    .collection(COLLECTIONS.products)
-    .where("category", "==", category)
-    .get();
-  return snap.docs
-    .map((d) => ({ ...toProduct(d), order: (d.data() as { order?: number }).order ?? 0 }))
-    .sort(byOrderThenName);
+  return (await readProducts()).filter((p) => p.category === category);
 }
 
 export async function getProductsByBrand(slug: string): Promise<Product[]> {
-  const snap = await getDb()
-    .collection(COLLECTIONS.products)
-    .where("brandSlug", "==", slug)
-    .get();
-  return snap.docs
-    .map((d) => ({ ...toProduct(d), order: (d.data() as { order?: number }).order ?? 0 }))
-    .sort(byOrderThenName);
+  return (await readProducts()).filter((p) => brandSlug(p.brand) === slug);
 }
 
 export async function getFeaturedProducts(limit = 8): Promise<Product[]> {
-  const snap = await getDb()
-    .collection(COLLECTIONS.products)
-    .where("featured", "==", true)
-    .get();
-  return snap.docs
-    .map((d) => ({ ...toProduct(d), order: (d.data() as { order?: number }).order ?? 0 }))
-    .sort(byOrderThenName)
-    .slice(0, limit);
+  return (await readProducts()).filter((p) => p.featured).slice(0, limit);
 }
 
 /** Related products: same category, excluding the current one. */
 export async function getRelatedProducts(product: Product, limit = 4): Promise<Product[]> {
-  const list = await getProductsByCategory(product.category);
-  return list.filter((p) => p.slug !== product.slug).slice(0, limit);
+  return (await readProducts())
+    .filter((p) => p.category === product.category && p.slug !== product.slug)
+    .slice(0, limit);
 }
 
 /** Unique brands present in the catalog, sorted A–Z, with URL slugs. */
 export async function getAllBrands(): Promise<{ name: string; slug: string }[]> {
-  const products = await allDocs();
+  const products = await readProducts();
   const bySlug = new Map<string, string>();
   for (const p of products) bySlug.set(brandSlug(p.brand), p.brand);
   return [...bySlug.entries()]

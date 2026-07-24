@@ -4,14 +4,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
-import { ProductCard } from "@/components/shop/ProductCard";
-import {
-  getBrandBySlug,
-  getBrands,
-  getFeaturedProductsForBrand,
-  youtubeEmbedId,
-} from "@/lib/content";
-import { getProductsByBrand } from "@/lib/catalog";
+import { BrandProductCard } from "@/components/shop/BrandProductCard";
+import { getBrandBySlug, getBrands, youtubeEmbedId } from "@/lib/content";
 import { SITE } from "@/lib/constants";
 
 // Pre-render every published brand page at build time (indexable HTML). Falls back to on-demand
@@ -61,8 +55,7 @@ export default async function BrandPage({
   const brand = await getBrandBySlug(slug);
   if (!brand) notFound();
 
-  const featured = await getFeaturedProductsForBrand(brand);
-  const catalog = await getProductsByBrand(brand.slug);
+  const products = brand.products;
   const videoId = youtubeEmbedId(brand.youtubeUrl);
 
   return (
@@ -118,7 +111,7 @@ export default async function BrandPage({
               </p>
               <p className="mt-3 text-sm leading-relaxed text-white/75">{brand.blurb}</p>
 
-              {featured.length > 0 && (
+              {products.length > 0 && (
                 <LinkButton href="#brand-products" variant="inverse" className="mt-8 w-fit">
                   Shop {brand.name}
                 </LinkButton>
@@ -190,25 +183,23 @@ export default async function BrandPage({
           </section>
         )}
 
-        {/* 6 · Featured products */}
-        {featured.length > 0 && (
+        {/* 6 · Products */}
+        {products.length > 0 && (
           <section id="brand-products" className="mt-16 scroll-mt-24">
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
-              Featured {brand.name} products
+              {brand.name} products
             </h2>
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {featured.map((p) => (
-                <ProductCard key={p.slug} product={p} />
+              {products.map((p) => (
+                <BrandProductCard
+                  key={p.id}
+                  product={p}
+                  brandName={brand.name}
+                  brandSlug={brand.slug}
+                  brandLogo={brand.logo}
+                />
               ))}
             </div>
-            {catalog.length > featured.length && (
-              <Link
-                href={`/?brand=${brand.slug}`}
-                className="mt-6 inline-block text-sm font-semibold text-brand-700 hover:text-brand-800"
-              >
-                See all {catalog.length} {brand.name} products →
-              </Link>
-            )}
           </section>
         )}
 

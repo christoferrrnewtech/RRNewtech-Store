@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import {
   deleteBrandAction,
   saveBrandAboutAction,
@@ -24,9 +24,8 @@ import {
   TextArea,
   TextInput,
 } from "@/components/admin/Form";
-import type { Brand } from "@/lib/content";
+import type { Brand, BrandProduct } from "@/lib/content";
 import { BRAND_GROUPS } from "@/lib/constants";
-import type { ProductOption } from "./sections";
 
 /**
  * The brand page editor. One <form> per section, each bound to its own server action, so a
@@ -34,13 +33,9 @@ import type { ProductOption } from "./sections";
  */
 export function BrandEditor({
   brand,
-  ownProducts,
-  otherProducts,
   canDelete,
 }: {
   brand: Brand;
-  ownProducts: ProductOption[];
-  otherProducts: ProductOption[];
   canDelete: boolean;
 }) {
   return (
@@ -51,7 +46,7 @@ export function BrandEditor({
       <AboutSection brand={brand} />
       <VideoSection brand={brand} />
       <GallerySection brand={brand} />
-      <ProductsSection brand={brand} own={ownProducts} others={otherProducts} />
+      <ProductsSection brand={brand} />
       <ReasonsSection brand={brand} />
       <CtaSection brand={brand} />
 
@@ -288,46 +283,20 @@ function GallerySection({ brand }: { brand: Brand }) {
   );
 }
 
-function ProductsSection({
-  brand,
-  own,
-  others,
-}: {
-  brand: Brand;
-  own: ProductOption[];
-  others: ProductOption[];
-}) {
+function ProductsSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandProductsAction, {});
-  const selected = new Set(brand.featuredProductSlugs);
-
   return (
     <Section
       id="sec-products"
       step="6"
-      title="Featured products"
-      hint="Tick the products to showcase on this brand's page. They render in the Featured Products section."
+      title="Products"
+      hint="The products shown on this brand's page. Add as many as you like — each one has its own image, price and stock."
     >
-      <form action={action} className="space-y-6">
+      <form action={action} className="space-y-5">
         <input type="hidden" name="slug" value={brand.slug} />
-
-        {own.length > 0 && (
-          <fieldset>
-            <legend className="mb-3 text-sm font-semibold text-fg">
-              {brand.name} products ({own.length})
-            </legend>
-            <ProductGrid products={own} selected={selected} />
-          </fieldset>
-        )}
-
-        <details className="rounded-xl border border-line bg-bg p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-fg">
-            Add products from other brands ({others.length})
-          </summary>
-          <div className="mt-4">
-            <ProductGrid products={others} selected={selected} />
-          </div>
-        </details>
-
+        {/* Re-key on the saved data so the editor re-seeds from Firestore after each save — without
+            this, the uncontrolled fields reset to stale values (React 19 resets forms post-action). */}
+        <ProductRows key={JSON.stringify(brand.products)} initial={brand.products} />
         <SubmitButton />
         <FormMessage state={state} />
       </form>
@@ -335,37 +304,229 @@ function ProductsSection({
   );
 }
 
-/** Selectable product cards — the whole card is the label; checked cards get a brand-blue ring. */
-function ProductGrid({
-  products,
-  selected,
-}: {
-  products: ProductOption[];
-  selected: Set<string>;
-}) {
+type Row = BrandProduct & { key: string };
+
+/**
+ * Repeatable product editor. Every row posts one value under each `product*` field name (kept
+ * aligned by row order) plus one `productImageFile` input, so the server action can zip them.
+ */
+function ProductRows({ initial }: { initial: BrandProduct[] }) {
+  const [rows, setRows] = useState<Row[]>(
+    initial.map((p) => ({ ...p, key: p.id || crypto.randomUUID() })),
+  );
+
+  function add() {
+    setRows((r) => [
+      ...r,
+      {
+        key: crypto.randomUUID(),
+        id: crypto.randomUUID(),
+        name: "",
+        price: 0,
+        image: "",
+        inStock: true,
+        contactSales: false,
+      },
+    ]);
+  }
+
+  function remove(key: string) {
+    setRows((r) => r.filter((row) => row.key !== key));
+  }
+
+  function toggleStock(key: string) {
+    setRows((r) => r.map((row) => (row.key === key ? { ...row, inStock: !row.inStock } : row)));
+  }
+
+  function toggleContactSales(key: string) {
+    setRows((r) =>
+      r.map((row) => (row.key === key ? { ...row, contactSales: !row.contactSales } : row)),
+    );
+  }
+
+  function removeGalleryImage(key: string, src: string) {
+    setRows((r) =>
+      r.map((row) =>
+        row.key === key
+          ? { ...row, gallery: (row.gallery ?? []).filter((g) => g.src !== src) }
+          : row,
+      ),
+    );
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {products.map((p) => (
-        <label
-          key={p.slug}
-          className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border border-line bg-surface transition hover:border-brand-300 has-[:checked]:border-brand-600 has-[:checked]:ring-2 has-[:checked]:ring-brand-600/30"
-        >
+    <div className="space-y-4">
+      {rows.map((row) => (
+        <div key={row.key} className="rounded-xl border border-line bg-bg p-4">
+          {/* Hidden, row-aligned values the action reads by index. */}
+          <input type="hidden" name="productId" value={row.id} />
+          <input type="hidden" name="productImage" value={row.image} />
+          <input type="hidden" name="productInStock" value={row.inStock ? "1" : "0"} />
           <input
-            type="checkbox"
-            name="productSlug"
-            value={p.slug}
-            defaultChecked={selected.has(p.slug)}
-            className="peer absolute right-2 top-2 z-10 h-4 w-4"
+            type="hidden"
+            name="productContactSales"
+            value={row.contactSales ? "1" : "0"}
           />
-          <div className="relative aspect-square bg-white">
-            <Image src={p.image} alt="" fill sizes="160px" className="object-contain p-3" />
+
+          <div className="flex gap-4">
+            <div className="w-28 shrink-0">
+              <div className="relative aspect-square overflow-hidden rounded-lg border border-line bg-white">
+                {row.image ? (
+                  <Image src={row.image} alt="" fill sizes="112px" className="object-contain p-2" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-center text-[11px] text-muted-light">
+                    No image
+                  </div>
+                )}
+              </div>
+              <input
+                type="file"
+                name="productImageFile"
+                accept="image/png,image/jpeg,image/webp"
+                className="mt-2 block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs file:font-medium file:text-fg"
+              />
+            </div>
+
+            <div className="min-w-0 flex-1 space-y-3">
+              <TextInput name="productName" defaultValue={row.name} placeholder="Product name" required />
+              <div
+                className={[
+                  "grid grid-cols-2 gap-3",
+                  row.contactSales ? "opacity-50" : "",
+                ].join(" ")}
+              >
+                <label className="block">
+                  <span className="text-xs font-medium text-muted">Price (₱)</span>
+                  <TextInput
+                    name="productPrice"
+                    type="number"
+                    min={0}
+                    defaultValue={row.price || ""}
+                    placeholder="0"
+                    readOnly={row.contactSales}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-muted">Sale “was” price (optional)</span>
+                  <TextInput
+                    name="productCompareAt"
+                    type="number"
+                    min={0}
+                    defaultValue={row.compareAtPrice || ""}
+                    placeholder="—"
+                    readOnly={row.contactSales}
+                  />
+                </label>
+              </div>
+              <TextInput
+                name="productSummary"
+                defaultValue={row.summary ?? ""}
+                placeholder="Short one-line summary (optional)"
+              />
+              <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <label className="flex items-center gap-2 text-sm text-fg">
+                    <input
+                      type="checkbox"
+                      checked={row.inStock}
+                      onChange={() => toggleStock(row.key)}
+                    />
+                    In stock
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-fg">
+                    <input
+                      type="checkbox"
+                      checked={row.contactSales ?? false}
+                      onChange={() => toggleContactSales(row.key)}
+                    />
+                    Price on request (Contact a sales agent)
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => remove(row.key)}
+                  className="rounded-lg border border-line px-3 py-1.5 text-sm text-muted hover:bg-elevated hover:text-danger"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="border-t border-line p-2.5">
-            <p className="line-clamp-2 text-xs font-medium leading-snug text-fg">{p.name}</p>
-            <p className="mt-1 text-xs font-semibold text-brand-700">{p.price}</p>
-          </div>
-        </label>
+
+          {/* Collapsible extra content for the product's detail page. Kept in the DOM even when
+              collapsed so its fields stay row-aligned with the other `product*` arrays on save. */}
+          <details className="mt-3 rounded-lg border border-line bg-surface px-3 py-2">
+            <summary className="cursor-pointer text-sm font-medium text-muted hover:text-fg">
+              More details — description, photos &amp; highlights (shown on the product page)
+            </summary>
+            <div className="mt-3 space-y-3">
+              <label className="block">
+                <span className="text-xs font-medium text-muted">Description</span>
+                <TextArea
+                  name="productDescription"
+                  defaultValue={(row.description ?? []).join("\n")}
+                  rows={4}
+                  placeholder="Full description. One paragraph per line."
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-muted">Highlights</span>
+                <TextArea
+                  name="productHighlights"
+                  defaultValue={(row.highlights ?? []).join("\n")}
+                  rows={3}
+                  placeholder="Key features or specs. One per line."
+                />
+              </label>
+
+              <div>
+                <span className="text-xs font-medium text-muted">Extra photos</span>
+                {/* Kept images, posted as JSON; a real form control so it submits with the row. */}
+                <input
+                  type="hidden"
+                  name="productGalleryJson"
+                  value={JSON.stringify(row.gallery ?? [])}
+                />
+                {(row.gallery ?? []).length > 0 && (
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {(row.gallery ?? []).map((img) => (
+                      <li key={img.src} className="relative h-16 w-16 overflow-hidden rounded-lg border border-line bg-elevated">
+                        <Image src={img.src} alt="" fill sizes="64px" className="object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeGalleryImage(row.key, img.src)}
+                          aria-label="Remove photo"
+                          className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/60 text-xs text-white hover:bg-ink"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <input
+                  type="file"
+                  name={`productGalleryFiles_${row.id}`}
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  className="mt-2 block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs file:font-medium file:text-fg"
+                />
+              </div>
+            </div>
+          </details>
+        </div>
       ))}
+
+      <button
+        type="button"
+        onClick={add}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-sm font-semibold text-brand-700 hover:border-brand-400 hover:bg-brand-50"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+        </svg>
+        Add product
+      </button>
     </div>
   );
 }

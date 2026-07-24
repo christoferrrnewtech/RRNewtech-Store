@@ -17,9 +17,9 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import crypto from "node:crypto";
 import { cert, initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-import { PRODUCT_SEED, CATEGORIES, brandSlug } from "../src/lib/products";
+import { PRODUCT_SEED, CATEGORIES, brandSlug, productImageUrl } from "../src/lib/products";
 
 const ROOT = process.cwd();
 
@@ -44,13 +44,23 @@ function requireEnv(name: string): string {
   return v;
 }
 
-const COLLECTIONS = {
-  banners: "storeBanners",
-  brands: "storeBrands",
-  products: "storeProducts",
-  categories: "storeCategories",
-  adminUsers: "storeAdminUsers",
+// Documents inside R&RLandingPage — one per type, each holding a map keyed by id/slug/uid.
+const LANDING = "R&RLandingPage";
+const DOCS = {
+  banner: "banner",
+  brand: "brand",
+  product: "product",
+  categories: "categories",
+  users: "users",
 } as const;
+// The old top-level collections from the first (sibling) seed — removed at the end.
+const OLD_COLLECTIONS = [
+  "storeBanners",
+  "storeBrands",
+  "storeProducts",
+  "storeCategories",
+  "storeAdminUsers",
+];
 
 initializeApp({
   credential: cert({
@@ -64,6 +74,8 @@ const db = getFirestore();
 db.settings({ ignoreUndefinedProperties: true });
 const auth = getAuth();
 
+const storeDoc = (name: string) => db.collection(LANDING).doc(name);
+
 type JsonBrand = { slug: string; [k: string]: unknown };
 type JsonBanner = { id: string; image: string; alt: string; href: string };
 type JsonUser = { email: string; name: string; role: "admin" | "marketing"; brandSlugs: string[] };
@@ -74,55 +86,65 @@ const content = JSON.parse(
 ) as SiteContent;
 
 async function seedBanners() {
-  const batch = db.batch();
+  const map: Record<string, unknown> = {};
   content.banners.forEach((b, order) => {
-    batch.set(db.collection(COLLECTIONS.banners).doc(b.id), {
-      image: b.image,
-      alt: b.alt,
-      href: b.href,
-      order,
-    });
+    map[b.id] = { image: b.image, alt: b.alt, href: b.href, order };
   });
-  await batch.commit();
-  console.log(`✓ storeBanners: ${content.banners.length}`);
+  // No merge: replaces the whole document (clears the old placeholder `banner: ""` field).
+  await storeDoc(DOCS.banner).set(map);
+  console.log(`✓ R&RLandingPage/banner: ${content.banners.length}`);
 }
 
 async function seedBrands() {
-  const batch = db.batch();
+  const map: Record<string, unknown> = {};
   for (const brand of content.brands) {
-    const { slug, ...rest } = brand;
-    batch.set(db.collection(COLLECTIONS.brands).doc(slug), {
-      ...rest,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    const { slug, featuredProductSlugs, ...rest } = brand as JsonBrand & {
+      featuredProductSlugs?: string[];
+    };
+    void featuredProductSlugs; // replaced by brand-owned `products`
+
+    // Seed each brand's products from the matching seed catalog entries (lightweight shape).
+    const products = PRODUCT_SEED.filter((p) => brandSlug(p.brand) === slug).map((p) => ({
+      id: p.slug,
+      name: p.name,
+      price: p.price,
+      compareAtPrice: p.compareAtPrice,
+      summary: p.summary,
+      image: p.useBrandLogo ? "" : productImageUrl(p, 800),
+      inStock: p.inStock,
+    }));
+
+    map[slug] = { ...rest, products };
   }
-  await batch.commit();
-  console.log(`✓ storeBrands: ${content.brands.length}`);
+  await storeDoc(DOCS.brand).set(map);
+  console.log(`✓ R&RLandingPage/brand: ${content.brands.length}`);
 }
 
 async function seedProducts() {
-  const batch = db.batch();
+  const map: Record<string, unknown> = {};
   PRODUCT_SEED.forEach((p, order) => {
     const { slug, ...rest } = p;
-    batch.set(db.collection(COLLECTIONS.products).doc(slug), {
-      ...rest,
-      brandSlug: brandSlug(p.brand), // real foreign key to storeBrands
-      order,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    map[slug] = { ...rest, brandSlug: brandSlug(p.brand), order }; // brandSlug = FK to brand
   });
-  await batch.commit();
-  console.log(`✓ storeProducts: ${PRODUCT_SEED.length}`);
+  await storeDoc(DOCS.product).set(map);
+  console.log(`✓ R&RLandingPage/product: ${PRODUCT_SEED.length}`);
 }
 
 async function seedCategories() {
-  const batch = db.batch();
+  const map: Record<string, unknown> = {};
   CATEGORIES.forEach((c, order) => {
     const { slug, ...rest } = c;
-    batch.set(db.collection(COLLECTIONS.categories).doc(slug), { ...rest, order });
+    map[slug] = { ...rest, order };
   });
-  await batch.commit();
-  console.log(`✓ storeCategories: ${CATEGORIES.length}`);
+  await storeDoc(DOCS.categories).set(map);
+  console.log(`✓ R&RLandingPage/categories: ${CATEGORIES.length}`);
+}
+
+async function deleteOldCollections() {
+  for (const name of OLD_COLLECTIONS) {
+    await db.recursiveDelete(db.collection(name));
+    console.log(`✓ removed old top-level collection: ${name}`);
+  }
 }
 
 /** Create (or update the password of) a Firebase Auth user; returns its uid. */
@@ -141,15 +163,12 @@ async function ensureAuthUser(email: string, password: string, name: string): Pr
 }
 
 async function seedUsers() {
+  const map: Record<string, unknown> = {};
+
   // 1. The owner account — same credentials the app used before.
   const ownerEmail = "admin@rnr.com";
   const ownerUid = await ensureAuthUser(ownerEmail, "rnr@123", "R&R Admin");
-  await db.collection(COLLECTIONS.adminUsers).doc(ownerUid).set({
-    email: ownerEmail,
-    name: "R&R Admin",
-    role: "admin",
-    brandSlugs: [],
-  });
+  map[ownerUid] = { email: ownerEmail, name: "R&R Admin", role: "admin", brandSlugs: [] };
   console.log(`✓ admin account: ${ownerEmail} / rnr@123`);
 
   // 2. Existing marketing users — new temp passwords (old scrypt hashes can't be migrated).
@@ -157,14 +176,16 @@ async function seedUsers() {
     if (u.email.toLowerCase() === ownerEmail) continue;
     const tempPassword = `rrnt-${crypto.randomBytes(4).toString("hex")}`;
     const uid = await ensureAuthUser(u.email, tempPassword, u.name);
-    await db.collection(COLLECTIONS.adminUsers).doc(uid).set({
+    map[uid] = {
       email: u.email.toLowerCase(),
       name: u.name,
       role: u.role,
       brandSlugs: u.brandSlugs ?? [],
-    });
+    };
     console.log(`✓ ${u.role} account: ${u.email} — TEMP PASSWORD: ${tempPassword}`);
   }
+
+  await storeDoc(DOCS.users).set(map);
 }
 
 async function main() {
@@ -174,6 +195,7 @@ async function main() {
   await seedProducts();
   await seedCategories();
   await seedUsers();
+  await deleteOldCollections();
   console.log("\nDone. Set any temporary passwords above with their owners.");
 }
 

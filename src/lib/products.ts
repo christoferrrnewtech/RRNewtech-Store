@@ -577,6 +577,19 @@ export function brandSlug(brand: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+/** Slug for a brand-owned product, from its name; falls back to its id when the name is empty. */
+export function brandProductSlugify(name: string, fallbackId: string): string {
+  return brandSlug(name) || fallbackId;
+}
+
+/** Canonical detail-page URL for a brand product. Single source of truth for the URL shape. */
+export function brandProductHref(
+  brandSlugValue: string,
+  product: { slug?: string; id: string },
+): string {
+  return `/brands/${brandSlugValue}/${product.slug ?? product.id}`;
+}
+
 /** Keyword search over name, brand, and summary (case-insensitive). */
 export function searchProducts(list: Product[], q: string): Product[] {
   const needle = q.trim().toLowerCase();

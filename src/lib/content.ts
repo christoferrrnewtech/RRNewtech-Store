@@ -14,16 +14,42 @@
  */
 
 import "server-only";
+import crypto from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
-import { getDb, COLLECTIONS } from "@/lib/firebase";
-import { getProductBySlug } from "@/lib/catalog";
-import { type Product } from "@/lib/products";
+import { getDb, storeDoc, DOCS } from "@/lib/firebase";
+import { type Product, brandProductSlugify } from "@/lib/products";
 import type { BrandGroup } from "@/lib/constants";
 
 export type BrandStatus = "draft" | "published";
 
 export type GalleryImage = { src: string; caption?: string };
 export type BrandReason = { title: string; body: string };
+
+/** A product owned by a brand and shown on its storefront page (with its own detail page). */
+export type BrandProduct = {
+  /** Stable key within the brand. */
+  id: string;
+  /** URL slug for the detail page, slugified from the name and deduped within the brand. Legacy
+   *  products saved before this existed have none — the detail page falls back to matching `id`. */
+  slug?: string;
+  name: string;
+  /** Price in PHP (whole pesos). */
+  price: number;
+  /** Optional original price for a sale (kept only when > price). */
+  compareAtPrice?: number;
+  summary?: string;
+  /** Full description paragraphs for the detail page. */
+  description?: string[];
+  /** Spec/feature highlight bullets for the detail page. */
+  highlights?: string[];
+  /** Extra product photos shown on the detail page (beyond the main `image`). */
+  gallery?: GalleryImage[];
+  /** Uploaded image URL, or "" — the brand logo is used as a fallback. */
+  image: string;
+  inStock: boolean;
+  /** When true, the storefront hides the price and shows a "Contact a sales agent" CTA instead. */
+  contactSales?: boolean;
+};
 
 export type BrandCta = {
   heading: string;
@@ -55,8 +81,8 @@ export type Brand = {
   /** Any YouTube URL; the embed id is parsed out at render time. */
   youtubeUrl?: string;
   gallery: GalleryImage[];
-  /** Product slugs to feature. Unknown slugs are ignored at read time. */
-  featuredProductSlugs: string[];
+  /** Products owned by this brand, shown on its storefront page. */
+  products: BrandProduct[];
   /** "Why Choose This Brand?" cards. */
   whyChoose: BrandReason[];
   cta: BrandCta;
@@ -80,39 +106,72 @@ export type AdminUser = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Firestore converters. Document id carries the natural key (banner id / brand slug / uid),
-// so it isn't duplicated inside the stored fields.
+// Each store document holds a map keyed by the natural id (banner id / slug / uid). These read the
+// whole map and turn map values into typed objects, ignoring any stray non-object fields.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Doc = FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot;
+type ItemMap = Record<string, Record<string, unknown>>;
 
-function toBanner(doc: Doc): Banner {
-  const d = doc.data() as Omit<Banner, "id">;
-  return { id: doc.id, image: d.image, alt: d.alt, href: d.href, order: d.order ?? 0 };
+/** Read the map inside a store document. Non-object values are dropped. */
+async function readMap(name: string): Promise<ItemMap> {
+  const snap = await storeDoc(name).get();
+  const data = (snap.exists ? snap.data() : undefined) ?? {};
+  const out: ItemMap = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      out[key] = value as Record<string, unknown>;
+    }
+  }
+  return out;
 }
 
-function toBrand(doc: Doc): Brand {
-  const { slug, ...rest } = doc.data() as Brand & { updatedAt?: unknown };
-  void slug; // slug comes from the document id, not the stored fields
-  return { ...(rest as Omit<Brand, "slug">), slug: doc.id };
-}
-
-function toUser(doc: Doc): AdminUser {
-  const d = doc.data() as Omit<AdminUser, "uid">;
+function toBanner(id: string, v: Record<string, unknown>): Banner {
   return {
-    uid: doc.id,
-    email: d.email,
-    name: d.name,
-    role: d.role,
-    brandSlugs: Array.isArray(d.brandSlugs) ? d.brandSlugs : [],
+    id,
+    image: String(v.image ?? ""),
+    alt: String(v.alt ?? ""),
+    href: String(v.href ?? ""),
+    order: typeof v.order === "number" ? v.order : 0,
   };
 }
 
-/** Strip the id-carrying key and stamp updatedAt before writing a brand document. */
-function brandToDoc(brand: Brand) {
+function toBrand(slug: string, v: Record<string, unknown>): Brand {
+  const raw = Array.isArray(v.products) ? (v.products as BrandProduct[]) : [];
+  // Slugs are always derived from the current product name (deduped within the brand), so a URL can
+  // never drift from a renamed product. This overrides any stored/legacy slug on read.
+  const used = new Set<string>();
+  const products = raw.map((p) => {
+    let s = brandProductSlugify(p.name ?? "", p.id);
+    if (used.has(s)) {
+      let n = 2;
+      while (used.has(`${s}-${n}`)) n++;
+      s = `${s}-${n}`;
+    }
+    used.add(s);
+    return { ...p, slug: s };
+  });
+  return {
+    ...(v as Omit<Brand, "slug">),
+    slug,
+    products,
+  };
+}
+
+function toUser(uid: string, v: Record<string, unknown>): AdminUser {
+  return {
+    uid,
+    email: String(v.email ?? ""),
+    name: String(v.name ?? ""),
+    role: v.role === "admin" ? "admin" : "marketing",
+    brandSlugs: Array.isArray(v.brandSlugs) ? (v.brandSlugs as string[]) : [],
+  };
+}
+
+/** Item payload to store under its id key — the id itself lives in the map key, not the value. */
+function brandItem(brand: Brand) {
   const { slug, ...rest } = brand;
-  void slug; // stored as the document id, not a field
-  return { ...rest, updatedAt: FieldValue.serverTimestamp() };
+  void slug;
+  return rest;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,24 +180,26 @@ function brandToDoc(brand: Brand) {
 
 /** Carousel banners in display order. */
 export async function getBanners(): Promise<Banner[]> {
-  const snap = await getDb().collection(COLLECTIONS.banners).get();
-  return snap.docs.map(toBanner).sort((a, b) => a.order - b.order);
+  const map = await readMap(DOCS.banner);
+  return Object.entries(map)
+    .map(([id, v]) => toBanner(id, v))
+    .sort((a, b) => a.order - b.order);
 }
 
 /** Published brands in display order. This is what the storefront should always call. */
 export async function getBrands(): Promise<Brand[]> {
-  const snap = await getDb().collection(COLLECTIONS.brands).get();
-  return snap.docs
-    .map(toBrand)
+  const map = await readMap(DOCS.brand);
+  return Object.entries(map)
+    .map(([slug, v]) => toBrand(slug, v))
     .filter((b) => b.status === "published")
     .sort((a, b) => a.order - b.order);
 }
 
 /** Published brand by slug, or undefined — drafts are invisible here on purpose. */
 export async function getBrandBySlug(slug: string): Promise<Brand | undefined> {
-  const doc = await getDb().collection(COLLECTIONS.brands).doc(slug).get();
-  if (!doc.exists) return undefined;
-  const brand = toBrand(doc);
+  const map = await readMap(DOCS.brand);
+  if (!map[slug]) return undefined;
+  const brand = toBrand(slug, map[slug]);
   return brand.status === "published" ? brand : undefined;
 }
 
@@ -152,131 +213,130 @@ export async function productBrandLogo(product: Product): Promise<string | undef
   return (await getBrandBySlug(brandSlug(product.brand)))?.logo;
 }
 
-/** Featured products for a brand, resolved and de-duplicated. Unknown slugs are dropped. */
-export async function getFeaturedProductsForBrand(brand: Brand): Promise<Product[]> {
-  const seen = new Set<string>();
-  const out: Product[] = [];
-  for (const slug of brand.featuredProductSlugs) {
-    if (seen.has(slug)) continue;
-    seen.add(slug);
-    const product = await getProductBySlug(slug);
-    if (product) out.push(product);
-  }
-  return out;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin reads — include drafts. Never call these from a storefront page.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getAllBrandsForAdmin(): Promise<Brand[]> {
-  const snap = await getDb().collection(COLLECTIONS.brands).get();
-  return snap.docs.map(toBrand).sort((a, b) => a.order - b.order);
+  const map = await readMap(DOCS.brand);
+  return Object.entries(map)
+    .map(([slug, v]) => toBrand(slug, v))
+    .sort((a, b) => a.order - b.order);
 }
 
 export async function getBrandForAdmin(slug: string): Promise<Brand | undefined> {
-  const doc = await getDb().collection(COLLECTIONS.brands).doc(slug).get();
-  return doc.exists ? toBrand(doc) : undefined;
+  const map = await readMap(DOCS.brand);
+  return map[slug] ? toBrand(slug, map[slug]) : undefined;
 }
 
 export async function brandExists(slug: string): Promise<boolean> {
-  const doc = await getDb().collection(COLLECTIONS.brands).doc(slug).get();
-  return doc.exists;
+  const map = await readMap(DOCS.brand);
+  return Boolean(map[slug]);
 }
 
 export async function getUsers(): Promise<AdminUser[]> {
-  const snap = await getDb().collection(COLLECTIONS.adminUsers).get();
-  return snap.docs.map(toUser).sort((a, b) => a.name.localeCompare(b.name));
+  const map = await readMap(DOCS.users);
+  return Object.entries(map)
+    .map(([uid, v]) => toUser(uid, v))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function getUserByEmail(email: string): Promise<AdminUser | undefined> {
   const needle = email.trim().toLowerCase();
-  const snap = await getDb()
-    .collection(COLLECTIONS.adminUsers)
-    .where("email", "==", needle)
-    .limit(1)
-    .get();
-  return snap.empty ? undefined : toUser(snap.docs[0]);
+  return (await getUsers()).find((u) => u.email.toLowerCase() === needle);
 }
 
 export async function getUserByUid(uid: string): Promise<AdminUser | undefined> {
-  const doc = await getDb().collection(COLLECTIONS.adminUsers).doc(uid).get();
-  return doc.exists ? toUser(doc) : undefined;
+  const map = await readMap(DOCS.users);
+  return map[uid] ? toUser(uid, map[uid]) : undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin writes.
+// Admin writes. Each write targets one map key inside the type's document.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function addBanner(data: Omit<Banner, "id" | "order">): Promise<void> {
-  const db = getDb();
+  const id = crypto.randomUUID();
   const existing = await getBanners();
-  const order = existing.length; // append to the end of the carousel
-  await db.collection(COLLECTIONS.banners).add({ ...data, order });
+  await storeDoc(DOCS.banner).set(
+    { [id]: { ...data, order: existing.length } },
+    { merge: true },
+  );
 }
 
 export async function updateBanner(
   id: string,
   patch: Partial<Omit<Banner, "id" | "order">>,
 ): Promise<void> {
-  await getDb().collection(COLLECTIONS.banners).doc(id).set(patch, { merge: true });
+  // Nested merge updates only the supplied fields of this banner, leaving the rest intact.
+  await storeDoc(DOCS.banner).set({ [id]: patch }, { merge: true });
 }
 
 export async function deleteBanner(id: string): Promise<void> {
-  await getDb().collection(COLLECTIONS.banners).doc(id).delete();
+  await storeDoc(DOCS.banner).update({ [id]: FieldValue.delete() });
 }
 
 /** Write the carousel order from a full id sequence. Ids not listed keep their old order. */
 export async function reorderBanners(ids: string[]): Promise<void> {
-  const db = getDb();
-  const batch = db.batch();
+  const updates: Record<string, number> = {};
   ids.forEach((id, order) => {
-    batch.set(db.collection(COLLECTIONS.banners).doc(id), { order }, { merge: true });
+    updates[`${id}.order`] = order;
   });
-  await batch.commit();
+  if (Object.keys(updates).length) await storeDoc(DOCS.banner).update(updates);
 }
 
 export async function createBrand(brand: Brand): Promise<void> {
-  await getDb().collection(COLLECTIONS.brands).doc(brand.slug).set(brandToDoc(brand));
+  await storeDoc(DOCS.brand).set({ [brand.slug]: brandItem(brand) }, { merge: true });
 }
 
-/** Persist a full brand document (used by every brand-section save). */
+/**
+ * Persist a full brand (used by every brand-section save). `update` replaces the whole item value,
+ * so fields cleared in the editor (e.g. a removed hero image) are actually dropped.
+ */
 export async function saveBrand(brand: Brand): Promise<void> {
-  await getDb().collection(COLLECTIONS.brands).doc(brand.slug).set(brandToDoc(brand));
+  await storeDoc(DOCS.brand).update({ [brand.slug]: brandItem(brand) });
 }
 
 export async function deleteBrand(slug: string): Promise<void> {
   const db = getDb();
   const batch = db.batch();
-  batch.delete(db.collection(COLLECTIONS.brands).doc(slug));
+  batch.update(storeDoc(DOCS.brand), { [slug]: FieldValue.delete() });
   // Drop the deleted brand from any marketing user's assignments.
-  const users = await db
-    .collection(COLLECTIONS.adminUsers)
-    .where("brandSlugs", "array-contains", slug)
-    .get();
-  for (const u of users.docs) {
-    batch.update(u.ref, { brandSlugs: FieldValue.arrayRemove(slug) });
+  const users = await readMap(DOCS.users);
+  for (const [uid, v] of Object.entries(users)) {
+    if (Array.isArray(v.brandSlugs) && (v.brandSlugs as string[]).includes(slug)) {
+      batch.update(storeDoc(DOCS.users), { [`${uid}.brandSlugs`]: FieldValue.arrayRemove(slug) });
+    }
   }
   await batch.commit();
 }
 
 /** Next display order for a new brand (count of existing brands). */
 export async function nextBrandOrder(): Promise<number> {
-  const snap = await getDb().collection(COLLECTIONS.brands).get();
-  return snap.size;
+  const map = await readMap(DOCS.brand);
+  return Object.keys(map).length;
+}
+
+/** Write brand display order from a full slug sequence (position = order). */
+export async function reorderBrands(slugs: string[]): Promise<void> {
+  const updates: Record<string, number> = {};
+  slugs.forEach((slug, order) => {
+    updates[`${slug}.order`] = order;
+  });
+  if (Object.keys(updates).length) await storeDoc(DOCS.brand).update(updates);
 }
 
 export async function upsertAdminUser(user: AdminUser): Promise<void> {
   const { uid, ...rest } = user;
-  await getDb().collection(COLLECTIONS.adminUsers).doc(uid).set(rest, { merge: true });
+  await storeDoc(DOCS.users).set({ [uid]: rest }, { merge: true });
 }
 
 export async function updateUserBrands(uid: string, brandSlugs: string[]): Promise<void> {
-  await getDb().collection(COLLECTIONS.adminUsers).doc(uid).set({ brandSlugs }, { merge: true });
+  await storeDoc(DOCS.users).update({ [`${uid}.brandSlugs`]: brandSlugs });
 }
 
 export async function deleteAdminUserDoc(uid: string): Promise<void> {
-  await getDb().collection(COLLECTIONS.adminUsers).doc(uid).delete();
+  await storeDoc(DOCS.users).update({ [uid]: FieldValue.delete() });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
