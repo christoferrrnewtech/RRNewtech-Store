@@ -30,6 +30,7 @@ export const DOCS = {
   product: "product",
   categories: "categories",
   users: "users",
+  about: "about",
 } as const;
 
 function requireEnv(name: string): string {

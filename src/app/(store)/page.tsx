@@ -5,6 +5,8 @@ import { ShopBanner } from "@/components/shop/ShopBanner";
 import { CategoryCircles } from "@/components/shop/CategoryCircles";
 import { DigitalDentistryPromo } from "@/components/home/DigitalDentistryPromo";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
+import { AboutIntro } from "@/components/home/AboutIntro";
+import { AllProductsGrid } from "@/components/home/AllProductsGrid";
 import {
   CATEGORY_MAP,
   brandSlug,
@@ -75,9 +77,13 @@ export default async function HomePage({
     <>
       <ShopBanner />
 
+      {isUnfiltered && <AboutIntro />}
+
       {SECTIONS.categoryCircles && <CategoryCircles activeCategory={activeCategory} />}
 
       {isUnfiltered && <BrandShowcase />}
+
+      {isUnfiltered && <AllProductsGrid />}
 
       {isUnfiltered && <DigitalDentistryPromo />}
 

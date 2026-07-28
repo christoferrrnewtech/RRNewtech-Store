@@ -3,8 +3,6 @@
  * Keep brand/marketing strings here so components stay thin and copy is edited in one place.
  */
 
-import type { CategorySlug } from "@/lib/products";
-
 // Public site URL — used for canonical links, sitemap, OG. Overridable via env for staging.
 export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://rrnewtech.ph"
@@ -24,6 +22,7 @@ export const SITE = {
   socials: {
     facebook: "https://facebook.com/rrnewtechdental",
     instagram: "https://instagram.com/rrnewtechdental",
+    linkedin: "https://linkedin.com/company/rrnewtechdental",
   },
 } as const;
 
@@ -56,54 +55,17 @@ export const BRAND_GROUP_MAP: Record<BrandGroup, { label: string; tag: string }>
  */
 export const SECTIONS = {
   categoryCircles: false, // "Shop by category" row under the banner
-  categoryNav: false, // "Category" mega-menu in the header (desktop + mobile)
+  categoryNav: true, // "Categories" mega-menu in the header (desktop + mobile)
   allProducts: false, // "All Products" catalog on the *unfiltered* landing view
 } as const;
 
 /**
- * Primary top-nav links (plain links). "Category" and "Brand" are mega-menu triggers handled
- * in SiteHeader, not listed here. About/Contact/FAQ live in the footer.
+ * Primary top-nav links (plain links). "Categories" and "Brand" are mega-menu triggers handled
+ * in SiteHeader, not listed here. The logo already links home, so there's no separate "Shop" link.
  */
 export const NAV_LINKS = [
-  { href: "/", label: "Shop" },
-  { href: "/discover", label: "Discover" },
+  { href: "/about", label: "About" },
 ] as const;
-
-/**
- * Logical parent groups for the Category mega-menu. Slugs must exist in `CATEGORIES`
- * (see lib/products.ts); names are resolved via CATEGORY_MAP at render time.
- */
-export const CATEGORY_GROUPS: { title: string; slugs: CategorySlug[] }[] = [
-  {
-    title: "Restorative & Cosmetic",
-    slugs: ["cosmetic-restorative", "endodontics", "finishing-polishing", "burs-diamonds"],
-  },
-  {
-    title: "Instruments & Handpieces",
-    slugs: ["hand-instruments", "handpieces", "loupes-magnification", "curing-lights"],
-  },
-  {
-    title: "Equipment & Digital",
-    slugs: ["equipment", "digital-dentistry", "imaging-xray", "photography", "laser-dentistry"],
-  },
-  {
-    title: "Specialties",
-    slugs: [
-      "orthodontics",
-      "periodontics",
-      "prosthodontics",
-      "pediatric",
-      "surgical-implant",
-      "anesthetics",
-      "occlusion-tmj",
-      "preventive",
-    ],
-  },
-  {
-    title: "Infection Control & Consumables",
-    slugs: ["infection-control", "disposables-ppe", "laboratory", "oral-hygiene", "uniforms-scrubs"],
-  },
-];
 
 /** Trust badges shown on the home page and footer. */
 export const TRUST_POINTS = [

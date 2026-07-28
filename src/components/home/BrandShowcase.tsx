@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { getBrands } from "@/lib/content";
 import { BrandFilterGrid, type BrandCard } from "@/components/home/BrandFilterGrid";
+import { BrandLogoCarousel } from "@/components/home/BrandLogoCarousel";
 
 /** Map published brands → serializable card data for the client grid. Server-only data lives here. */
 async function brandCards(): Promise<BrandCard[]> {
@@ -17,16 +18,17 @@ async function brandCards(): Promise<BrandCard[]> {
 }
 
 /**
- * "Shop by Brand" — header + the filterable bento tile grid, shown on the unfiltered home page.
- * Each tile leads to /brands/[slug]. Logos ship with their own backgrounds, so they sit contained
- * on a light plate rather than cropped to fill the card.
+ * "Shop by Brand" — header + an auto-scrolling logo-only carousel, shown on the unfiltered home
+ * page. Each logo leads to /brands/[slug]. The full filterable grid lives on the /brands index page
+ * (see `BrandGrid`). Logos ship with their own backgrounds, so they sit contained on a white plate.
  */
 export async function BrandShowcase() {
   const brands = await brandCards();
+  if (brands.length === 0) return null;
   return (
     <section aria-labelledby="brands-heading" className="bg-bg">
       <Container className="py-14">
-        <div className="mb-6 flex items-end justify-between gap-4">
+        <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
               Our Brands
@@ -50,7 +52,9 @@ export async function BrandShowcase() {
           </Link>
         </div>
 
-        <BrandFilterGrid brands={brands} />
+        <BrandLogoCarousel
+          brands={brands.map((b) => ({ slug: b.slug, name: b.name, logo: b.logo }))}
+        />
       </Container>
     </section>
   );

@@ -16,11 +16,18 @@ export function BrandProductCard({
   brandName,
   brandSlug,
   brandLogo,
+  showBrand = false,
+  categoryLabel,
 }: {
   product: BrandProduct;
   brandName: string;
   brandSlug: string;
   brandLogo: string;
+  /** Show the brand name as an eyebrow above the title — used on mixed grids (e.g. the home page),
+   *  off on a brand's own page where the brand is already obvious. */
+  showBrand?: boolean;
+  /** Optional resolved category/subcategory label shown after the brand (parent resolves the name). */
+  categoryLabel?: string;
 }) {
   const off = product.contactSales ? null : discountPercent(product.price, product.compareAtPrice);
   const image = product.image || brandLogo;
@@ -56,6 +63,14 @@ export function BrandProductCard({
       </Link>
 
       <div className="flex flex-1 flex-col p-4">
+        {showBrand && (
+          <p className="mb-1 truncate text-xs font-medium uppercase tracking-wide text-muted-light">
+            <Link href={`/brands/${brandSlug}`} className="hover:text-brand-700">
+              {brandName}
+            </Link>
+            {categoryLabel && <span> · {categoryLabel}</span>}
+          </p>
+        )}
         <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-fg">
           <Link href={href} className="hover:text-brand-700">
             {product.name}

@@ -48,7 +48,7 @@ export function CategoryCircles({ activeCategory }: { activeCategory: string }) 
             {CATEGORIES.map((c) => (
               <li key={c.slug} className="w-24 shrink-0 snap-start">
                 <CircleLink
-                  href={`/?category=${c.slug}`}
+                  href={`/categories/${c.slug}`}
                   label={c.name}
                   glyph={initials(c.name)}
                   icon={c.icon}

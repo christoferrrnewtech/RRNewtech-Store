@@ -21,6 +21,17 @@ import {
   updateBanner,
   deleteBanner,
   reorderBanners,
+  saveAboutContent,
+  type AboutContent,
+  getCategories,
+  createCategory,
+  renameCategory,
+  deleteCategory,
+  reorderCategories,
+  createSubcategory,
+  renameSubcategory,
+  deleteSubcategory,
+  reorderSubcategories,
   brandExists,
   createBrand,
   saveBrand,
@@ -66,6 +77,8 @@ function revalidateStorefront(slug?: string) {
   revalidatePath("/brands");
   // "layout" so the brand page AND its nested product detail pages both refresh.
   if (slug) revalidatePath(`/brands/${slug}`, "layout");
+  // Category pages list brand products, so refresh them all when brand content changes.
+  revalidatePath("/categories/[slug]", "page");
   revalidatePath("/sitemap.xml");
 }
 
@@ -202,6 +215,112 @@ export async function deleteBannerAction(form: FormData): Promise<void> {
 export async function reorderBannersAction(ids: string[]): Promise<void> {
   await requireAdmin();
   await reorderBanners(ids);
+  revalidateStorefront();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// About section (admin only) — the homepage "About" band
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function saveAboutAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const heading = text(form, "heading");
+  if (!heading) return { error: "Heading is required." };
+
+  try {
+    const uploaded = await storeUpload(form.get("image"), "about");
+    const patch: Partial<AboutContent> = {
+      eyebrow: text(form, "eyebrow"),
+      heading,
+      paragraphs: textList(form, "paragraph"),
+      ctaLabel: text(form, "ctaLabel"),
+      ctaHref: text(form, "ctaHref"),
+    };
+    // New upload wins; otherwise an explicit "use placeholder" clears it, and a plain save keeps it.
+    if (uploaded) patch.image = uploaded;
+    else if (form.get("removeImage") === "1") patch.image = "";
+    await saveAboutContent(patch);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not save the About section." };
+  }
+
+  revalidateStorefront();
+  return { ok: "About section saved." };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Categories & subcategories (admin only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createCategoryAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await createCategory(text(form, "name"));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not create the category." };
+  }
+  revalidateStorefront();
+  return { ok: "Category created." };
+}
+
+export async function renameCategoryAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await renameCategory(text(form, "slug"), text(form, "name"));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not rename the category." };
+  }
+  revalidateStorefront();
+  return { ok: "Category renamed." };
+}
+
+export async function deleteCategoryAction(form: FormData): Promise<void> {
+  await requireAdmin();
+  await deleteCategory(text(form, "slug"));
+  revalidateStorefront();
+}
+
+export async function reorderCategoriesAction(slugs: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderCategories(slugs);
+  revalidateStorefront();
+}
+
+export async function createSubcategoryAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await createSubcategory(text(form, "category"), text(form, "name"));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not create the subcategory." };
+  }
+  revalidateStorefront();
+  return { ok: "Subcategory created." };
+}
+
+export async function renameSubcategoryAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await renameSubcategory(text(form, "category"), text(form, "slug"), text(form, "name"));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not rename the subcategory." };
+  }
+  revalidateStorefront();
+  return { ok: "Subcategory renamed." };
+}
+
+export async function deleteSubcategoryAction(form: FormData): Promise<void> {
+  await requireAdmin();
+  await deleteSubcategory(text(form, "category"), text(form, "slug"));
+  revalidateStorefront();
+}
+
+export async function reorderSubcategoriesAction(category: string, slugs: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderSubcategories(category, slugs);
   revalidateStorefront();
 }
 
@@ -424,6 +543,9 @@ export async function saveBrandProductsAction(_prev: ActionState, form: FormData
       const prices = form.getAll("productPrice").map(String);
       const compareAts = form.getAll("productCompareAt").map(String);
       const summaries = form.getAll("productSummary").map(String);
+      const categories = form.getAll("productCategory").map(String);
+      const subcategories = form.getAll("productSubcategory").map(String);
+      const allCategories = await getCategories();
       const descriptions = form.getAll("productDescription").map(String);
       const highlightsRaw = form.getAll("productHighlights").map(String);
       const galleryJson = form.getAll("productGalleryJson").map(String);
@@ -469,12 +591,22 @@ export async function saveBrandProductsAction(_prev: ActionState, form: FormData
         const description = linesOf(descriptions[i] ?? "");
         const highlights = linesOf(highlightsRaw[i] ?? "");
 
+        // Keep a category only if it exists, and a subcategory only if it belongs to that category.
+        const rawCategory = (categories[i] ?? "").trim();
+        const cat = allCategories.find((c) => c.slug === rawCategory);
+        const category = cat?.slug;
+        const rawSub = (subcategories[i] ?? "").trim();
+        const subcategory =
+          cat && cat.subcategories.some((s) => s.slug === rawSub) ? rawSub : undefined;
+
         out.push({
           id,
           slug,
           name,
           price,
           compareAtPrice: compareAt > price ? compareAt : undefined,
+          category,
+          subcategory,
           summary: (summaries[i] ?? "").trim() || undefined,
           description: description.length ? description : undefined,
           highlights: highlights.length ? highlights : undefined,

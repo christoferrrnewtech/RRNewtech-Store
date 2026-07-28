@@ -15,10 +15,11 @@
 
 import "server-only";
 import crypto from "node:crypto";
+import { cache } from "react";
 import { FieldValue } from "firebase-admin/firestore";
 import { getDb, storeDoc, DOCS } from "@/lib/firebase";
-import { type Product, brandProductSlugify } from "@/lib/products";
-import type { BrandGroup } from "@/lib/constants";
+import { type Product, CATEGORIES, brandSlug, brandProductSlugify } from "@/lib/products";
+import { SITE, type BrandGroup } from "@/lib/constants";
 
 export type BrandStatus = "draft" | "published";
 
@@ -37,6 +38,10 @@ export type BrandProduct = {
   price: number;
   /** Optional original price for a sale (kept only when > price). */
   compareAtPrice?: number;
+  /** Storefront category slug (admin-managed, see StoreCategory). Undefined = uncategorized. */
+  category?: string;
+  /** Optional subcategory slug within {@link category}. */
+  subcategory?: string;
   summary?: string;
   /** Full description paragraphs for the detail page. */
   description?: string[];
@@ -89,6 +94,52 @@ export type Brand = {
 };
 
 export type Banner = { id: string; image: string; alt: string; href: string; order: number };
+
+/**
+ * Editable copy + image for the homepage "About" band (AboutIntro). A singleton, so it's stored as
+ * plain fields in `R&RLandingPage/about` (not a keyed map like banners/brands).
+ */
+export type AboutContent = {
+  /** Small label above the heading. */
+  eyebrow: string;
+  heading: string;
+  /** Body paragraphs, one per entry. */
+  paragraphs: string[];
+  /** Uploaded image URL, or "" — the storefront falls back to the /brand/about.svg placeholder. */
+  image: string;
+  ctaLabel: string;
+  ctaHref: string;
+};
+
+/** Shown until an admin saves the About section — mirrors the original static AboutIntro copy. */
+export const ABOUT_DEFAULTS: AboutContent = {
+  eyebrow: "Who we are",
+  heading: `About ${SITE.name}`,
+  paragraphs: [
+    SITE.description,
+    "We partner with trusted manufacturers and authorized distributors so every item we carry meets " +
+      "the standards your patients deserve — from everyday consumables to clinic equipment, delivered " +
+      "anywhere in the Philippines.",
+  ],
+  image: "",
+  ctaLabel: "Learn more about us",
+  ctaHref: "/about",
+};
+
+/** A subcategory nested under a {@link StoreCategory}. */
+export type Subcategory = { slug: string; name: string; order: number };
+
+/**
+ * Admin-managed storefront category. Stored in the `categories` doc keyed by slug. Slugs are stable
+ * once created (rename changes only the display name) so product references never break.
+ */
+export type StoreCategory = {
+  slug: string;
+  name: string;
+  blurb?: string;
+  order: number;
+  subcategories: Subcategory[];
+};
 
 export type UserRole = "admin" | "marketing";
 
@@ -186,6 +237,71 @@ export async function getBanners(): Promise<Banner[]> {
     .sort((a, b) => a.order - b.order);
 }
 
+/**
+ * The homepage "About" band content, with any saved fields laid over ABOUT_DEFAULTS so the section
+ * always has sensible copy (even before it's ever edited, or if Firestore is unreachable).
+ */
+export async function getAboutContent(): Promise<AboutContent> {
+  const snap = await storeDoc(DOCS.about).get().catch(() => null);
+  const v = (snap?.exists ? snap.data() : undefined) ?? {};
+  const str = (val: unknown, fallback: string) =>
+    typeof val === "string" && val.trim() ? val : fallback;
+  const paragraphs = Array.isArray(v.paragraphs)
+    ? v.paragraphs.map(String).map((p) => p.trim()).filter(Boolean)
+    : [];
+  return {
+    eyebrow: str(v.eyebrow, ABOUT_DEFAULTS.eyebrow),
+    heading: str(v.heading, ABOUT_DEFAULTS.heading),
+    paragraphs: paragraphs.length ? paragraphs : ABOUT_DEFAULTS.paragraphs,
+    image: typeof v.image === "string" ? v.image : "",
+    ctaLabel: str(v.ctaLabel, ABOUT_DEFAULTS.ctaLabel),
+    ctaHref: str(v.ctaHref, ABOUT_DEFAULTS.ctaHref),
+  };
+}
+
+function toSubcategories(v: unknown): Subcategory[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === "object")
+    .map((s, i) => ({
+      slug: String(s.slug ?? ""),
+      name: String(s.name ?? ""),
+      order: typeof s.order === "number" ? s.order : i,
+    }))
+    .filter((s) => s.slug && s.name)
+    .sort((a, b) => a.order - b.order);
+}
+
+function toStoreCategory(slug: string, v: Record<string, unknown>): StoreCategory {
+  return {
+    slug,
+    name: String(v.name ?? slug),
+    blurb: typeof v.blurb === "string" ? v.blurb : undefined,
+    order: typeof v.order === "number" ? v.order : 0,
+    subcategories: toSubcategories(v.subcategories),
+  };
+}
+
+/**
+ * All store categories (with subcategories) in display order. Cached per request so the header,
+ * footer and page can each call it without re-reading. Falls back to the built-in taxonomy until
+ * the `categories` doc has been populated (seed or first admin edit).
+ */
+export const getCategories = cache(async (): Promise<StoreCategory[]> => {
+  const map = await readMap(DOCS.categories).catch(() => ({}));
+  const list = Object.entries(map).map(([slug, v]) => toStoreCategory(slug, v));
+  if (list.length === 0) {
+    return CATEGORIES.map((c, i) => ({
+      slug: c.slug,
+      name: c.name,
+      blurb: c.blurb,
+      order: i,
+      subcategories: [],
+    }));
+  }
+  return list.sort((a, b) => a.order - b.order);
+});
+
 /** Published brands in display order. This is what the storefront should always call. */
 export async function getBrands(): Promise<Brand[]> {
   const map = await readMap(DOCS.brand);
@@ -254,6 +370,113 @@ export async function getUserByUid(uid: string): Promise<AdminUser | undefined> 
 // ─────────────────────────────────────────────────────────────────────────────
 // Admin writes. Each write targets one map key inside the type's document.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Persist edited About-band fields. Merge write, so only the supplied fields change. */
+export async function saveAboutContent(patch: Partial<AboutContent>): Promise<void> {
+  await storeDoc(DOCS.about).set(patch, { merge: true });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Categories & subcategories (admin). Slugs are immutable once created so product
+// references (BrandProduct.category / .subcategory) never dangle on a rename.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function readCategoryRaw(slug: string): Promise<StoreCategory | undefined> {
+  const map = await readMap(DOCS.categories);
+  return map[slug] ? toStoreCategory(slug, map[slug]) : undefined;
+}
+
+/** Replace a category's whole subcategory array (merge keeps name/order/blurb intact). */
+async function writeSubcategories(catSlug: string, subs: Subcategory[]): Promise<void> {
+  await storeDoc(DOCS.categories).set({ [catSlug]: { subcategories: subs } }, { merge: true });
+}
+
+export async function createCategory(name: string): Promise<StoreCategory> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Category name is required.");
+  const base = brandSlug(trimmed);
+  if (!base) throw new Error("That name doesn't produce a usable URL.");
+  const map = await readMap(DOCS.categories);
+  let slug = base;
+  for (let n = 2; map[slug]; n++) slug = `${base}-${n}`;
+  const order = Object.keys(map).length;
+  await storeDoc(DOCS.categories).set(
+    { [slug]: { name: trimmed, order, subcategories: [] } },
+    { merge: true },
+  );
+  return { slug, name: trimmed, order, subcategories: [] };
+}
+
+export async function renameCategory(slug: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Category name is required.");
+  await storeDoc(DOCS.categories).set({ [slug]: { name: trimmed } }, { merge: true });
+}
+
+export async function deleteCategory(slug: string): Promise<void> {
+  await storeDoc(DOCS.categories).update({ [slug]: FieldValue.delete() });
+}
+
+export async function reorderCategories(slugs: string[]): Promise<void> {
+  const updates: Record<string, number> = {};
+  slugs.forEach((slug, order) => {
+    updates[`${slug}.order`] = order;
+  });
+  if (Object.keys(updates).length) await storeDoc(DOCS.categories).update(updates);
+}
+
+export async function createSubcategory(catSlug: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Subcategory name is required.");
+  const base = brandSlug(trimmed);
+  if (!base) throw new Error("That name doesn't produce a usable URL.");
+  const cat = await readCategoryRaw(catSlug);
+  if (!cat) throw new Error("That category no longer exists.");
+  const used = new Set(cat.subcategories.map((s) => s.slug));
+  let slug = base;
+  for (let n = 2; used.has(slug); n++) slug = `${base}-${n}`;
+  await writeSubcategories(catSlug, [
+    ...cat.subcategories,
+    { slug, name: trimmed, order: cat.subcategories.length },
+  ]);
+}
+
+export async function renameSubcategory(
+  catSlug: string,
+  subSlug: string,
+  name: string,
+): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Subcategory name is required.");
+  const cat = await readCategoryRaw(catSlug);
+  if (!cat) throw new Error("That category no longer exists.");
+  await writeSubcategories(
+    catSlug,
+    cat.subcategories.map((s) => (s.slug === subSlug ? { ...s, name: trimmed } : s)),
+  );
+}
+
+export async function deleteSubcategory(catSlug: string, subSlug: string): Promise<void> {
+  const cat = await readCategoryRaw(catSlug);
+  if (!cat) return;
+  await writeSubcategories(
+    catSlug,
+    cat.subcategories.filter((s) => s.slug !== subSlug),
+  );
+}
+
+export async function reorderSubcategories(catSlug: string, subSlugs: string[]): Promise<void> {
+  const cat = await readCategoryRaw(catSlug);
+  if (!cat) return;
+  const bySlug = new Map(cat.subcategories.map((s) => [s.slug, s]));
+  const reordered = subSlugs
+    .map((slug, order) => {
+      const s = bySlug.get(slug);
+      return s ? { ...s, order } : undefined;
+    })
+    .filter((s): s is Subcategory => Boolean(s));
+  await writeSubcategories(catSlug, reordered);
+}
 
 export async function addBanner(data: Omit<Banner, "id" | "order">): Promise<void> {
   const id = crypto.randomUUID();

@@ -1,8 +1,8 @@
 import type { MetadataRoute } from "next";
 import { SITE } from "@/lib/constants";
-import { CATEGORIES, brandProductHref } from "@/lib/products";
+import { brandProductHref } from "@/lib/products";
 import { getAllProducts } from "@/lib/catalog";
-import { getBrands } from "@/lib/content";
+import { getBrands, getCategories } from "@/lib/content";
 
 /**
  * Dynamic sitemap — regenerates from the catalog so every product & category is discoverable.
@@ -24,8 +24,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE.url}/terms`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
   ];
 
-  const categoryRoutes: MetadataRoute.Sitemap = CATEGORIES.map((c) => ({
-    url: `${SITE.url}/?category=${c.slug}`,
+  const categoryRoutes: MetadataRoute.Sitemap = (await getCategories().catch(() => [])).map((c) => ({
+    url: `${SITE.url}/categories/${c.slug}`,
     lastModified: now,
     changeFrequency: "weekly",
     priority: 0.7,

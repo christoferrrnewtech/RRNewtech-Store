@@ -33,6 +33,7 @@ export default async function AdminDashboard() {
         {isAdmin && (
           <>
             <Card href="/admin/banner" title="Home banner" value="Edit" detail="Image, alt text and link" />
+            <Card href="/admin/about" title="About section" value="Edit" detail="Home page intro copy & image" />
             <Card
               href="/admin/users"
               title="Marketing team"

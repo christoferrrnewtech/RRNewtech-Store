@@ -29,7 +29,7 @@ export async function DigitalDentistryPromo() {
             </h2>
           </div>
           <Link
-            href="/?category=digital-dentistry"
+            href="/categories/digital-dentistry"
             className="whitespace-nowrap text-sm font-semibold text-brand-700 hover:text-brand-800"
           >
             View all →
@@ -56,7 +56,7 @@ export async function DigitalDentistryPromo() {
               </p>
             </div>
             <LinkButton
-              href="/?category=digital-dentistry"
+              href="/categories/digital-dentistry"
               variant="inverse"
               className="relative mt-8 w-fit"
             >

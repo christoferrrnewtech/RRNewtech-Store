@@ -67,7 +67,7 @@ export default async function ProductPage({
         <nav aria-label="Breadcrumb" className="mb-6 text-sm text-muted">
           <Link href="/" className="hover:text-brand-700">Home</Link>
           <span className="mx-2 text-line-strong">/</span>
-          <Link href={`/?category=${category.slug}`} className="hover:text-brand-700">
+          <Link href={`/categories/${category.slug}`} className="hover:text-brand-700">
             {category.name}
           </Link>
         </nav>

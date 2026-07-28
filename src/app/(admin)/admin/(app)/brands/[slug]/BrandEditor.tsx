@@ -24,7 +24,7 @@ import {
   TextArea,
   TextInput,
 } from "@/components/admin/Form";
-import type { Brand, BrandProduct } from "@/lib/content";
+import type { Brand, BrandProduct, StoreCategory } from "@/lib/content";
 import { BRAND_GROUPS } from "@/lib/constants";
 
 /**
@@ -33,9 +33,11 @@ import { BRAND_GROUPS } from "@/lib/constants";
  */
 export function BrandEditor({
   brand,
+  categories,
   canDelete,
 }: {
   brand: Brand;
+  categories: StoreCategory[];
   canDelete: boolean;
 }) {
   return (
@@ -46,7 +48,7 @@ export function BrandEditor({
       <AboutSection brand={brand} />
       <VideoSection brand={brand} />
       <GallerySection brand={brand} />
-      <ProductsSection brand={brand} />
+      <ProductsSection brand={brand} categories={categories} />
       <ReasonsSection brand={brand} />
       <CtaSection brand={brand} />
 
@@ -283,7 +285,7 @@ function GallerySection({ brand }: { brand: Brand }) {
   );
 }
 
-function ProductsSection({ brand }: { brand: Brand }) {
+function ProductsSection({ brand, categories }: { brand: Brand; categories: StoreCategory[] }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandProductsAction, {});
   return (
     <Section
@@ -296,7 +298,7 @@ function ProductsSection({ brand }: { brand: Brand }) {
         <input type="hidden" name="slug" value={brand.slug} />
         {/* Re-key on the saved data so the editor re-seeds from Firestore after each save — without
             this, the uncontrolled fields reset to stale values (React 19 resets forms post-action). */}
-        <ProductRows key={JSON.stringify(brand.products)} initial={brand.products} />
+        <ProductRows key={JSON.stringify(brand.products)} initial={brand.products} categories={categories} />
         <SubmitButton />
         <FormMessage state={state} />
       </form>
@@ -310,10 +312,27 @@ type Row = BrandProduct & { key: string };
  * Repeatable product editor. Every row posts one value under each `product*` field name (kept
  * aligned by row order) plus one `productImageFile` input, so the server action can zip them.
  */
-function ProductRows({ initial }: { initial: BrandProduct[] }) {
+function ProductRows({
+  initial,
+  categories,
+}: {
+  initial: BrandProduct[];
+  categories: StoreCategory[];
+}) {
   const [rows, setRows] = useState<Row[]>(
     initial.map((p) => ({ ...p, key: p.id || crypto.randomUUID() })),
   );
+
+  // Changing the category clears the subcategory (subcategories belong to one category).
+  function setCategory(key: string, category: string | undefined) {
+    setRows((r) =>
+      r.map((row) => (row.key === key ? { ...row, category, subcategory: undefined } : row)),
+    );
+  }
+
+  function setSubcategory(key: string, subcategory: string | undefined) {
+    setRows((r) => r.map((row) => (row.key === key ? { ...row, subcategory } : row)));
+  }
 
   function add() {
     setRows((r) => [
@@ -423,6 +442,56 @@ function ProductRows({ initial }: { initial: BrandProduct[] }) {
                 defaultValue={row.summary ?? ""}
                 placeholder="Short one-line summary (optional)"
               />
+              {(() => {
+                const subs =
+                  categories.find((c) => c.slug === row.category)?.subcategories ?? [];
+                const catValue = categories.some((c) => c.slug === row.category)
+                  ? (row.category as string)
+                  : "";
+                const subValue = subs.some((s) => s.slug === row.subcategory)
+                  ? (row.subcategory as string)
+                  : "";
+                const selectClass =
+                  "mt-1 block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:opacity-60";
+                return (
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block">
+                      <span className="text-xs font-medium text-muted">Category</span>
+                      <select
+                        name="productCategory"
+                        value={catValue}
+                        onChange={(e) => setCategory(row.key, e.target.value || undefined)}
+                        className={selectClass}
+                      >
+                        <option value="">— No category —</option>
+                        {categories.map((c) => (
+                          <option key={c.slug} value={c.slug}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium text-muted">Subcategory</span>
+                      <select
+                        name="productSubcategory"
+                        value={subValue}
+                        onChange={(e) => setSubcategory(row.key, e.target.value || undefined)}
+                        className={selectClass}
+                      >
+                        <option value="">
+                          {subs.length ? "— None —" : "— No subcategories —"}
+                        </option>
+                        {subs.map((s) => (
+                          <option key={s.slug} value={s.slug}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                );
+              })()}
               <div className="flex items-center justify-between">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                   <label className="flex items-center gap-2 text-sm text-fg">

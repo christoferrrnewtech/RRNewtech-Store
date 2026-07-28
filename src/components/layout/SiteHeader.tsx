@@ -7,14 +7,20 @@ import { usePathname } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { CartButton } from "@/components/cart/CartButton";
 import { SearchBar } from "@/components/layout/SearchBar";
-import { CategoryMenu } from "@/components/layout/CategoryMenu";
+import { CategoryMenu, type MenuCategory } from "@/components/layout/CategoryMenu";
 import { BrandMenu, type BrandLink } from "@/components/layout/BrandMenu";
 import { NAV_LINKS, SECTIONS, SITE, FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 import { formatPHP } from "@/lib/format";
 
 type MenuKey = "category" | "brand";
 
-export function SiteHeader({ brands }: { brands: BrandLink[] }) {
+export function SiteHeader({
+  brands,
+  categories,
+}: {
+  brands: BrandLink[];
+  categories: MenuCategory[];
+}) {
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSection, setMobileSection] = useState<MenuKey | null>(null);
@@ -86,7 +92,7 @@ export function SiteHeader({ brands }: { brands: BrandLink[] }) {
               ))}
               {SECTIONS.categoryNav && (
                 <MenuTrigger
-                  label="Category"
+                  label="Categories"
                   menuKey="category"
                   activeMenu={activeMenu}
                   setActiveMenu={setActiveMenu}
@@ -140,7 +146,7 @@ export function SiteHeader({ brands }: { brands: BrandLink[] }) {
           >
             <Container className="py-8">
               {activeMenu === "category" ? (
-                <CategoryMenu onNavigate={closeAll} />
+                <CategoryMenu categories={categories} onNavigate={closeAll} />
               ) : (
                 <BrandMenu brands={brands} onNavigate={closeAll} />
               )}
@@ -167,13 +173,13 @@ export function SiteHeader({ brands }: { brands: BrandLink[] }) {
 
               {SECTIONS.categoryNav && (
                 <MobileAccordion
-                  label="Category"
+                  label="Categories"
                   open={mobileSection === "category"}
                   onToggle={() =>
                     setMobileSection((s) => (s === "category" ? null : "category"))
                   }
                 >
-                  <CategoryMenu onNavigate={closeAll} />
+                  <CategoryMenu categories={categories} onNavigate={closeAll} />
                 </MobileAccordion>
               )}
 

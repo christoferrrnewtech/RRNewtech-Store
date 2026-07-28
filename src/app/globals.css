@@ -82,6 +82,23 @@ textarea {
   border-radius: 4px;
 }
 
+/* Brand logo marquee (home "Shop by Brand"). Track holds the logo set duplicated once, so a
+   -50% shift lands exactly on the copy for a seamless loop. Pauses on hover. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee 45s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
 /* Respect reduced-motion preferences */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -92,5 +109,13 @@ textarea {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+  /* No auto-scroll: let the logos sit as a horizontally scrollable row instead. */
+  .marquee {
+    overflow-x: auto;
+  }
+  .marquee-track {
+    animation: none;
+    transform: none;
   }
 }

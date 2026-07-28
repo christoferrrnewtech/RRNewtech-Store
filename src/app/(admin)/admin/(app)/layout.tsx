@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { logoutAction } from "@/app/(admin)/admin/actions";
-import { AdminNav, type AdminNavItem } from "@/components/admin/AdminNav";
+import { getAllBrandsForAdmin } from "@/lib/content";
+import { AdminNav, type AdminBrandLink, type AdminNavItem } from "@/components/admin/AdminNav";
 
 /**
  * Authenticated admin shell. The guard here is for navigation only — every server action
@@ -16,12 +17,19 @@ export default async function AdminAppLayout({
   const nav: (AdminNavItem & { show: boolean })[] = [
     { href: "/admin", label: "Dashboard", icon: "dashboard", show: true },
     { href: "/admin/banner", label: "Home banner", icon: "banner", show: isAdmin },
+    { href: "/admin/about", label: "About section", icon: "about", show: isAdmin },
+    { href: "/admin/categories", label: "Categories", icon: "categories", show: isAdmin },
     { href: "/admin/brands", label: "Brands", icon: "brands", show: true },
     { href: "/admin/users", label: "Marketing team", icon: "users", show: isAdmin },
   ];
   const items: AdminNavItem[] = nav
     .filter((n) => n.show)
     .map(({ href, label, icon }) => ({ href, label, icon }));
+
+  // Brand quick-nav in the sidebar (marketing users see only their assigned brands).
+  const brandLinks: AdminBrandLink[] = (await getAllBrandsForAdmin().catch(() => []))
+    .filter((b) => isAdmin || user.brandSlugs.includes(b.slug))
+    .map((b) => ({ slug: b.slug, name: b.name, status: b.status }));
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
@@ -39,7 +47,7 @@ export default async function AdminAppLayout({
           </Link>
 
           <div className="mt-6">
-            <AdminNav items={items} />
+            <AdminNav items={items} brands={brandLinks} />
           </div>
 
           <div className="mt-auto border-t border-line pt-4">

@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireBrandAccess } from "@/lib/auth";
-import { getBrandForAdmin } from "@/lib/content";
+import { getBrandForAdmin, getCategories } from "@/lib/content";
 import { StatusPill } from "@/app/(admin)/admin/(app)/page";
 import { BrandEditor } from "./BrandEditor";
 import { BRAND_EDITOR_SECTIONS } from "./sections";
@@ -30,9 +30,11 @@ export default async function AdminBrandEditorPage({
   const brand = await getBrandForAdmin(slug);
   if (!brand) notFound();
 
+  const categories = await getCategories();
+
   return (
     <div>
-      {/* Back to the list on mobile (on desktop the rail is always visible). */}
+      {/* Back to the list on mobile (on desktop the sidebar's Brands group handles switching). */}
       <Link
         href="/admin/brands"
         className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-brand-700 lg:hidden"
@@ -78,7 +80,7 @@ export default async function AdminBrandEditorPage({
         ))}
       </nav>
 
-      <BrandEditor brand={brand} canDelete={user.role === "admin"} />
+      <BrandEditor brand={brand} categories={categories} canDelete={user.role === "admin"} />
     </div>
   );
 }
