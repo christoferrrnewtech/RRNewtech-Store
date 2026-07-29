@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "rnr-dental-clinics"
+  },
+  "targets": {
+    "rnr-dental-clinics": {
+      "hosting": {
+        "rrnewtech": [
+          "rrnewtech"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

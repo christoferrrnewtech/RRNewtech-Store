@@ -8,6 +8,7 @@ import { ProductCard } from "@/components/shop/ProductCard";
 import { ProductPurchase } from "@/components/product/ProductPurchase";
 import { ProductJsonLd } from "@/components/analytics/ProductJsonLd";
 import { CATEGORY_MAP, productImageUrl } from "@/lib/products";
+import { catalogCartItem } from "@/lib/cart-item";
 import { getAllProducts, getProductBySlug, getRelatedProducts } from "@/lib/catalog";
 import { productBrandLogo } from "@/lib/content";
 import { discountPercent, formatPHP } from "@/lib/format";
@@ -144,15 +145,7 @@ export default async function ProductPage({
             <div className="mt-6">
               <ProductPurchase
                 inStock={product.inStock}
-                item={{
-                  slug: product.slug,
-                  name: product.name,
-                  price: product.price,
-                  unit: product.unit,
-                  sku: product.sku,
-                  category: category.name,
-                  image: logo ?? productImageUrl(product, 300),
-                }}
+                item={catalogCartItem(product, logo ?? productImageUrl(product, 300))}
               />
             </div>
 

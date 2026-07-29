@@ -3,9 +3,17 @@
 /**
  * Client-side shopping cart — React context + localStorage persistence.
  *
- * PHASE 1: the cart is entirely client-side (no server, no payment). It stores a denormalized
- * snapshot of each line so the cart renders without re-fetching products. PHASE 2 (checkout)
- * reads `items` to build the order and hand off to PayMongo.
+ * PHASE 1: the cart is entirely client-side (no server, no payment) and fully anonymous — nothing
+ * here needs or collects a customer identity. It stores a denormalized snapshot of each line so the
+ * cart renders without re-fetching products. PHASE 2 (checkout) reads `items` to build the order
+ * and hand off to PayMongo.
+ *
+ * PRICE DRIFT: because each line snapshots its price, a cart left for weeks can hold a figure that
+ * no longer matches the catalog. Checkout MUST re-fetch and re-price every line server-side before
+ * creating a payment intent — never charge `subtotal` as computed here.
+ *
+ * The line model, its builders, and its runtime guard live in `cart-item.ts` so Server Components
+ * can build lines without importing this `"use client"` module.
  */
 
 import {
@@ -14,23 +22,24 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { trackAddToCart } from "@/lib/analytics";
+import { clampQuantity, isCartItem, type CartItem, type NewCartItem } from "@/lib/cart-item";
 
-const STORAGE_KEY = "rrnewtech.cart.v1";
+export type { CartItem, NewCartItem } from "@/lib/cart-item";
+export { MAX_QUANTITY } from "@/lib/cart-item";
 
-export type CartItem = {
-  slug: string;
-  name: string;
-  price: number;
-  unit: string;
-  sku: string;
-  category: string;
-  image: string;
-  quantity: number;
-};
+const STORAGE_KEY = "rrnewtech.cart.v2";
+
+/**
+ * Older storage keys, cleared on hydration. v1 lines keyed on a bare `slug` that mixed the catalog
+ * and brand id namespaces, and never stored a brand slug — so their detail URLs can't be rebuilt.
+ * Dropping them is deliberate; migrating would only preserve broken links.
+ */
+const LEGACY_KEYS = ["rrnewtech.cart.v1"];
 
 type CartContextValue = {
   items: CartItem[];
@@ -39,21 +48,30 @@ type CartContextValue = {
   isOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
-  addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
-  updateQuantity: (slug: string, quantity: number) => void;
-  removeItem: (slug: string) => void;
+  addItem: (item: NewCartItem, quantity?: number) => void;
+  updateQuantity: (key: string, quantity: number) => void;
+  removeItem: (key: string) => void;
   clear: () => void;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
 
+/** Parse a persisted payload, dropping any line that fails validation. */
+function parseItems(raw: string | null): CartItem[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    // Validate every line: this data outlives deploys, so it may predate the current shape.
+    return Array.isArray(parsed) ? parsed.filter(isCartItem) : [];
+  } catch {
+    return [];
+  }
+}
+
 function readStorage(): CartItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as CartItem[]) : [];
+    return parseItems(window.localStorage.getItem(STORAGE_KEY));
   } catch {
     return [];
   }
@@ -64,6 +82,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  // Mirrors the last payload this tab wrote or received, so the storage listener can tell a real
+  // change from an echo of our own write and avoid a set/persist ping-pong between tabs.
+  const lastPayload = useRef<string | null>(null);
+
   // Load persisted cart after mount. localStorage is unavailable during SSR, so this must run
   // in an effect (not a lazy initializer) to keep the server and first client render identical.
   useEffect(() => {
@@ -71,48 +93,73 @@ export function CartProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from localStorage
     if (stored.length > 0) setItems(stored);
     setHydrated(true);
+
+    try {
+      for (const key of LEGACY_KEYS) window.localStorage.removeItem(key);
+    } catch {
+      /* storage disabled — nothing to clean up */
+    }
   }, []);
 
   // Persist on change (once hydrated so we never clobber storage with the empty initial state).
   useEffect(() => {
     if (!hydrated) return;
+    const payload = JSON.stringify(items);
+    lastPayload.current = payload;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+      window.localStorage.setItem(STORAGE_KEY, payload);
     } catch {
       /* storage full / disabled — cart still works in-memory */
     }
   }, [items, hydrated]);
 
+  // Keep other tabs in sync. `storage` fires only in tabs that did not perform the write.
+  useEffect(() => {
+    if (!hydrated) return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY) return;
+      // Ignore an echo of a payload we already hold — otherwise each tab's persist effect would
+      // re-broadcast and the two would bounce updates back and forth.
+      if (e.newValue === lastPayload.current) return;
+      lastPayload.current = e.newValue;
+      setItems(parseItems(e.newValue));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [hydrated]);
+
   const addItem = useCallback<CartContextValue["addItem"]>((item, quantity = 1) => {
+    const qty = clampQuantity(quantity);
     setItems((prev) => {
-      const existing = prev.find((i) => i.slug === item.slug);
+      const existing = prev.find((i) => i.key === item.key);
       if (existing) {
         return prev.map((i) =>
-          i.slug === item.slug ? { ...i, quantity: i.quantity + quantity } : i,
+          i.key === item.key ? { ...i, quantity: clampQuantity(i.quantity + qty) } : i,
         );
       }
-      return [...prev, { ...item, quantity }];
+      return [...prev, { ...item, quantity: qty }];
     });
     trackAddToCart({
       id: item.sku,
       name: item.name,
       category: item.category,
       price: item.price,
-      quantity,
+      quantity: qty,
     });
     setIsOpen(true);
   }, []);
 
-  const updateQuantity = useCallback<CartContextValue["updateQuantity"]>((slug, quantity) => {
+  const updateQuantity = useCallback<CartContextValue["updateQuantity"]>((key, quantity) => {
     setItems((prev) =>
+      // Stepping below 1 removes the line; anything else is clamped to a whole, in-range quantity.
       quantity <= 0
-        ? prev.filter((i) => i.slug !== slug)
-        : prev.map((i) => (i.slug === slug ? { ...i, quantity } : i)),
+        ? prev.filter((i) => i.key !== key)
+        : prev.map((i) => (i.key === key ? { ...i, quantity: clampQuantity(quantity) } : i)),
     );
   }, []);
 
-  const removeItem = useCallback<CartContextValue["removeItem"]>((slug) => {
-    setItems((prev) => prev.filter((i) => i.slug !== slug));
+  const removeItem = useCallback<CartContextValue["removeItem"]>((key) => {
+    setItems((prev) => prev.filter((i) => i.key !== key));
   }, []);
 
   const clear = useCallback(() => setItems([]), []);

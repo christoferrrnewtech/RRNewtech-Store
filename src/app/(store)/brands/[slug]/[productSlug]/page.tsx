@@ -9,6 +9,7 @@ import { BrandProductGallery, type GalleryImg } from "@/components/shop/BrandPro
 import { ProductPurchase } from "@/components/product/ProductPurchase";
 import { getBrandBySlug, getBrands, type Brand, type BrandProduct } from "@/lib/content";
 import { brandProductHref } from "@/lib/products";
+import { brandCartItem } from "@/lib/cart-item";
 import { discountPercent, formatPHP } from "@/lib/format";
 import { SITE } from "@/lib/constants";
 
@@ -183,15 +184,12 @@ export default async function BrandProductPage({
                 <div className="mt-6">
                   <ProductPurchase
                     inStock={product.inStock}
-                    item={{
-                      slug: product.slug ?? product.id,
-                      name: product.name,
-                      price: product.price,
-                      unit: "",
-                      sku: product.id,
-                      category: brand.name,
-                      image: product.image || brand.logo,
-                    }}
+                    item={brandCartItem(
+                      product,
+                      brand.slug,
+                      brand.name,
+                      product.image || brand.logo,
+                    )}
                   />
                 </div>
               </>

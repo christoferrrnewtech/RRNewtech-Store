@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
-import { useCart } from "@/lib/cart";
+import { useCart, MAX_QUANTITY } from "@/lib/cart";
 import { formatPHP } from "@/lib/format";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 
@@ -31,27 +31,28 @@ export default function CartPage() {
           <div>
             <ul className="divide-y divide-line border-y border-line">
               {items.map((item) => (
-                <li key={item.slug} className="flex gap-4 py-5">
+                <li key={item.key} className="flex gap-4 py-5">
                   <Link
-                    href={`/products/${item.slug}`}
+                    href={item.href}
                     className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-elevated"
                   >
                     <Image src={item.image} alt={item.name} fill sizes="96px" className="object-cover" />
                   </Link>
                   <div className="flex min-w-0 flex-1 flex-col">
                     <Link
-                      href={`/products/${item.slug}`}
+                      href={item.href}
                       className="font-semibold text-fg hover:text-brand-700"
                     >
                       {item.name}
                     </Link>
                     <p className="mt-0.5 text-sm text-muted">
-                      {formatPHP(item.price)} / {item.unit}
+                      {formatPHP(item.price)}
+                      {item.unit && ` / ${item.unit}`}
                     </p>
                     <div className="mt-auto flex items-center gap-4 pt-3">
                       <div className="inline-flex items-center rounded-lg border border-line">
                         <button
-                          onClick={() => updateQuantity(item.slug, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.key, item.quantity - 1)}
                           aria-label="Decrease quantity"
                           className="h-9 w-9 text-muted hover:text-fg"
                         >
@@ -59,15 +60,16 @@ export default function CartPage() {
                         </button>
                         <span className="w-9 text-center text-sm font-medium">{item.quantity}</span>
                         <button
-                          onClick={() => updateQuantity(item.slug, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.key, item.quantity + 1)}
                           aria-label="Increase quantity"
-                          className="h-9 w-9 text-muted hover:text-fg"
+                          disabled={item.quantity >= MAX_QUANTITY}
+                          className="h-9 w-9 text-muted hover:text-fg disabled:opacity-40"
                         >
                           +
                         </button>
                       </div>
                       <button
-                        onClick={() => removeItem(item.slug)}
+                        onClick={() => removeItem(item.key)}
                         className="text-sm text-muted-light hover:text-danger"
                       >
                         Remove

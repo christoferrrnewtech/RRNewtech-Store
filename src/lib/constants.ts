@@ -4,8 +4,10 @@
  */
 
 // Public site URL — used for canonical links, sitemap, OG. Overridable via env for staging.
+// `||` not `??`: an env var present-but-empty (as in .env.example) must still fall back, otherwise
+// SITE_URL becomes "" and `new URL(SITE.url)` in the root layout throws on every page.
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://rrnewtech.ph"
+  process.env.NEXT_PUBLIC_SITE_URL || "https://rrnewtech.ph"
 ).replace(/\/$/, "");
 
 export const SITE = {

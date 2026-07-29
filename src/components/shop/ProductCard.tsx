@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { AddToCartButton } from "@/components/shop/AddToCartButton";
 import { CATEGORY_MAP, productImageUrl, type Product } from "@/lib/products";
+import { catalogCartItem } from "@/lib/cart-item";
 import { productBrandLogo } from "@/lib/content";
 import { discountPercent, formatPHP } from "@/lib/format";
 
@@ -69,15 +70,7 @@ export async function ProductCard({ product }: { product: Product }) {
           size="sm"
           fullWidth
           disabled={!product.inStock}
-          item={{
-            slug: product.slug,
-            name: product.name,
-            price: product.price,
-            unit: product.unit,
-            sku: product.sku,
-            category: category.name,
-            image: logo ?? productImageUrl(product, 300),
-          }}
+          item={catalogCartItem(product, logo ?? productImageUrl(product, 300))}
         />
       </div>
     </div>

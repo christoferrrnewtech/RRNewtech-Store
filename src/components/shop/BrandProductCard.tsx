@@ -5,6 +5,7 @@ import { LinkButton } from "@/components/ui/Button";
 import { AddToCartButton } from "@/components/shop/AddToCartButton";
 import type { BrandProduct } from "@/lib/content";
 import { brandProductHref } from "@/lib/products";
+import { brandCartItem } from "@/lib/cart-item";
 import { discountPercent, formatPHP } from "@/lib/format";
 
 /**
@@ -101,15 +102,7 @@ export function BrandProductCard({
             size="sm"
             fullWidth
             disabled={!product.inStock}
-            item={{
-              slug: product.id,
-              name: product.name,
-              price: product.price,
-              unit: "",
-              sku: "",
-              category: brandName,
-              image,
-            }}
+            item={brandCartItem(product, brandSlug, brandName, image)}
           />
         )}
       </div>
