@@ -23,10 +23,12 @@ env:
     value: rnr-dental-clinics.firebasestorage.app
     availability: [BUILD, RUNTIME]
 
-  # Public site URL for canonical links / sitemap / OG tags. Update to the live
-  # App Hosting domain (or your custom domain) once the backend is created.
+  # Public site URL for canonical links / sitemap / OG tags. Baked in at BUILD time, so it must
+  # match the domain the site is actually served from — a canonical pointing at a domain that
+  # doesn't resolve tells Google to index nothing.
+  # TODO: switch to https://rrnewtech.ph once that domain is secured and mapped to this backend.
   - variable: NEXT_PUBLIC_SITE_URL
-    value: https://rrnewtech.ph
+    value: https://rrnewtech-store--rnr-dental-clinics.asia-southeast1.hosted.app
     availability: [BUILD, RUNTIME]
 
   # --- Optional analytics (uncomment and fill when ready) ---
