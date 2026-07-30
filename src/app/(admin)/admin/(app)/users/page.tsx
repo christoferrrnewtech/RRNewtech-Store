@@ -1,18 +1,26 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { getAllBrandsForAdmin, getUsers } from "@/lib/content";
-import { NewUserForm, UserRow } from "./UserForms";
+import { UsersManager } from "./UsersManager";
 
 export const metadata: Metadata = { title: "Marketing team" };
 
 export default async function AdminUsersPage() {
   await requireAdmin();
 
-  const users = getUsers();
-  const brands = getAllBrandsForAdmin().map((b) => ({ slug: b.slug, name: b.name }));
+  // Only marketing teammates belong here — the admin owner is managed elsewhere and must never be
+  // deletable from this screen.
+  const users = (await getUsers())
+    .filter((u) => u.role === "marketing")
+    .map((u) => ({ uid: u.uid, name: u.name, email: u.email, brandSlugs: u.brandSlugs }));
+  const brands = (await getAllBrandsForAdmin()).map((b) => ({
+    slug: b.slug,
+    name: b.name,
+    logo: b.logo,
+  }));
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">
         Marketing team
       </h1>
@@ -21,28 +29,7 @@ export default async function AdminUsersPage() {
         banner, add or delete brands, or see this page.
       </p>
 
-      {users.length === 0 ? (
-        <p className="mt-8 rounded-2xl border border-line bg-surface p-6 text-muted">
-          No marketing accounts yet.
-        </p>
-      ) : (
-        <ul className="mt-8 space-y-4">
-          {users.map((u) => (
-            <UserRow
-              key={u.id}
-              user={{
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                brandSlugs: u.brandSlugs,
-              }}
-              brands={brands}
-            />
-          ))}
-        </ul>
-      )}
-
-      <NewUserForm brands={brands} />
+      <UsersManager users={users} brands={brands} />
     </div>
   );
 }

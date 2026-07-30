@@ -1,15 +1,19 @@
 {
-  "banner": {
-    "image": "/brand/banner1.png",
-    "alt": "R&R Newtech Dental — dental supplies delivered nationwide",
-    "href": ""
-  },
+  "banners": [
+    {
+      "id": "b1",
+      "image": "/brand/banner1.png",
+      "alt": "R&R Newtech Dental — dental supplies delivered nationwide",
+      "href": ""
+    }
+  ],
   "brands": [
     {
       "slug": "curaprox",
       "name": "Curaprox",
       "status": "published",
       "order": 0,
+      "group": "consumables",
       "tagline": "Gentle daily care patients actually stick with.",
       "blurb": "Swiss oral care built around ultra-fine filaments — cleaning that is thorough without being harsh on gums or enamel.",
       "logo": "/brand-logos/curaprox.png",
@@ -49,6 +53,7 @@
       "name": "Herculite",
       "status": "published",
       "order": 1,
+      "group": "consumables",
       "tagline": "The composite that set the standard for natural polish.",
       "blurb": "A restorative benchmark for decades — nano-hybrid handling, lifelike shading and a polish that holds.",
       "logo": "/brand-logos/herculite.png",
@@ -86,6 +91,7 @@
       "name": "Kavoo",
       "status": "published",
       "order": 2,
+      "group": "equipment",
       "tagline": "Clinic equipment and handpieces built to last.",
       "blurb": "Chairs, handpieces and clinic hardware chosen for daily throughput — the pieces you only want to buy once.",
       "logo": "/brand-logos/kavoo.png",
@@ -125,6 +131,7 @@
       "name": "Kerr",
       "status": "published",
       "order": 3,
+      "group": "consumables",
       "tagline": "Restorative materials trusted chairside for generations.",
       "blurb": "One of dentistry's most established material houses — bonding, endodontics, finishing and everything in between.",
       "logo": "/brand-logos/kerr.png",
@@ -164,6 +171,7 @@
       "name": "Lasotronix",
       "status": "published",
       "order": 4,
+      "group": "laser-whitening",
       "tagline": "Precision diode lasers for everyday clinical work.",
       "blurb": "European-built diode laser systems for soft-tissue surgery, endodontic disinfection, periodontics and whitening.",
       "logo": "/brand-logos/lasotronix.png",
@@ -202,6 +210,7 @@
       "name": "Philips Zoom",
       "status": "published",
       "order": 5,
+      "group": "laser-whitening",
       "tagline": "Whiter teeth — without hurting your enamel.",
       "blurb": "The most requested whitening system in the world, with enamel-protective chemistry and clinically visible results in one visit.",
       "logo": "/brand-logos/philips-zoom.png",
@@ -240,6 +249,7 @@
       "name": "Rundeer",
       "status": "published",
       "order": 6,
+      "group": "equipment",
       "tagline": "Scan a full arch in 30 seconds.",
       "blurb": "Fast, lightweight intraoral scanners that make digital impressions quicker than the alginate they replace.",
       "logo": "/brand-logos/rundeer.png",
@@ -278,6 +288,7 @@
       "name": "SOL Laser",
       "status": "published",
       "order": 7,
+      "group": "laser-whitening",
       "tagline": "Start your laser dentistry journey.",
       "blurb": "An accessible entry point into laser dentistry — compact systems and training for clinics adding their first laser.",
       "logo": "/brand-logos/sol-laser.png",
@@ -316,6 +327,7 @@
       "name": "Sprintray",
       "status": "published",
       "order": 8,
+      "group": "equipment",
       "tagline": "Ready for a transformative digital workflow.",
       "blurb": "Scanning, 3D printing and same-day chairside production — the complete digital pipeline for a modern clinic.",
       "logo": "/brand-logos/sprintray.png",

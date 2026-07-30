@@ -7,19 +7,20 @@ import { Badge } from "@/components/ui/Badge";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { ProductPurchase } from "@/components/product/ProductPurchase";
 import { ProductJsonLd } from "@/components/analytics/ProductJsonLd";
-import {
-  CATEGORY_MAP,
-  getAllProducts,
-  getProductBySlug,
-  getRelatedProducts,
-  productImageUrl,
-} from "@/lib/products";
+import { CATEGORY_MAP, productImageUrl } from "@/lib/products";
+import { catalogCartItem } from "@/lib/cart-item";
+import { getAllProducts, getProductBySlug, getRelatedProducts } from "@/lib/catalog";
 import { productBrandLogo } from "@/lib/content";
 import { discountPercent, formatPHP } from "@/lib/format";
 
-// Pre-render every product page at build time (ISR-ready, fully indexable HTML).
-export function generateStaticParams() {
-  return getAllProducts().map((p) => ({ slug: p.slug }));
+// Pre-render every product page at build time (ISR-ready, fully indexable HTML). Falls back to
+// on-demand rendering if Firestore isn't reachable at build (e.g. before credentials are set).
+export async function generateStaticParams() {
+  try {
+    return (await getAllProducts()).map((p) => ({ slug: p.slug }));
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({
@@ -28,7 +29,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const product = getProductBySlug(slug);
+  const product = await getProductBySlug(slug);
   if (!product) return { title: "Product not found" };
 
   const title = `${product.name} — ${product.brand}`;
@@ -51,14 +52,14 @@ export default async function ProductPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = getProductBySlug(slug);
+  const product = await getProductBySlug(slug);
   if (!product) notFound();
 
   const category = CATEGORY_MAP[product.category];
   const off = discountPercent(product.price, product.compareAtPrice);
-  const related = getRelatedProducts(product, 4);
+  const related = await getRelatedProducts(product, 4);
   // Products with no photo yet show the brand wordmark on a white plate instead.
-  const logo = productBrandLogo(product);
+  const logo = await productBrandLogo(product);
 
   return (
     <>
@@ -67,7 +68,7 @@ export default async function ProductPage({
         <nav aria-label="Breadcrumb" className="mb-6 text-sm text-muted">
           <Link href="/" className="hover:text-brand-700">Home</Link>
           <span className="mx-2 text-line-strong">/</span>
-          <Link href={`/?category=${category.slug}`} className="hover:text-brand-700">
+          <Link href={`/categories/${category.slug}`} className="hover:text-brand-700">
             {category.name}
           </Link>
         </nav>
@@ -144,15 +145,7 @@ export default async function ProductPage({
             <div className="mt-6">
               <ProductPurchase
                 inStock={product.inStock}
-                item={{
-                  slug: product.slug,
-                  name: product.name,
-                  price: product.price,
-                  unit: product.unit,
-                  sku: product.sku,
-                  category: category.name,
-                  image: logo ?? productImageUrl(product, 300),
-                }}
+                item={catalogCartItem(product, logo ?? productImageUrl(product, 300))}
               />
             </div>
 

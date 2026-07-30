@@ -1,30 +1,35 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getBanner } from "@/lib/content";
+import { getBanners } from "@/lib/content";
+import { BannerCarousel } from "@/components/shop/BannerCarousel";
 
 /**
- * Full-bleed picture banner at the top of the Shop All (landing) page.
- * Image-only (no text overlay); spans the full viewport width. The image, alt text and optional
- * link are edited in the admin at /admin/banner — no code edits needed.
+ * Full-bleed banner at the top of the landing page. Managed in the admin at /admin/banner:
+ * no banners → nothing; one → a plain static image; two or more → an auto-advancing carousel.
  */
-export function ShopBanner() {
-  const banner = getBanner();
+export async function ShopBanner() {
+  const banners = await getBanners();
+  if (banners.length === 0) return null;
 
-  const image = (
-    <Image
-      src={banner.image}
-      alt={banner.alt}
-      width={1489}
-      height={551}
-      priority
-      sizes="100vw"
-      className="h-auto w-full"
-    />
-  );
+  if (banners.length === 1) {
+    const banner = banners[0];
+    const image = (
+      <Image
+        src={banner.image}
+        alt={banner.alt}
+        width={1489}
+        height={551}
+        priority
+        sizes="100vw"
+        className="h-auto w-full"
+      />
+    );
+    return (
+      <section className="w-full">
+        {banner.href ? <Link href={banner.href}>{image}</Link> : image}
+      </section>
+    );
+  }
 
-  return (
-    <section className="w-full">
-      {banner.href ? <Link href={banner.href}>{image}</Link> : image}
-    </section>
-  );
+  return <BannerCarousel banners={banners} />;
 }

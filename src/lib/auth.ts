@@ -1,43 +1,42 @@
 /**
  * Admin authentication — SERVER ONLY.
  *
- * ⚠️  TEMPORARY, LOCALHOST-ONLY IMPLEMENTATION. Do not deploy this file as-is.
+ * Credentials are owned by Firebase Authentication (project `rnr-dental-clinics`). Login verifies
+ * the email + password against Firebase's Identity Toolkit, then loads the user's role and brand
+ * scoping from the `storeAdminUsers/{uid}` document. The existing `admin@rnr.com` / `rnr@123`
+ * account is seeded into Firebase Auth, so the same credentials keep working.
  *
- * The owner account below is hardcoded in source with a plaintext password, and the session
- * secret falls back to a constant when ADMIN_SESSION_SECRET is unset. That is fine while the
- * admin runs on a developer's machine and nothing else.
+ * We keep our own signed session cookie (rather than a Firebase session cookie) so the middleware,
+ * layout guards, and every server action's `requireUser`/`requireAdmin`/`canEditBrand` calls are
+ * unchanged. Authorization rule: a layout check alone is not authorization — server actions are
+ * directly callable HTTP endpoints, so each re-checks.
  *
- * BEFORE ANY DEPLOY:
- *   1. Move authentication to Firebase Auth and delete OWNER_ACCOUNT entirely.
- *   2. Require ADMIN_SESSION_SECRET from the environment — remove the dev fallback.
- *   3. Move users out of data/site-content.json into the real datastore.
- *
- * Authorization rule: `requireUser`/`requireAdmin`/`requireBrandAccess` are called by the admin
- * layout AND independently by every server action. A layout check alone is not authorization —
- * server actions are directly callable HTTP endpoints.
+ * DEPLOY NOTE: set ADMIN_SESSION_SECRET in the environment. A dev-only fallback keeps local runs
+ * working; in production the secret is required and login throws without it.
  */
 
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getUserByEmail, type AdminUser, type UserRole } from "@/lib/content";
-
-/** TEMPORARY hardcoded owner account — replace with Firebase Auth. */
-const OWNER_ACCOUNT = {
-  email: "admin@rnr.com",
-  password: "rnr@123",
-  name: "R&R Admin",
-} as const;
+import { getAdminAuth } from "@/lib/firebase";
+import { getUserByUid, type UserRole } from "@/lib/content";
 
 const SESSION_COOKIE = "rrnt_session";
 const SESSION_MAX_AGE = 60 * 60 * 8; // 8 hours
 
-/** Dev fallback only — see the warning above. */
-const SESSION_SECRET =
-  process.env.ADMIN_SESSION_SECRET ?? "rrnt-local-dev-secret-do-not-use-in-production";
+/** Session cookie signing secret. Required in production; dev-only fallback otherwise. */
+function sessionSecret(): string {
+  const secret = process.env.ADMIN_SESSION_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("ADMIN_SESSION_SECRET is required in production.");
+  }
+  return "rrnt-local-dev-secret-do-not-use-in-production";
+}
 
-/** The session-safe view of a user. Never carries the password hash. */
+/** The session-safe view of a user. Never carries credentials. */
 export type SessionUser = {
+  uid: string;
   email: string;
   name: string;
   role: UserRole;
@@ -46,28 +45,11 @@ export type SessionUser = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Password hashing (marketing users). Node's scrypt — no extra dependency.
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function hashPassword(password: string): { passwordHash: string; salt: string } {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const passwordHash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return { passwordHash, salt };
-}
-
-function verifyPassword(password: string, user: AdminUser): boolean {
-  const attempt = crypto.scryptSync(password, user.salt, 64);
-  const stored = Buffer.from(user.passwordHash, "hex");
-  // Length check first: timingSafeEqual throws on a length mismatch.
-  return attempt.length === stored.length && crypto.timingSafeEqual(attempt, stored);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Session cookie — signed payload, verified on every read.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function sign(payload: string): string {
-  return crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+  return crypto.createHmac("sha256", sessionSecret()).update(payload).digest("base64url");
 }
 
 function serialize(user: SessionUser): string {
@@ -95,6 +77,7 @@ function deserialize(token: string | undefined): SessionUser | null {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     if (typeof data.exp !== "number" || data.exp < Date.now()) return null;
     return {
+      uid: data.uid,
       email: data.email,
       name: data.name,
       role: data.role,
@@ -105,19 +88,80 @@ function deserialize(token: string | undefined): SessionUser | null {
   }
 }
 
-/** Validate credentials against the hardcoded owner, then the stored marketing users. */
-export function authenticate(email: string, password: string): SessionUser | null {
-  const normalized = email.trim().toLowerCase();
+// ─────────────────────────────────────────────────────────────────────────────
+// Credential verification against Firebase Authentication.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  if (normalized === OWNER_ACCOUNT.email && password === OWNER_ACCOUNT.password) {
-    return { email: OWNER_ACCOUNT.email, name: OWNER_ACCOUNT.name, role: "admin", brandSlugs: [] };
-  }
+/**
+ * Verify email + password with Firebase's Identity Toolkit (the Admin SDK can't check passwords
+ * directly). Returns the Firebase uid on success, or null on any failure. Requires
+ * FIREBASE_WEB_API_KEY.
+ */
+async function verifyFirebasePassword(email: string, password: string): Promise<string | null> {
+  const apiKey = process.env.FIREBASE_WEB_API_KEY;
+  if (!apiKey) throw new Error("FIREBASE_WEB_API_KEY is not set — cannot verify admin logins.");
 
-  const user = getUserByEmail(normalized);
-  if (!user || !verifyPassword(password, user)) return null;
-
-  return { email: user.email, name: user.name, role: user.role, brandSlugs: user.brandSlugs };
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    },
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as { localId?: string };
+  return data.localId ?? null;
 }
+
+/** Validate credentials against Firebase Auth, then load role/brand scope from Firestore. */
+export async function authenticate(email: string, password: string): Promise<SessionUser | null> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized || !password) return null;
+
+  const uid = await verifyFirebasePassword(normalized, password);
+  if (!uid) return null;
+
+  const profile = await getUserByUid(uid);
+  if (!profile) return null; // authenticated but not provisioned as an admin/marketing user
+
+  return {
+    uid: profile.uid,
+    email: profile.email,
+    name: profile.name,
+    role: profile.role,
+    brandSlugs: profile.brandSlugs,
+  };
+}
+
+/** Create (or update the password of) a Firebase Auth user; returns the uid. */
+export async function createFirebaseUser(
+  email: string,
+  password: string,
+  name: string,
+): Promise<string> {
+  const auth = getAdminAuth();
+  try {
+    const user = await auth.createUser({ email, password, displayName: name });
+    return user.uid;
+  } catch (err) {
+    // If the account already exists, update its password instead of failing.
+    if (err instanceof Error && "code" in err && err.code === "auth/email-already-exists") {
+      const existing = await auth.getUserByEmail(email);
+      await auth.updateUser(existing.uid, { password, displayName: name });
+      return existing.uid;
+    }
+    throw err;
+  }
+}
+
+export async function deleteFirebaseUser(uid: string): Promise<void> {
+  await getAdminAuth().deleteUser(uid);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Session lifecycle.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function createSession(user: SessionUser): Promise<void> {
   const store = await cookies();

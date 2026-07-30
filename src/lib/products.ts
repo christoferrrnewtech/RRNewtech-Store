@@ -1,9 +1,17 @@
 /**
- * Product catalog — data model + seed data + query helpers.
+ * Product catalog — data model + pure helpers + the seed catalog.
  *
- * PHASE 1: the catalog lives in code so the store renders with no database or credentials.
- * PHASE 4 (admin): swap `PRODUCTS` for Firestore/DB reads behind these same helper functions
- * (getAllProducts, getProductBySlug, …) so pages don't change. Keep the Product shape stable.
+ * CLIENT-SAFE: this module has no server-only imports, so client components may import the pure
+ * helpers, types, and the category taxonomy from here.
+ *
+ * Runtime product reads now come from Firestore via `@/lib/catalog` (server-only, async):
+ * getAllProducts, getProductBySlug, getProductsByCategory, getProductsByBrand, getFeaturedProducts,
+ * getRelatedProducts, getAllBrands. `PRODUCT_SEED` below is the one-time migration source used by
+ * `scripts/seed-firestore.ts` — it is not read at runtime.
+ *
+ * The category taxonomy (`CATEGORIES` / `CategorySlug`) stays in code: `CategorySlug` is a
+ * compile-time union relied on across the app for type safety. Categories are also mirrored into
+ * the `storeCategories` collection by the seed script for the admin / landing page to read.
  */
 
 export type CategorySlug =
@@ -106,9 +114,10 @@ export type Product = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Seed catalog — representative products across every category.
+// Seed catalog — representative products across every category. Migration source only
+// (scripts/seed-firestore.ts); runtime reads come from Firestore via @/lib/catalog.
 // ─────────────────────────────────────────────────────────────────────────────
-export const PRODUCTS: Product[] = [
+export const PRODUCT_SEED: Product[] = [
   {
     slug: "nano-hybrid-composite-a2",
     name: "Nano-Hybrid Composite Resin — Shade A2",
@@ -557,20 +566,8 @@ export const PRODUCTS: Product[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Query helpers — the single interface pages use. Swap the source here in Phase 4.
+// Pure, client-safe helpers. Product *reads* live in @/lib/catalog (server-only, Firestore).
 // ─────────────────────────────────────────────────────────────────────────────
-
-export function getAllProducts(): Product[] {
-  return PRODUCTS;
-}
-
-export function getProductBySlug(slug: string): Product | undefined {
-  return PRODUCTS.find((p) => p.slug === slug);
-}
-
-export function getProductsByCategory(category: CategorySlug): Product[] {
-  return PRODUCTS.filter((p) => p.category === category);
-}
 
 /** URL-safe slug for a brand display name (e.g. "Shining Digital" → "shining-digital"). */
 export function brandSlug(brand: string): string {
@@ -580,17 +577,17 @@ export function brandSlug(brand: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-/** Unique brands present in the catalog, sorted A–Z, with URL slugs. */
-export function getAllBrands(): { name: string; slug: string }[] {
-  const bySlug = new Map<string, string>();
-  for (const p of PRODUCTS) bySlug.set(brandSlug(p.brand), p.brand);
-  return [...bySlug.entries()]
-    .map(([slug, name]) => ({ slug, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+/** Slug for a brand-owned product, from its name; falls back to its id when the name is empty. */
+export function brandProductSlugify(name: string, fallbackId: string): string {
+  return brandSlug(name) || fallbackId;
 }
 
-export function getProductsByBrand(slug: string): Product[] {
-  return PRODUCTS.filter((p) => brandSlug(p.brand) === slug);
+/** Canonical detail-page URL for a brand product. Single source of truth for the URL shape. */
+export function brandProductHref(
+  brandSlugValue: string,
+  product: { slug?: string; id: string },
+): string {
+  return `/brands/${brandSlugValue}/${product.slug ?? product.id}`;
 }
 
 /** Keyword search over name, brand, and summary (case-insensitive). */
@@ -600,17 +597,6 @@ export function searchProducts(list: Product[], q: string): Product[] {
   return list.filter((p) =>
     `${p.name} ${p.brand} ${p.summary}`.toLowerCase().includes(needle),
   );
-}
-
-export function getFeaturedProducts(limit = 8): Product[] {
-  return PRODUCTS.filter((p) => p.featured).slice(0, limit);
-}
-
-/** Related products: same category, excluding the current one. */
-export function getRelatedProducts(product: Product, limit = 4): Product[] {
-  return PRODUCTS.filter(
-    (p) => p.category === product.category && p.slug !== product.slug,
-  ).slice(0, limit);
 }
 
 /** Placeholder image URL for a product (deterministic). Replace with real hosted images later. */

@@ -7,17 +7,44 @@
  * directly callable HTTP endpoints — the layout guard in (app)/layout.tsx does not protect them.
  * Never remove a `requireUser` / `requireAdmin` / `canEditBrand` call from an action because
  * "the UI already hides it".
+ *
+ * Persistence is Firestore (+ Firebase Auth for users, Firebase Storage for images) via the
+ * helpers in `@/lib/content`, `@/lib/auth`, and `@/lib/firebase`.
  */
 
-import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
+import sharp from "sharp";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
-  getContent,
-  updateContent,
+  addBanner,
+  updateBanner,
+  deleteBanner,
+  reorderBanners,
+  saveAboutContent,
+  type AboutContent,
+  getCategories,
+  createCategory,
+  renameCategory,
+  deleteCategory,
+  reorderCategories,
+  createSubcategory,
+  renameSubcategory,
+  deleteSubcategory,
+  reorderSubcategories,
+  brandExists,
+  createBrand,
+  saveBrand,
+  deleteBrand,
+  reorderBrands,
+  getBrandForAdmin,
+  getUserByEmail,
+  upsertAdminUser,
+  updateUserBrands,
+  deleteAdminUserDoc,
+  nextBrandOrder,
   type Brand,
+  type BrandProduct,
   type GalleryImage,
 } from "@/lib/content";
 import {
@@ -25,15 +52,17 @@ import {
   canEditBrand,
   createSession,
   destroySession,
-  hashPassword,
+  createFirebaseUser,
+  deleteFirebaseUser,
   requireAdmin,
   requireUser,
 } from "@/lib/auth";
-import { brandSlug } from "@/lib/products";
+import { getBucket } from "@/lib/firebase";
+import { brandSlug, brandProductSlugify } from "@/lib/products";
+import { BRAND_GROUPS } from "@/lib/constants";
 
 export type ActionState = { ok?: string; error?: string };
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 // SVG is deliberately excluded — it can carry script and would be served from our own origin.
 const ALLOWED_TYPES: Record<string, string> = {
@@ -46,25 +75,48 @@ const ALLOWED_TYPES: Record<string, string> = {
 function revalidateStorefront(slug?: string) {
   revalidatePath("/", "layout");
   revalidatePath("/brands");
-  if (slug) revalidatePath(`/brands/${slug}`);
+  // "layout" so the brand page AND its nested product detail pages both refresh.
+  if (slug) revalidatePath(`/brands/${slug}`, "layout");
+  // Category pages list brand products, so refresh them all when brand content changes.
+  revalidatePath("/categories/[slug]", "page");
   revalidatePath("/sitemap.xml");
 }
 
 /**
- * Persist an uploaded image under public/uploads and return its public path.
- * Returns undefined when no file was supplied (an unchanged image field).
+ * Upload an image to Firebase Storage and return a public download URL.
+ * Returns "" when no file was supplied (an unchanged image field).
+ *
+ * The upload is downscaled to a max 1600px edge and re-encoded to WebP (quality 80), so banners and
+ * logos land at tens of KB instead of multi-MB. Uses Firebase's download-token URL rather than
+ * `makePublic()`: it works with uniform bucket-level access and doesn't expose the whole bucket.
  */
 async function storeUpload(file: FormDataEntryValue | null, prefix: string): Promise<string> {
   if (!(file instanceof File) || file.size === 0) return "";
 
-  const ext = ALLOWED_TYPES[file.type];
-  if (!ext) throw new Error("Only PNG, JPG and WebP images are allowed.");
+  if (!ALLOWED_TYPES[file.type]) throw new Error("Only PNG, JPG and WebP images are allowed.");
   if (file.size > MAX_UPLOAD_BYTES) throw new Error("Image must be 5 MB or smaller.");
 
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  const name = `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
-  fs.writeFileSync(path.join(UPLOAD_DIR, name), Buffer.from(await file.arrayBuffer()));
-  return `/uploads/${name}`;
+  // Resize (never upscale) and re-encode to WebP so Storage stays small. `rotate()` bakes in EXIF
+  // orientation so phone photos aren't saved sideways.
+  const compressed = await sharp(Buffer.from(await file.arrayBuffer()))
+    .rotate()
+    .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toBuffer();
+
+  const bucket = getBucket();
+  const token = crypto.randomUUID();
+  const name = `uploads/${prefix}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.webp`;
+  await bucket.file(name).save(compressed, {
+    resumable: false,
+    metadata: {
+      contentType: "image/webp",
+      metadata: { firebaseStorageDownloadTokens: token },
+    },
+  });
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(
+    name,
+  )}?alt=media&token=${token}`;
 }
 
 function text(form: FormData, key: string): string {
@@ -89,7 +141,12 @@ export async function loginAction(
   _prev: ActionState,
   form: FormData,
 ): Promise<ActionState> {
-  const user = authenticate(text(form, "email"), String(form.get("password") ?? ""));
+  let user;
+  try {
+    user = await authenticate(text(form, "email"), String(form.get("password") ?? ""));
+  } catch {
+    return { error: "Sign-in is temporarily unavailable. Please try again." };
+  }
   if (!user) return { error: "Incorrect email or password." };
   await createSession(user);
   redirect("/admin");
@@ -104,25 +161,167 @@ export async function logoutAction(): Promise<void> {
 // Banner (admin only)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function saveBannerAction(
+export async function addBannerAction(
   _prev: ActionState,
   form: FormData,
 ): Promise<ActionState> {
   await requireAdmin();
 
   try {
+    const image = await storeUpload(form.get("image"), "banner");
+    if (!image) return { error: "Choose an image for the banner." };
+    await addBanner({ image, alt: text(form, "alt"), href: text(form, "href") });
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not add the banner." };
+  }
+
+  revalidateStorefront();
+  return { ok: "Banner added." };
+}
+
+export async function updateBannerAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const id = text(form, "id");
+
+  try {
     const uploaded = await storeUpload(form.get("image"), "banner");
-    updateContent((draft) => {
-      if (uploaded) draft.banner.image = uploaded;
-      draft.banner.alt = text(form, "alt");
-      draft.banner.href = text(form, "href");
-    });
+    const patch: { alt: string; href: string; image?: string } = {
+      alt: text(form, "alt"),
+      href: text(form, "href"),
+    };
+    if (uploaded) patch.image = uploaded;
+    await updateBanner(id, patch);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not save the banner." };
   }
 
   revalidateStorefront();
   return { ok: "Banner saved." };
+}
+
+export async function deleteBannerAction(form: FormData): Promise<void> {
+  await requireAdmin();
+  await deleteBanner(text(form, "id"));
+  revalidateStorefront();
+}
+
+/**
+ * Set the carousel order to the given id sequence. Plain-arg action so the client can call it
+ * imperatively (drag-drop and the arrow buttons both submit the full desired order).
+ */
+export async function reorderBannersAction(ids: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderBanners(ids);
+  revalidateStorefront();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// About section (admin only) — the homepage "About" band
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function saveAboutAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const heading = text(form, "heading");
+  if (!heading) return { error: "Heading is required." };
+
+  try {
+    const uploaded = await storeUpload(form.get("image"), "about");
+    const patch: Partial<AboutContent> = {
+      eyebrow: text(form, "eyebrow"),
+      heading,
+      paragraphs: textList(form, "paragraph"),
+      ctaLabel: text(form, "ctaLabel"),
+      ctaHref: text(form, "ctaHref"),
+    };
+    // New upload wins; otherwise an explicit "use placeholder" clears it, and a plain save keeps it.
+    if (uploaded) patch.image = uploaded;
+    else if (form.get("removeImage") === "1") patch.image = "";
+    await saveAboutContent(patch);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not save the About section." };
+  }
+
+  revalidateStorefront();
+  return { ok: "About section saved." };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Categories & subcategories (admin only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function createCategoryAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await createCategory(text(form, "name"));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not create the category." };
+  }
+  revalidateStorefront();
+  return { ok: "Category created." };
+}
+
+export async function renameCategoryAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await renameCategory(text(form, "slug"), text(form, "name"));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not rename the category." };
+  }
+  revalidateStorefront();
+  return { ok: "Category renamed." };
+}
+
+export async function deleteCategoryAction(form: FormData): Promise<void> {
+  await requireAdmin();
+  await deleteCategory(text(form, "slug"));
+  revalidateStorefront();
+}
+
+export async function reorderCategoriesAction(slugs: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderCategories(slugs);
+  revalidateStorefront();
+}
+
+export async function createSubcategoryAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await createSubcategory(text(form, "category"), text(form, "name"));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not create the subcategory." };
+  }
+  revalidateStorefront();
+  return { ok: "Subcategory created." };
+}
+
+export async function renameSubcategoryAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  await requireAdmin();
+  try {
+    await renameSubcategory(text(form, "category"), text(form, "slug"), text(form, "name"));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not rename the subcategory." };
+  }
+  revalidateStorefront();
+  return { ok: "Subcategory renamed." };
+}
+
+export async function deleteSubcategoryAction(form: FormData): Promise<void> {
+  await requireAdmin();
+  await deleteSubcategory(text(form, "category"), text(form, "slug"));
+  revalidateStorefront();
+}
+
+export async function reorderSubcategoriesAction(category: string, slugs: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderSubcategories(category, slugs);
+  revalidateStorefront();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -140,7 +339,7 @@ export async function createBrandAction(
 
   const slug = brandSlug(name);
   if (!slug) return { error: "That name doesn't produce a usable URL." };
-  if (getContent().brands.some((b) => b.slug === slug)) {
+  if (await brandExists(slug)) {
     return { error: `A brand with the URL /brands/${slug} already exists.` };
   }
 
@@ -152,13 +351,14 @@ export async function createBrandAction(
       slug,
       name,
       status: "draft",
-      order: getContent().brands.length,
+      order: await nextBrandOrder(),
+      group: "consumables",
       tagline: "",
       blurb: "",
       logo: logo || "/brand/logo.png",
       about: [],
       gallery: [],
-      featuredProductSlugs: [],
+      products: [],
       whyChoose: [],
       cta: {
         heading: "Interested in learning more?",
@@ -167,9 +367,7 @@ export async function createBrandAction(
         websiteUrl: "",
       },
     };
-    updateContent((draft) => {
-      draft.brands.push(brand);
-    });
+    await createBrand(brand);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not create the brand." };
   }
@@ -181,22 +379,24 @@ export async function createBrandAction(
 export async function deleteBrandAction(form: FormData): Promise<void> {
   await requireAdmin();
   const slug = text(form, "slug");
-
-  updateContent((draft) => {
-    draft.brands = draft.brands.filter((b) => b.slug !== slug);
-    // Drop the deleted brand from any marketing user's assignments.
-    for (const user of draft.users) {
-      user.brandSlugs = user.brandSlugs.filter((s) => s !== slug);
-    }
-  });
-
+  await deleteBrand(slug);
   revalidateStorefront(slug);
   redirect("/admin/brands");
 }
 
 /**
+ * Set the storefront display order from a full slug sequence. Plain-arg action so the rail can call
+ * it imperatively from drag-drop and the arrow buttons (admin only — marketing users see a subset).
+ */
+export async function reorderBrandsAction(slugs: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderBrands(slugs);
+  revalidateStorefront();
+}
+
+/**
  * Every brand-section save funnels through here so the ownership check exists in exactly one
- * place. `apply` receives the brand draft and the submitted form.
+ * place. `apply` receives the brand object and the submitted form.
  */
 async function saveBrandSection(
   form: FormData,
@@ -209,18 +409,13 @@ async function saveBrandSection(
   if (!canEditBrand(user, slug)) {
     return { error: "You don't have access to this brand." };
   }
-  if (!getContent().brands.some((b) => b.slug === slug)) {
-    return { error: "That brand no longer exists." };
-  }
+
+  const brand = await getBrandForAdmin(slug);
+  if (!brand) return { error: "That brand no longer exists." };
 
   try {
-    const draft = structuredClone(getContent());
-    const brand = draft.brands.find((b) => b.slug === slug)!;
     await apply(brand, form);
-    updateContent((d) => {
-      const target = d.brands.findIndex((b) => b.slug === slug);
-      d.brands[target] = brand;
-    });
+    await saveBrand(brand);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not save changes." };
   }
@@ -273,6 +468,10 @@ export async function saveBrandAboutAction(_prev: ActionState, form: FormData) {
       brand.tagline = text(form, "tagline");
       brand.blurb = text(form, "blurb");
       brand.about = textList(form, "about");
+      const group = text(form, "group");
+      if (BRAND_GROUPS.some((g) => g.key === group)) {
+        brand.group = group as (typeof BRAND_GROUPS)[number]["key"];
+      }
     },
     "About section saved.",
   );
@@ -313,13 +512,113 @@ export async function saveBrandGalleryAction(_prev: ActionState, form: FormData)
   );
 }
 
+/** Split a textarea value into trimmed, non-empty lines (one paragraph / bullet per line). */
+function linesOf(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+/** Parse a `productGalleryJson` hidden value into the kept (already-uploaded) gallery images. */
+function parseGalleryJson(raw: string): GalleryImage[] {
+  try {
+    const parsed = JSON.parse(raw || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((g) => g && typeof g.src === "string" && g.src)
+      .map((g) => (g.caption ? { src: String(g.src), caption: String(g.caption) } : { src: String(g.src) }));
+  } catch {
+    return [];
+  }
+}
+
 export async function saveBrandProductsAction(_prev: ActionState, form: FormData) {
   return saveBrandSection(
     form,
-    (brand) => {
-      brand.featuredProductSlugs = form.getAll("productSlug").map(String);
+    async (brand) => {
+      // Parallel per-row arrays (kept aligned by the client), plus per-row file inputs.
+      const ids = form.getAll("productId").map(String);
+      const names = form.getAll("productName").map(String);
+      const prices = form.getAll("productPrice").map(String);
+      const compareAts = form.getAll("productCompareAt").map(String);
+      const summaries = form.getAll("productSummary").map(String);
+      const categories = form.getAll("productCategory").map(String);
+      const subcategories = form.getAll("productSubcategory").map(String);
+      const allCategories = await getCategories();
+      const descriptions = form.getAll("productDescription").map(String);
+      const highlightsRaw = form.getAll("productHighlights").map(String);
+      const galleryJson = form.getAll("productGalleryJson").map(String);
+      const inStocks = form.getAll("productInStock").map(String);
+      const contactSalesFlags = form.getAll("productContactSales").map(String);
+      const existingImages = form.getAll("productImage").map(String);
+      const files = form.getAll("productImageFile");
+
+      const usedSlugs = new Set<string>();
+      const out: BrandProduct[] = [];
+      for (let i = 0; i < names.length; i++) {
+        const name = (names[i] ?? "").trim();
+        if (!name) continue; // a blank name means the row was cleared/removed
+
+        const id = ids[i] || crypto.randomUUID();
+
+        // Slug always follows the current name (deduped within the brand); the read path recomputes
+        // it too, so URLs never drift from a renamed product.
+        let slug = brandProductSlugify(name, id);
+        if (usedSlugs.has(slug)) {
+          let n = 2;
+          while (usedSlugs.has(`${slug}-${n}`)) n++;
+          slug = `${slug}-${n}`;
+        }
+        usedSlugs.add(slug);
+
+        // "Price on request" products hide the price on the storefront, so we don't retain a figure.
+        const contactSales = contactSalesFlags[i] === "1";
+        const price = contactSales ? 0 : Math.max(0, Math.round(Number(prices[i]) || 0));
+        const compareAt = contactSales ? 0 : Math.round(Number(compareAts[i]) || 0);
+
+        // A newly chosen file uploads (and compresses); otherwise keep the prior image URL.
+        const uploaded = await storeUpload(files[i] ?? null, `product-${brand.slug}`);
+        const image = uploaded || (existingImages[i] ?? "");
+
+        // Gallery: kept images come back as JSON; new files (keyed by row id) upload and append.
+        const gallery = parseGalleryJson(galleryJson[i] ?? "");
+        for (const file of form.getAll(`productGalleryFiles_${id}`)) {
+          const galleryUrl = await storeUpload(file, `bp-${brand.slug}`);
+          if (galleryUrl) gallery.push({ src: galleryUrl });
+        }
+
+        const description = linesOf(descriptions[i] ?? "");
+        const highlights = linesOf(highlightsRaw[i] ?? "");
+
+        // Keep a category only if it exists, and a subcategory only if it belongs to that category.
+        const rawCategory = (categories[i] ?? "").trim();
+        const cat = allCategories.find((c) => c.slug === rawCategory);
+        const category = cat?.slug;
+        const rawSub = (subcategories[i] ?? "").trim();
+        const subcategory =
+          cat && cat.subcategories.some((s) => s.slug === rawSub) ? rawSub : undefined;
+
+        out.push({
+          id,
+          slug,
+          name,
+          price,
+          compareAtPrice: compareAt > price ? compareAt : undefined,
+          category,
+          subcategory,
+          summary: (summaries[i] ?? "").trim() || undefined,
+          description: description.length ? description : undefined,
+          highlights: highlights.length ? highlights : undefined,
+          gallery: gallery.length ? gallery : undefined,
+          image,
+          inStock: inStocks[i] === "1",
+          contactSales,
+        });
+      }
+      brand.products = out;
     },
-    "Featured products saved.",
+    "Products saved.",
   );
 }
 
@@ -373,22 +672,16 @@ export async function createUserAction(
 
   if (!email || !name) return { error: "Name and email are required." };
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
-  if (getContent().users.some((u) => u.email.toLowerCase() === email)) {
+  if (await getUserByEmail(email)) {
     return { error: "That email already has an account." };
   }
 
-  const { passwordHash, salt } = hashPassword(password);
-  updateContent((draft) => {
-    draft.users.push({
-      id: crypto.randomUUID(),
-      email,
-      name,
-      role: "marketing",
-      passwordHash,
-      salt,
-      brandSlugs,
-    });
-  });
+  try {
+    const uid = await createFirebaseUser(email, password, name);
+    await upsertAdminUser({ uid, email, name, role: "marketing", brandSlugs });
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not create the user." };
+  }
 
   return { ok: `${name} can now sign in.` };
 }
@@ -398,25 +691,14 @@ export async function updateUserBrandsAction(
   form: FormData,
 ): Promise<ActionState> {
   await requireAdmin();
-
-  const id = text(form, "id");
-  const brandSlugs = form.getAll("brandSlugs").map(String);
-
-  updateContent((draft) => {
-    const user = draft.users.find((u) => u.id === id);
-    if (user) user.brandSlugs = brandSlugs;
-  });
-
+  await updateUserBrands(text(form, "uid"), form.getAll("brandSlugs").map(String));
   return { ok: "Brand access updated." };
 }
 
 export async function deleteUserAction(form: FormData): Promise<void> {
   await requireAdmin();
-  const id = text(form, "id");
-
-  updateContent((draft) => {
-    draft.users = draft.users.filter((u) => u.id !== id);
-  });
-
+  const uid = text(form, "uid");
+  await deleteFirebaseUser(uid).catch(() => {});
+  await deleteAdminUserDoc(uid);
   redirect("/admin/users");
 }

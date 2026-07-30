@@ -4,19 +4,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
-import { ProductCard } from "@/components/shop/ProductCard";
-import {
-  getBrandBySlug,
-  getBrands,
-  getFeaturedProductsForBrand,
-  youtubeEmbedId,
-} from "@/lib/content";
-import { getProductsByBrand } from "@/lib/products";
+import { BrandProductCard } from "@/components/shop/BrandProductCard";
+import { getBrandBySlug, getBrands, youtubeEmbedId } from "@/lib/content";
 import { SITE } from "@/lib/constants";
 
-// Pre-render every published brand page at build time (indexable HTML, no runtime data fetch).
-export function generateStaticParams() {
-  return getBrands().map((b) => ({ slug: b.slug }));
+// Pre-render every published brand page at build time (indexable HTML). Falls back to on-demand
+// rendering if Firestore isn't reachable at build (e.g. before credentials are configured).
+export async function generateStaticParams() {
+  try {
+    return (await getBrands()).map((b) => ({ slug: b.slug }));
+  } catch {
+    return [];
+  }
 }
 
 export async function generateMetadata({
@@ -25,7 +24,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const brand = getBrandBySlug(slug);
+  const brand = await getBrandBySlug(slug);
   if (!brand) return { title: "Brand not found" };
 
   const title = `${brand.name} — Dental Products in the Philippines`;
@@ -53,29 +52,43 @@ export default async function BrandPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const brand = getBrandBySlug(slug);
+  const brand = await getBrandBySlug(slug);
   if (!brand) notFound();
 
-  const featured = getFeaturedProductsForBrand(brand);
-  const catalog = getProductsByBrand(brand.slug);
+  const products = brand.products;
   const videoId = youtubeEmbedId(brand.youtubeUrl);
+
+  // Small logo + name/tagline + Shop CTA — shared by the 2-column (with hero) and bar (no hero) layouts.
+  const headerInfo = (
+    <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+      {/* Logos carry their own backgrounds, so they sit contained on a white plate. */}
+      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-line bg-white sm:h-20 sm:w-20">
+        <Image
+          src={brand.logo}
+          alt={brand.name}
+          fill
+          sizes="80px"
+          className="object-contain p-2.5"
+          priority={!brand.heroImage}
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Brand</p>
+        <h1 className="mt-0.5 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-fg sm:text-3xl">
+          {brand.name}
+        </h1>
+        {brand.tagline && <p className="mt-1 text-muted">{brand.tagline}</p>}
+      </div>
+      {products.length > 0 && (
+        <LinkButton href="#brand-products" className="shrink-0">
+          Shop {brand.name}
+        </LinkButton>
+      )}
+    </div>
+  );
 
   return (
     <>
-      {/* 1 · Hero banner */}
-      {brand.heroImage && (
-        <section className="relative aspect-[21/9] w-full bg-elevated sm:aspect-[3/1]">
-          <Image
-            src={brand.heroImage}
-            alt=""
-            fill
-            sizes="100vw"
-            className="object-cover"
-            priority
-          />
-        </section>
-      )}
-
       <Container className="py-10">
         <nav aria-label="Breadcrumb" className="mb-6 text-sm text-muted">
           <Link href="/" className="hover:text-brand-700">Home</Link>
@@ -83,44 +96,30 @@ export default async function BrandPage({
           <Link href="/brands" className="hover:text-brand-700">Brands</Link>
         </nav>
 
-        {/* 2 · Brand logo, beside the headline copy */}
-        <div className="grid items-stretch gap-6 lg:grid-cols-2">
-          {/* Logos carry their own backgrounds, so they sit contained on a white plate — never
-              cropped, and never over the brand-blue panel. */}
-          <div className="relative aspect-[4/3] rounded-2xl border border-line bg-white lg:aspect-auto lg:min-h-72">
-            <Image
-              src={brand.logo}
-              alt={brand.name}
-              fill
-              sizes="(max-width: 1024px) 100vw, 560px"
-              className="object-contain p-10"
-              priority={!brand.heroImage}
-            />
-          </div>
-
-          <div className="relative flex flex-col justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-brand-700 to-brand-900 p-8 text-white sm:p-10">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-brand-400/20 blur-3xl"
-            />
-            <div className="relative">
-              <p className="text-xs font-semibold uppercase tracking-wide text-brand-200">Brand</p>
-              <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold leading-tight sm:text-4xl">
-                {brand.name}
-              </h1>
-              <p className="mt-3 font-[family-name:var(--font-display)] text-xl font-bold leading-snug">
-                {brand.tagline}
-              </p>
-              <p className="mt-3 text-sm leading-relaxed text-white/75">{brand.blurb}</p>
-
-              {featured.length > 0 && (
-                <LinkButton href="#brand-products" variant="inverse" className="mt-8 w-fit">
-                  Shop {brand.name}
-                </LinkButton>
-              )}
+        {/* Header — with a hero: two columns (hero left, logo+info right); without: the info bar. */}
+        {brand.heroImage ? (
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
+            <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border border-line bg-elevated">
+              <Image
+                src={brand.heroImage}
+                alt=""
+                fill
+                sizes="(max-width: 1024px) 100vw, 560px"
+                className="object-cover"
+                priority
+              />
+            </div>
+            <div className="flex items-center rounded-2xl border border-line bg-surface p-6 sm:p-8">
+              {headerInfo}
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="border-b border-line pb-6">{headerInfo}</div>
+        )}
+
+        {brand.blurb && (
+          <p className="mt-5 max-w-2xl leading-relaxed text-muted">{brand.blurb}</p>
+        )}
 
         {/* 3 · About the brand */}
         {brand.about.length > 0 && (
@@ -185,25 +184,23 @@ export default async function BrandPage({
           </section>
         )}
 
-        {/* 6 · Featured products */}
-        {featured.length > 0 && (
+        {/* 6 · Products */}
+        {products.length > 0 && (
           <section id="brand-products" className="mt-16 scroll-mt-24">
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
-              Featured {brand.name} products
+              {brand.name} products
             </h2>
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {featured.map((p) => (
-                <ProductCard key={p.slug} product={p} />
+              {products.map((p) => (
+                <BrandProductCard
+                  key={p.id}
+                  product={p}
+                  brandName={brand.name}
+                  brandSlug={brand.slug}
+                  brandLogo={brand.logo}
+                />
               ))}
             </div>
-            {catalog.length > featured.length && (
-              <Link
-                href={`/?brand=${brand.slug}`}
-                className="mt-6 inline-block text-sm font-semibold text-brand-700 hover:text-brand-800"
-              >
-                See all {catalog.length} {brand.name} products →
-              </Link>
-            )}
           </section>
         )}
 

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect } from "react";
-import { useCart } from "@/lib/cart";
+import { useCart, MAX_QUANTITY } from "@/lib/cart";
 import { formatPHP } from "@/lib/format";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 
@@ -12,7 +12,8 @@ import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
  * (Contact page) while online payment (PayMongo) is finalized in Phase 2.
  */
 export function CartDrawer() {
-  const { items, isOpen, closeCart, subtotal, count, updateQuantity, removeItem } = useCart();
+  const { items, isOpen, closeCart, subtotal, count, updateQuantity, removeItem, clear } =
+    useCart();
 
   // Lock body scroll while open.
   useEffect(() => {
@@ -97,9 +98,9 @@ export function CartDrawer() {
 
               <ul className="flex flex-col gap-4">
                 {items.map((item) => (
-                  <li key={item.slug} className="flex gap-3">
+                  <li key={item.key} className="flex gap-3">
                     <Link
-                      href={`/products/${item.slug}`}
+                      href={item.href}
                       onClick={closeCart}
                       className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-elevated"
                     >
@@ -107,18 +108,21 @@ export function CartDrawer() {
                     </Link>
                     <div className="flex min-w-0 flex-1 flex-col">
                       <Link
-                        href={`/products/${item.slug}`}
+                        href={item.href}
                         onClick={closeCart}
                         className="line-clamp-2 text-sm font-semibold text-fg hover:text-brand-700"
                       >
                         {item.name}
                       </Link>
-                      <p className="mt-0.5 text-xs text-muted">{formatPHP(item.price)} / {item.unit}</p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {formatPHP(item.price)}
+                        {item.unit && ` / ${item.unit}`}
+                      </p>
 
                       <div className="mt-2 flex items-center justify-between">
                         <div className="inline-flex items-center rounded-lg border border-line">
                           <button
-                            onClick={() => updateQuantity(item.slug, item.quantity - 1)}
+                            onClick={() => updateQuantity(item.key, item.quantity - 1)}
                             aria-label="Decrease quantity"
                             className="h-8 w-8 text-muted hover:text-fg"
                           >
@@ -126,15 +130,16 @@ export function CartDrawer() {
                           </button>
                           <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
                           <button
-                            onClick={() => updateQuantity(item.slug, item.quantity + 1)}
+                            onClick={() => updateQuantity(item.key, item.quantity + 1)}
                             aria-label="Increase quantity"
-                            className="h-8 w-8 text-muted hover:text-fg"
+                            disabled={item.quantity >= MAX_QUANTITY}
+                            className="h-8 w-8 text-muted hover:text-fg disabled:opacity-40"
                           >
                             +
                           </button>
                         </div>
                         <button
-                          onClick={() => removeItem(item.slug)}
+                          onClick={() => removeItem(item.key)}
                           className="text-xs text-muted-light hover:text-danger"
                         >
                           Remove
@@ -153,6 +158,14 @@ export function CartDrawer() {
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-sm text-muted">Subtotal</span>
                 <span className="text-lg font-bold text-fg">{formatPHP(subtotal)}</span>
+              </div>
+              <div className="mb-3 flex justify-end">
+                <button
+                  onClick={clear}
+                  className="text-xs text-muted-light hover:text-danger"
+                >
+                  Clear cart
+                </button>
               </div>
               <p className="mb-3 text-xs text-muted-light">
                 Shipping &amp; taxes calculated at checkout. Online payment (GCash, Maya, card) is

@@ -2,16 +2,30 @@ import { CartProvider } from "@/lib/cart";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { CartDrawer } from "@/components/cart/CartDrawer";
-import { getBrands } from "@/lib/content";
+import { getBrands, getCategories } from "@/lib/content";
 
 /**
  * Storefront chrome. Brands are read here (server) and passed into the client header, since the
  * content store touches the filesystem and can't be imported from a client component.
  */
-export default function StoreLayout({
+export default async function StoreLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const brands = getBrands().map((b) => ({ slug: b.slug, name: b.name }));
+  // The header's brand menu. If Firestore is unreachable (e.g. a build with no credentials), fall
+  // back to an empty menu rather than failing every page that renders this shared chrome.
+  const brands = await getBrands()
+    .then((list) => list.map((b) => ({ slug: b.slug, name: b.name })))
+    .catch(() => []);
+  // Category mega-menu data (server-only content store → passed into the client header).
+  const categories = await getCategories()
+    .then((list) =>
+      list.map((c) => ({
+        slug: c.slug,
+        name: c.name,
+        subcategories: c.subcategories.map((s) => ({ slug: s.slug, name: s.name })),
+      })),
+    )
+    .catch(() => []);
 
   return (
     <>
@@ -23,7 +37,7 @@ export default function StoreLayout({
       </a>
       <CartProvider>
         <div className="flex min-h-full flex-col">
-          <SiteHeader brands={brands} />
+          <SiteHeader brands={brands} categories={categories} />
           <main id="main" className="flex-1">
             {children}
           </main>

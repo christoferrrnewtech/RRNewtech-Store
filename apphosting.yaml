@@ -1,0 +1,55 @@
+# Firebase App Hosting configuration for the R&R Newtech store (Next.js SSR).
+# Non-secret values live here (safe to commit). Sensitive values are stored in
+# Secret Manager and only REFERENCED by name below — never paste secret values here.
+#
+# Before the first deploy, create the referenced secrets and grant the backend access:
+#   firebase apphosting:secrets:set FIREBASE_CLIENT_EMAIL
+#   firebase apphosting:secrets:set FIREBASE_PRIVATE_KEY
+#   firebase apphosting:secrets:set FIREBASE_WEB_API_KEY
+#   firebase apphosting:secrets:set ADMIN_SESSION_SECRET
+# (each command prompts for the value and offers to grant access automatically).
+
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+
+env:
+  # --- Non-secret Firebase config ---
+  - variable: FIREBASE_PROJECT_ID
+    value: rnr-dental-clinics
+    availability: [BUILD, RUNTIME]
+
+  - variable: FIREBASE_STORAGE_BUCKET
+    value: rnr-dental-clinics.firebasestorage.app
+    availability: [BUILD, RUNTIME]
+
+  # Public site URL for canonical links / sitemap / OG tags. Update to the live
+  # App Hosting domain (or your custom domain) once the backend is created.
+  - variable: NEXT_PUBLIC_SITE_URL
+    value: https://rrnewtech.ph
+    availability: [BUILD, RUNTIME]
+
+  # --- Optional analytics (uncomment and fill when ready) ---
+  # - variable: NEXT_PUBLIC_META_PIXEL_ID
+  #   value: ""
+  #   availability: [BUILD, RUNTIME]
+  # - variable: NEXT_PUBLIC_GA_ID
+  #   value: ""
+  #   availability: [BUILD, RUNTIME]
+
+  # --- Secrets (stored in Secret Manager, referenced by name) ---
+  - variable: FIREBASE_CLIENT_EMAIL
+    secret: FIREBASE_CLIENT_EMAIL
+    availability: [BUILD, RUNTIME]
+
+  - variable: FIREBASE_PRIVATE_KEY
+    secret: FIREBASE_PRIVATE_KEY
+    availability: [BUILD, RUNTIME]
+
+  - variable: FIREBASE_WEB_API_KEY
+    secret: FIREBASE_WEB_API_KEY
+    availability: [BUILD, RUNTIME]
+
+  - variable: ADMIN_SESSION_SECRET
+    secret: ADMIN_SESSION_SECRET
+    availability: [BUILD, RUNTIME]

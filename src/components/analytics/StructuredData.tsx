@@ -18,7 +18,7 @@ export function StructuredData() {
         telephone: SITE.phone,
         description: SITE.description,
         areaServed: { "@type": "Country", name: "Philippines" },
-        sameAs: [SITE.socials.facebook, SITE.socials.instagram],
+        sameAs: [SITE.socials.facebook, SITE.socials.instagram, SITE.socials.linkedin],
         contactPoint: {
           "@type": "ContactPoint",
           contactType: "sales",

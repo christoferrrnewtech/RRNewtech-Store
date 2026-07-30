@@ -1,19 +1,34 @@
-import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { getBrands } from "@/lib/content";
-import { getProductsByBrand } from "@/lib/products";
+import { BrandFilterGrid, type BrandCard } from "@/components/home/BrandFilterGrid";
+import { BrandLogoCarousel } from "@/components/home/BrandLogoCarousel";
+
+/** Map published brands → serializable card data for the client grid. Server-only data lives here. */
+async function brandCards(): Promise<BrandCard[]> {
+  const brands = await getBrands().catch(() => []);
+  return brands.map((b) => ({
+    slug: b.slug,
+    name: b.name,
+    logo: b.logo,
+    tagline: b.tagline,
+    group: b.group ?? "consumables",
+    count: b.products.length,
+  }));
+}
 
 /**
- * "Shop by Brand" — a grid of logo cards, one per published brand, each leading to its own
- * /brands/[slug] page. Shown on the unfiltered home page. Logos ship with their own backgrounds,
- * so each sits contained on a white plate rather than cropped to fill the card.
+ * "Shop by Brand" — header + an auto-scrolling logo-only carousel, shown on the unfiltered home
+ * page. Each logo leads to /brands/[slug]. The full filterable grid lives on the /brands index page
+ * (see `BrandGrid`). Logos ship with their own backgrounds, so they sit contained on a white plate.
  */
-export function BrandShowcase() {
+export async function BrandShowcase() {
+  const brands = await brandCards();
+  if (brands.length === 0) return null;
   return (
     <section aria-labelledby="brands-heading" className="bg-bg">
       <Container className="py-14">
-        <div className="mb-6 flex items-end justify-between gap-4">
+        <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
               Our Brands
@@ -37,51 +52,15 @@ export function BrandShowcase() {
           </Link>
         </div>
 
-        <BrandGrid />
+        <BrandLogoCarousel
+          brands={brands.map((b) => ({ slug: b.slug, name: b.name, logo: b.logo }))}
+        />
       </Container>
     </section>
   );
 }
 
-/** The card grid on its own — reused by the /brands index page inside its own Container. */
-export function BrandGrid() {
-  const brands = getBrands();
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {brands.map((b) => {
-        const count = getProductsByBrand(b.slug).length;
-        return (
-          <Link
-            key={b.slug}
-            href={`/brands/${b.slug}`}
-            className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface transition-shadow hover:shadow-lg"
-          >
-            <div className="relative aspect-[16/9] border-b border-line bg-white p-8">
-              <Image
-                src={b.logo}
-                alt={b.name}
-                fill
-                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 400px"
-                className="object-contain p-8 transition-transform duration-300 group-hover:scale-[1.03]"
-              />
-            </div>
-
-            <div className="flex flex-1 flex-col p-5">
-              <p className="text-sm leading-relaxed text-muted">{b.tagline}</p>
-              <div className="mt-4 flex-1" />
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-sm font-semibold text-brand-700 group-hover:text-brand-800">
-                  Shop {b.name} →
-                </span>
-                <span className="text-xs text-muted-light">
-                  {count} product{count === 1 ? "" : "s"}
-                </span>
-              </div>
-            </div>
-          </Link>
-        );
-      })}
-    </div>
-  );
+/** The filterable grid on its own — reused by the /brands index page inside its own Container. */
+export async function BrandGrid() {
+  return <BrandFilterGrid brands={await brandCards()} />;
 }

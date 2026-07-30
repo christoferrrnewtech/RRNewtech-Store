@@ -26,7 +26,12 @@ export function ContactForm() {
     isCartInquiry && items.length > 0
       ? "\n\nMy cart:\n" +
         items
-          .map((i) => `• ${i.quantity} × ${i.name} (${i.sku}) — ${formatPHP(i.price * i.quantity)}`)
+          .map(
+            (i) =>
+              `• ${i.quantity} × ${i.name}${i.sku ? ` (${i.sku})` : ""} — ${formatPHP(
+                i.price * i.quantity,
+              )}`,
+          )
           .join("\n") +
         `\n\nSubtotal: ${formatPHP(subtotal)}`
       : "";

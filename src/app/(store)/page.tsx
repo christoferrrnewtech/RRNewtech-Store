@@ -5,15 +5,17 @@ import { ShopBanner } from "@/components/shop/ShopBanner";
 import { CategoryCircles } from "@/components/shop/CategoryCircles";
 import { DigitalDentistryPromo } from "@/components/home/DigitalDentistryPromo";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
+import { AboutIntro } from "@/components/home/AboutIntro";
+import { AllProductsGrid } from "@/components/home/AllProductsGrid";
 import {
   CATEGORY_MAP,
-  getAllProducts,
   brandSlug,
   searchProducts,
   sortProducts,
   type CategorySlug,
   type SortKey,
 } from "@/lib/products";
+import { getAllProducts } from "@/lib/catalog";
 import { getBrandBySlug } from "@/lib/content";
 import { SECTIONS, SITE } from "@/lib/constants";
 
@@ -44,10 +46,10 @@ export default async function HomePage({
   const activeSort: SortKey =
     sort && VALID_SORTS.has(sort as SortKey) ? (sort as SortKey) : "featured";
   const query = q?.trim() ?? "";
-  const activeBrand = brand ? getBrandBySlug(brand) : undefined;
+  const activeBrand = brand ? await getBrandBySlug(brand) : undefined;
 
   // Apply filters in sequence (AND): category → brand → keyword search.
-  let list = getAllProducts();
+  let list = await getAllProducts();
   if (activeCategory !== "all") list = list.filter((p) => p.category === activeCategory);
   if (activeBrand) list = list.filter((p) => brandSlug(p.brand) === activeBrand.slug);
   if (query) list = searchProducts(list, query);
@@ -75,9 +77,13 @@ export default async function HomePage({
     <>
       <ShopBanner />
 
+      {isUnfiltered && <AboutIntro />}
+
       {SECTIONS.categoryCircles && <CategoryCircles activeCategory={activeCategory} />}
 
       {isUnfiltered && <BrandShowcase />}
+
+      {isUnfiltered && <AllProductsGrid />}
 
       {isUnfiltered && <DigitalDentistryPromo />}
 

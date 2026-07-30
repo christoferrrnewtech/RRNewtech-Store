@@ -6,10 +6,11 @@ export default async function AdminDashboard() {
   const user = await requireUser();
   const isAdmin = user.role === "admin";
 
-  const brands = getAllBrandsForAdmin().filter(
+  const brands = (await getAllBrandsForAdmin()).filter(
     (b) => isAdmin || user.brandSlugs.includes(b.slug),
   );
   const published = brands.filter((b) => b.status === "published").length;
+  const userCount = isAdmin ? (await getUsers()).length : 0;
 
   return (
     <div>
@@ -32,10 +33,11 @@ export default async function AdminDashboard() {
         {isAdmin && (
           <>
             <Card href="/admin/banner" title="Home banner" value="Edit" detail="Image, alt text and link" />
+            <Card href="/admin/about" title="About section" value="Edit" detail="Home page intro copy & image" />
             <Card
               href="/admin/users"
               title="Marketing team"
-              value={`${getUsers().length}`}
+              value={`${userCount}`}
               detail="Accounts with brand access"
             />
           </>
