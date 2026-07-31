@@ -1,30 +1,52 @@
 "use client";
 
-import { Children, useState } from "react";
+import { Children, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 /**
  * Progressive product grid. The card children are rendered on the server (so `BrandProductCard` can
  * stay a server component) and passed in; this client wrapper only controls how many are visible.
- * Shows `initial` cards, then a "Load more" button reveals `step` more per click until all are shown.
+ *
+ * Reveals whole ROWS, not a fixed product count: it measures the grid's live column count (which is
+ * responsive — 2 / 3 / 4) and shows `rowsShown × columns` cards, so the last row is never a partial
+ * orphan. "Load more" adds `stepRows` more rows; the count re-derives on resize.
  */
 export function LoadMoreGrid({
   children,
-  initial = 16,
-  step = 16,
+  initialRows = 4,
+  stepRows = 2,
 }: {
   children: React.ReactNode;
-  initial?: number;
-  step?: number;
+  initialRows?: number;
+  stepRows?: number;
 }) {
   const items = Children.toArray(children);
-  const [visible, setVisible] = useState(initial);
   const total = items.length;
-  const shown = Math.min(visible, total);
+
+  const gridRef = useRef<HTMLDivElement>(null);
+  // Default to the widest (lg) column count so the first server paint matches desktop, the common
+  // case; the effect corrects it to the real count on mount and on resize.
+  const [cols, setCols] = useState(4);
+  const [rowsShown, setRowsShown] = useState(initialRows);
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const measure = () => {
+      const n = getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length;
+      if (n > 0) setCols(n);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const visible = Math.min(rowsShown * cols, total);
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div ref={gridRef} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {items.slice(0, visible)}
       </div>
 
@@ -34,12 +56,12 @@ export function LoadMoreGrid({
             type="button"
             variant="secondary"
             size="lg"
-            onClick={() => setVisible((v) => v + step)}
+            onClick={() => setRowsShown((r) => r + stepRows)}
           >
             Load more
           </Button>
           <p className="text-xs text-muted-light">
-            Showing {shown} of {total}
+            Showing {visible} of {total}
           </p>
         </div>
       )}

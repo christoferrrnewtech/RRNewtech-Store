@@ -36,7 +36,7 @@ export function BrandProductCard({
   const href = brandProductHref(brandSlug, product);
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface transition-shadow hover:shadow-lg">
+    <div className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface transition-shadow hover:shadow-lg">
       <Link
         href={href}
         className={[
@@ -94,7 +94,7 @@ export function BrandProductCard({
 
         <div className="mt-4 flex-1" />
         {product.contactSales ? (
-          <LinkButton href="/contact" size="sm" className="w-full">
+          <LinkButton href="/contact" size="sm" className="w-full whitespace-nowrap">
             Contact a sales agent
           </LinkButton>
         ) : (

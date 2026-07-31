@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandProductCard } from "@/components/shop/BrandProductCard";
 import { LinkButton } from "@/components/ui/Button";
 import type { BrandProduct } from "@/lib/content";
@@ -23,6 +23,29 @@ export function BrandProductRail({
   const scrollerRef = useRef<HTMLUListElement>(null);
   const brandHref = `/brands/${brand.slug}`;
 
+  // Track scroll position so the arrows disable at each edge (and hide when nothing scrolls).
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+  const [overflowing, setOverflowing] = useState(true);
+
+  const updateEdges = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    setOverflowing(maxScroll > 1);
+    setAtStart(el.scrollLeft <= 1);
+    setAtEnd(el.scrollLeft >= maxScroll - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    updateEdges();
+    const ro = new ResizeObserver(updateEdges);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateEdges, products.length]);
+
   function scrollByDir(dir: "left" | "right") {
     const el = scrollerRef.current;
     if (!el) return;
@@ -32,20 +55,20 @@ export function BrandProductRail({
   }
 
   return (
-    <div className="border-2 border-brand-600 bg-surface p-3 sm:p-4">
-      <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
+    <div className="bg-surface p-3 sm:p-4">
+      <div className="grid gap-4 lg:grid-cols-[14rem_1fr]">
         {/* Feature panel */}
-        <div className="flex flex-col items-center justify-center p-4 text-center">
+        <div className="flex flex-col items-center justify-center p-2 text-center">
           <Link
             href={brandHref}
-            className="relative mb-4 block aspect-[16/9] w-full overflow-hidden rounded-xl bg-white"
+            className="relative mb-3 block aspect-[16/9] w-full overflow-hidden rounded-xl bg-white"
           >
             <Image
               src={brand.logo}
               alt={brand.name}
               fill
-              sizes="256px"
-              className="object-contain p-5"
+              sizes="224px"
+              className="object-contain p-2"
             />
           </Link>
           <h3 className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
@@ -66,15 +89,15 @@ export function BrandProductRail({
           </LinkButton>
         </div>
 
-        {/* Product rail */}
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <ArrowButton dir="left" onClick={() => scrollByDir("left")} />
+        {/* Product rail — arrows overlay the edges so the scroller uses the full width */}
+        <div className="relative min-w-0">
           <ul
             ref={scrollerRef}
-            className="flex min-w-0 flex-1 snap-x gap-4 overflow-x-auto scroll-smooth py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            onScroll={updateEdges}
+            className="flex snap-x gap-4 overflow-x-auto scroll-smooth py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {products.map((product) => (
-              <li key={product.id} className="w-[14rem] shrink-0 snap-start sm:w-[15rem]">
+              <li key={product.id} className="w-[15rem] shrink-0 snap-start">
                 <BrandProductCard
                   product={product}
                   brandName={brand.name}
@@ -84,23 +107,52 @@ export function BrandProductRail({
               </li>
             ))}
           </ul>
-          <ArrowButton dir="right" onClick={() => scrollByDir("right")} />
+          {overflowing && (
+            <>
+              <ArrowButton
+                dir="left"
+                disabled={atStart}
+                onClick={() => scrollByDir("left")}
+                className="absolute left-1 top-1/2 z-10 -translate-y-1/2"
+              />
+              <ArrowButton
+                dir="right"
+                disabled={atEnd}
+                onClick={() => scrollByDir("right")}
+                className="absolute right-1 top-1/2 z-10 -translate-y-1/2"
+              />
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/** Blue circular scroll arrow — hidden on phones where touch/swipe is primary. */
-function ArrowButton({ dir, onClick }: { dir: "left" | "right"; onClick: () => void }) {
+/** Blue circular scroll arrow — hidden on phones where touch/swipe is primary. Disabled (dimmed,
+ *  not clickable) when the rail can't scroll further in that direction. */
+function ArrowButton({
+  dir,
+  onClick,
+  disabled = false,
+  className,
+}: {
+  dir: "left" | "right";
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={dir === "left" ? "Scroll products left" : "Scroll products right"}
       className={[
         "hidden h-9 w-9 shrink-0 items-center justify-center rounded-full sm:flex",
         "bg-brand-600 text-white shadow-md transition-colors hover:bg-brand-700",
+        "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand-600",
+        className ?? "",
       ].join(" ")}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">

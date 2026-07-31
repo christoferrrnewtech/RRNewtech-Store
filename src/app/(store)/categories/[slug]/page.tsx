@@ -108,7 +108,7 @@ export default async function CategoryPage({
           <p className="mb-4 text-sm text-muted">
             {items.length} product{items.length === 1 ? "" : "s"}
           </p>
-          <LoadMoreGrid initial={16} step={16}>
+          <LoadMoreGrid initialRows={4} stepRows={2}>
             {items.map((it) => (
               <BrandProductCard
                 key={`${it.brandSlug}-${it.product.id}`}

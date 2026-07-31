@@ -40,7 +40,7 @@ export async function AllProductsGrid() {
   };
 
   return (
-    <LoadMoreGrid initial={16} step={16}>
+    <LoadMoreGrid initialRows={4} stepRows={2}>
       {items.map((it) => (
         <BrandProductCard
           key={`${it.brandSlug}-${it.product.id}`}

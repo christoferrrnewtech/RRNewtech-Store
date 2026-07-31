@@ -169,7 +169,7 @@ export function CartDrawer() {
               </div>
               <p className="mb-3 text-xs text-muted-light">
                 Shipping &amp; taxes calculated at checkout. Online payment (GCash, Maya, card) is
-                coming soon — for now, send your cart as an inquiry and we&apos;ll confirm stock.
+                coming soon — for now, checkout sends your order to our team to confirm stock.
               </p>
               <Link
                 href="/cart"
@@ -179,11 +179,11 @@ export function CartDrawer() {
                 View cart
               </Link>
               <Link
-                href="/contact?inquiry=cart"
+                href="/checkout"
                 onClick={closeCart}
                 className="block rounded-lg bg-brand-600 px-5 py-3 text-center text-sm font-semibold text-white hover:bg-brand-700"
               >
-                Send as inquiry
+                Checkout
               </Link>
             </footer>
           </>

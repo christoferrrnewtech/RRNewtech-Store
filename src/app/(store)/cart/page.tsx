@@ -125,12 +125,13 @@ export default function CartPage() {
               </div>
             </div>
 
-            <LinkButton href="/contact?inquiry=cart" size="lg" className="mt-5 w-full">
-              Send as inquiry
+            <LinkButton href="/checkout" size="lg" className="mt-5 w-full">
+              Checkout
             </LinkButton>
             <p className="mt-3 text-xs leading-relaxed text-muted-light">
               Online payment (GCash, Maya, card) via a secure Philippine gateway is coming soon.
-              For now, send your cart and our team will confirm stock, shipping, and payment.
+              For now, checkout collects your shipping details and our team will confirm stock,
+              shipping, and payment.
             </p>
           </aside>
         </div>

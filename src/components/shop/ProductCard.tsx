@@ -14,7 +14,7 @@ export async function ProductCard({ product }: { product: Product }) {
   const logo = await productBrandLogo(product);
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-surface transition-shadow hover:shadow-lg">
+    <div className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface transition-shadow hover:shadow-lg">
       <Link
         href={`/products/${product.slug}`}
         className={[
