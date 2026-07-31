@@ -20,6 +20,9 @@ export function HomeViewToggle({ view }: { view: HomeView }) {
           <Link
             key={opt.view}
             href={opt.view === "by-brand" ? "/" : "/?view=all"}
+            // Keep the reader at the catalog section instead of jumping to the top of the page
+            // on every toggle (the toggle only appears at the section header, so staying put is right).
+            scroll={false}
             aria-current={active ? "true" : undefined}
             className={[
               "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",

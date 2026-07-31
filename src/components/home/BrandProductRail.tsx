@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRef } from "react";
 import { BrandProductCard } from "@/components/shop/BrandProductCard";
+import { LinkButton } from "@/components/ui/Button";
 import type { BrandProduct } from "@/lib/content";
 
 /**
@@ -31,13 +32,13 @@ export function BrandProductRail({
   }
 
   return (
-    <div className="rounded-2xl border-2 border-brand-600 bg-surface p-3 sm:p-4">
+    <div className="border-2 border-brand-600 bg-surface p-3 sm:p-4">
       <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
         {/* Feature panel */}
-        <div className="flex flex-col p-2 lg:border-r lg:border-line lg:pr-5">
+        <div className="flex flex-col items-center justify-center p-4 text-center">
           <Link
             href={brandHref}
-            className="relative mb-4 block aspect-[16/9] overflow-hidden rounded-xl bg-white"
+            className="relative mb-4 block aspect-[16/9] w-full overflow-hidden rounded-xl bg-white"
           >
             <Image
               src={brand.logo}
@@ -55,13 +56,14 @@ export function BrandProductRail({
           {brand.tagline && (
             <p className="mt-1 line-clamp-3 text-sm text-muted">{brand.tagline}</p>
           )}
-          <div className="mt-4 flex-1" />
-          <Link
+          <LinkButton
             href={brandHref}
-            className="mt-4 whitespace-nowrap text-sm font-semibold text-brand-700 hover:text-brand-800"
+            variant="primary"
+            size="sm"
+            className="mt-5 w-fit whitespace-nowrap"
           >
-            View all →
-          </Link>
+            Shop {brand.name} →
+          </LinkButton>
         </div>
 
         {/* Product rail */}

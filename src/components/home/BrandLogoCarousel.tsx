@@ -29,7 +29,7 @@ export function BrandLogoCarousel({ brands }: { brands: BrandLogo[] }) {
         className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-bg to-transparent sm:w-20"
       />
 
-      <ul className="marquee-track flex w-max items-center gap-4">
+      <ul className="marquee-track flex w-max items-center gap-8">
         {loop.map((b, i) => {
           const isClone = i >= brands.length;
           return (
@@ -39,14 +39,14 @@ export function BrandLogoCarousel({ brands }: { brands: BrandLogo[] }) {
                 aria-label={b.name}
                 aria-hidden={isClone}
                 tabIndex={isClone ? -1 : 0}
-                className="relative flex h-24 w-40 items-center justify-center rounded-2xl border border-line bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-md sm:h-28 sm:w-52"
+                className="relative flex h-28 w-48 items-center justify-center transition-transform duration-200 hover:-translate-y-1 sm:h-36 sm:w-64"
               >
                 <Image
                   src={b.logo}
                   alt={b.name}
                   fill
-                  sizes="208px"
-                  className="object-contain p-6"
+                  sizes="256px"
+                  className="object-contain p-3"
                 />
               </Link>
             </li>
