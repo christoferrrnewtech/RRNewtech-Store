@@ -6,7 +6,7 @@ import { CategoryCircles } from "@/components/shop/CategoryCircles";
 import { DigitalDentistryPromo } from "@/components/home/DigitalDentistryPromo";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
 import { AboutIntro } from "@/components/home/AboutIntro";
-import { AllProductsGrid } from "@/components/home/AllProductsGrid";
+import { HomeCatalog, type HomeView } from "@/components/home/HomeCatalog";
 import {
   CATEGORY_MAP,
   brandSlug,
@@ -37,9 +37,18 @@ const VALID_SORTS = new Set<SortKey>([
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string; sort?: string; q?: string; brand?: string }>;
+  searchParams: Promise<{
+    category?: string;
+    sort?: string;
+    q?: string;
+    brand?: string;
+    view?: string;
+  }>;
 }) {
-  const { category, sort, q, brand } = await searchParams;
+  const { category, sort, q, brand, view } = await searchParams;
+
+  // Homepage catalog view: grouped brand shelves (default) vs the flat "all products" grid.
+  const activeView: HomeView = view === "all" ? "all" : "by-brand";
 
   const activeCategory =
     category && VALID_CATEGORIES.has(category) ? (category as CategorySlug) : "all";
@@ -83,7 +92,7 @@ export default async function HomePage({
 
       {isUnfiltered && <BrandShowcase />}
 
-      {isUnfiltered && <AllProductsGrid />}
+      {isUnfiltered && <HomeCatalog view={activeView} />}
 
       {isUnfiltered && <DigitalDentistryPromo />}
 

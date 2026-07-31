@@ -71,6 +71,9 @@ export type Brand = {
   status: BrandStatus;
   /** Display order in the Brand Showcase and /brands index. */
   order: number;
+  /** Whether this brand's product shelf appears on the home "By Brand" view. Undefined counts as
+   *  true, so brands saved before this field existed show by default (no migration needed). */
+  featuredOnHome?: boolean;
   /** Category grouping — drives the card tag chip and the "Shop by Brand" filter chips. */
   group: BrandGroup;
   /** One line on the brand card. */
@@ -204,6 +207,8 @@ function toBrand(slug: string, v: Record<string, unknown>): Brand {
   return {
     ...(v as Omit<Brand, "slug">),
     slug,
+    // Legacy brands have no `featuredOnHome` field — treat a missing value as featured.
+    featuredOnHome: v.featuredOnHome !== false,
     products,
   };
 }

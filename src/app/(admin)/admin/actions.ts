@@ -352,6 +352,7 @@ export async function createBrandAction(
       name,
       status: "draft",
       order: await nextBrandOrder(),
+      featuredOnHome: true,
       group: "consumables",
       tagline: "",
       blurb: "",
@@ -429,6 +430,7 @@ export async function saveBrandStatusAction(_prev: ActionState, form: FormData) 
     form,
     (brand) => {
       brand.status = form.get("status") === "published" ? "published" : "draft";
+      brand.featuredOnHome = form.get("featuredOnHome") === "1";
     },
     "Status updated.",
   );

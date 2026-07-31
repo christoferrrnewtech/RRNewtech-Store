@@ -120,8 +120,23 @@ function StatusSection({ brand }: { brand: Brand }) {
             <option value="published">Published — live</option>
           </select>
         </Field>
+        <label className="flex items-center gap-2 py-2.5 text-sm text-fg">
+          <input
+            type="checkbox"
+            name="featuredOnHome"
+            value="1"
+            defaultChecked={brand.featuredOnHome !== false}
+            className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500/20"
+          />
+          Feature this brand on the homepage
+        </label>
         <SubmitButton>Update status</SubmitButton>
       </form>
+      <p className="mt-2 text-sm text-muted">
+        When featured, this brand gets its own product shelf on the homepage “By Brand” view (a
+        published brand with at least one product). Uncheck to keep it out of the homepage shelves —
+        its brand page stays live.
+      </p>
       <FormMessage state={state} />
     </Section>
   );
