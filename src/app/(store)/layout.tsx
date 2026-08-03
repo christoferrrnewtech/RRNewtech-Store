@@ -2,7 +2,7 @@ import { CartProvider } from "@/lib/cart";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { CartDrawer } from "@/components/cart/CartDrawer";
-import { getBrands, getCategories } from "@/lib/content";
+import { getBrands, getCategoriesWithProducts } from "@/lib/content";
 
 /**
  * Storefront chrome. Brands are read here (server) and passed into the client header, since the
@@ -16,8 +16,9 @@ export default async function StoreLayout({
   const brands = await getBrands()
     .then((list) => list.map((b) => ({ slug: b.slug, name: b.name })))
     .catch(() => []);
-  // Category mega-menu data (server-only content store → passed into the client header).
-  const categories = await getCategories()
+  // Category mega-menu data (server-only content store → passed into the client header). Filtered
+  // to categories that actually have products, so every link in the menu lands somewhere useful.
+  const categories = await getCategoriesWithProducts()
     .then((list) =>
       list.map((c) => ({
         slug: c.slug,

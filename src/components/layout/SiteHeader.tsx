@@ -90,7 +90,8 @@ export function SiteHeader({
                   {link.label}
                 </Link>
               ))}
-              {SECTIONS.categoryNav && (
+              {/* No trigger when nothing is stocked — otherwise it opens an empty panel. */}
+              {SECTIONS.categoryNav && categories.length > 0 && (
                 <MenuTrigger
                   label="Categories"
                   menuKey="category"
@@ -171,7 +172,7 @@ export function SiteHeader({
                 </Link>
               ))}
 
-              {SECTIONS.categoryNav && (
+              {SECTIONS.categoryNav && categories.length > 0 && (
                 <MobileAccordion
                   label="Categories"
                   open={mobileSection === "category"}

@@ -11,7 +11,27 @@ import { FREE_SHIPPING_THRESHOLD, SITE } from "@/lib/constants";
 
 const field =
   "w-full rounded-lg border border-line bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-muted-light focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
-const labelCls = "flex flex-col gap-1 text-sm font-medium text-fg";
+
+/**
+ * One labelled control. The label text and the control live in separate spans so a label that
+ * wraps to two lines can't push its input below its neighbour's: the grid stretches every cell to
+ * the tallest in the row, and `mt-auto` parks the control on the cell's bottom edge. Spans rather
+ * than divs — <label> only accepts phrasing content.
+ */
+function Field({
+  label,
+  children,
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col text-sm font-medium text-fg">
+      <span>{label}</span>
+      <span className="mt-auto pt-1">{children}</span>
+    </label>
+  );
+}
 
 /**
  * Phase 1 checkout — a bold, brand-forward split screen (compact shipping form on white, order
@@ -79,10 +99,12 @@ export function CheckoutClient() {
   }
 
   return (
-    <div className="lg:flex lg:flex-1 lg:items-stretch">
+    // -mb-20 cancels SiteFooter's mt-20 so this full-bleed page runs straight into the footer
+    // instead of showing a band of page background below the brand panel.
+    <div className="-mb-20 lg:flex lg:flex-1 lg:items-stretch">
       {/* Order summary — bold brand panel, bleeds to the right edge; stacks on top on mobile */}
       <aside className="bg-gradient-to-br from-brand-700 to-brand-900 text-white lg:order-2 lg:w-[26rem] lg:shrink-0">
-        <div className="mx-auto w-full max-w-md px-4 py-8 sm:px-6 lg:mx-0 lg:px-10 lg:py-12 lg:sticky lg:top-24">
+        <div className="mx-auto w-full max-w-md px-4 py-8 sm:px-6 lg:mx-0 lg:px-10 lg:py-8 lg:sticky lg:top-24">
           <h2 className="font-[family-name:var(--font-display)] text-lg font-bold">
             Order summary
           </h2>
@@ -132,7 +154,7 @@ export function CheckoutClient() {
 
       {/* Contact + shipping form — white, hugs the centre seam on desktop */}
       <div className="bg-surface lg:order-1 lg:min-w-0 lg:flex-1">
-        <div className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 lg:ml-auto lg:px-10 lg:py-12">
+        <div className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 lg:ml-auto lg:px-10 lg:py-8">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-fg">
               Checkout
@@ -142,20 +164,17 @@ export function CheckoutClient() {
             </Link>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-6">
+          <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-5">
             <section>
               <h2 className="text-sm font-bold uppercase tracking-wide text-brand-600">Contact</h2>
-              <label className={`mt-3 ${labelCls}`}>
-                Email
-                <input
-                  required
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className={field}
-                  placeholder="you@email.com"
-                />
-              </label>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Field label="Email">
+                  <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={field} placeholder="you@email.com" />
+                </Field>
+                <Field label="Phone">
+                  <input required value={phone} onChange={(e) => setPhone(e.target.value)} className={field} placeholder="09xx xxx xxxx" inputMode="tel" />
+                </Field>
+              </div>
             </section>
 
             <section>
@@ -164,52 +183,46 @@ export function CheckoutClient() {
               </h2>
               <div className="mt-3 flex flex-col gap-3">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className={labelCls}>
-                    First name
+                  <Field label="First name">
                     <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} className={field} placeholder="Juan" />
-                  </label>
-                  <label className={labelCls}>
-                    Last name
+                  </Field>
+                  <Field label="Last name">
                     <input required value={lastName} onChange={(e) => setLastName(e.target.value)} className={field} placeholder="dela Cruz" />
-                  </label>
+                  </Field>
                 </div>
-                <label className={labelCls}>
-                  Address
+                <Field label="Address">
                   <input required value={address} onChange={(e) => setAddress(e.target.value)} className={field} placeholder="House / unit no. and street" />
-                </label>
+                </Field>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className={labelCls}>
-                    Apartment, suite, etc. <span className="font-normal text-muted-light">(optional)</span>
-                    <input value={apartment} onChange={(e) => setApartment(e.target.value)} className={field} />
-                  </label>
-                  <label className={labelCls}>
-                    Barangay
+                  <Field
+                    label={
+                      <>
+                        Apartment <span className="font-normal text-muted-light">(optional)</span>
+                      </>
+                    }
+                  >
+                    <input value={apartment} onChange={(e) => setApartment(e.target.value)} className={field} placeholder="Unit, floor, building" />
+                  </Field>
+                  <Field label="Barangay">
                     <input required value={barangay} onChange={(e) => setBarangay(e.target.value)} className={field} />
-                  </label>
+                  </Field>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <label className={labelCls}>
-                    City / Municipality
+                  <Field label="City / Municipality">
                     <input required value={city} onChange={(e) => setCity(e.target.value)} className={field} />
-                  </label>
-                  <label className={labelCls}>
-                    Region / Province
+                  </Field>
+                  <Field label="Region / Province">
                     <input required value={region} onChange={(e) => setRegion(e.target.value)} className={field} />
-                  </label>
-                  <label className={labelCls}>
-                    Postal code
+                  </Field>
+                  <Field label="Postal code">
                     <input required value={postal} onChange={(e) => setPostal(e.target.value)} className={field} inputMode="numeric" />
-                  </label>
+                  </Field>
                 </div>
-                <label className={labelCls}>
-                  Phone
-                  <input required value={phone} onChange={(e) => setPhone(e.target.value)} className={field} placeholder="09xx xxx xxxx" inputMode="tel" />
-                </label>
               </div>
             </section>
 
             <div>
-              <Button type="submit" size="lg" className="w-full sm:w-auto">
+              <Button type="submit" className="w-full sm:w-auto">
                 Place order
               </Button>
               <p className="mt-3 text-xs leading-relaxed text-muted-light">

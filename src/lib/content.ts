@@ -307,14 +307,51 @@ export const getCategories = cache(async (): Promise<StoreCategory[]> => {
   return list.sort((a, b) => a.order - b.order);
 });
 
-/** Published brands in display order. This is what the storefront should always call. */
-export async function getBrands(): Promise<Brand[]> {
+/**
+ * Published brands in display order. This is what the storefront should always call. Cached per
+ * request: the brand doc carries every brand's full product array, gallery URLs and prose, and a
+ * single page can reach it from the header menu, the home rails and a category listing at once.
+ */
+export const getBrands = cache(async (): Promise<Brand[]> => {
   const map = await readMap(DOCS.brand);
   return Object.entries(map)
     .map(([slug, v]) => toBrand(slug, v))
     .filter((b) => b.status === "published")
     .sort((a, b) => a.order - b.order);
-}
+});
+
+/**
+ * Categories that actually have something to browse — the header menu's source. A category
+ * survives if a published brand sells at least one product tagged to it, and a subcategory
+ * survives on the same rule. Without this the mega-menu lists the whole taxonomy (26 categories,
+ * 226 subcategories) when only a fraction of it is stocked, and most links open an empty page.
+ */
+export const getCategoriesWithProducts = cache(async (): Promise<StoreCategory[]> => {
+  const [categories, brands] = await Promise.all([getCategories(), getBrands()]);
+
+  const stockedCategories = new Set<string>();
+  // Subcategory slugs are only unique *within* a category (e.g. "finishing-polishing" exists under
+  // two parents), so key on "category/subcategory" or they leak across categories.
+  const stockedSubcategories = new Set<string>();
+  for (const brand of brands) {
+    for (const product of brand.products) {
+      if (!product.category) continue;
+      stockedCategories.add(product.category);
+      if (product.subcategory) {
+        stockedSubcategories.add(`${product.category}/${product.subcategory}`);
+      }
+    }
+  }
+
+  return categories
+    .filter((c) => stockedCategories.has(c.slug))
+    .map((c) => ({
+      ...c,
+      subcategories: c.subcategories.filter((s) =>
+        stockedSubcategories.has(`${c.slug}/${s.slug}`),
+      ),
+    }));
+});
 
 /** Published brand by slug, or undefined — drafts are invisible here on purpose. */
 export async function getBrandBySlug(slug: string): Promise<Brand | undefined> {
