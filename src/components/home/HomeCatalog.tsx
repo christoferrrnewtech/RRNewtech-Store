@@ -1,7 +1,7 @@
 import { Container } from "@/components/ui/Container";
 import { AllProductsGrid } from "@/components/home/AllProductsGrid";
 import { BrandRailsSection } from "@/components/home/BrandRailsSection";
-import { HomeViewToggle } from "@/components/home/HomeViewToggle";
+import { HomeViewCards } from "@/components/home/HomeViewCards";
 
 export type HomeView = "by-brand" | "all";
 
@@ -17,21 +17,22 @@ export function HomeCatalog({ view }: { view: HomeView }) {
   return (
     <section id="catalog" className="scroll-mt-24 bg-surface">
       <Container className="py-14">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-              Our Catalog
-            </p>
-            <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
-              {byBrand ? "Shop by Brand" : "Shop All Products"}
-            </h2>
-            <p className="mt-2 max-w-2xl text-muted">
-              {byBrand
-                ? "Browse each brand's line-up on its own shelf — equipment, consumables and laser & whitening, kept separate."
-                : "Every product from the brands we carry, in one grid you can scan and sort."}
-            </p>
-          </div>
-          <HomeViewToggle view={view} />
+        <div className="mb-6">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
+            Our Catalog
+          </p>
+          {/* Static on purpose: when this echoed the selected card's title, the card read as a
+              decorative repeat of the heading rather than as a control. */}
+          <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
+            Browse the catalog
+          </h2>
+          <p className="mt-2 max-w-2xl text-muted">
+            Every product from the brands we carry — shelf by shelf, or all in one grid.
+          </p>
+        </div>
+
+        <div className="mb-10">
+          <HomeViewCards view={view} />
         </div>
 
         {byBrand ? <BrandRailsSection /> : <AllProductsGrid />}

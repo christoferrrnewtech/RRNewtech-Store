@@ -130,7 +130,9 @@ function BrandsNavItem({ item, brands }: { item: AdminNavItem; brands: AdminBran
       {open && (
         <ul className="mt-0.5 space-y-0.5 border-l border-line pl-3 lg:ml-4">
           {brands.map((b) => {
-            const active = pathname === `${item.href}/${b.slug}`;
+            // Prefix match so sub-pages (e.g. /products) keep the brand highlighted.
+            const href = `${item.href}/${b.slug}`;
+            const active = pathname === href || pathname.startsWith(`${href}/`);
             return (
               <li key={b.slug}>
                 <Link
