@@ -47,7 +47,7 @@ export function BrandProducts({
   return (
     <>
       {facets.mode === "categories" && (
-        <div className="mt-5 flex flex-wrap gap-2">
+        <ChipRow className="mt-5">
           <Chip
             active={activeCat === null}
             onClick={() => {
@@ -70,11 +70,11 @@ export function BrandProducts({
               {c.label} <Count>{c.count}</Count>
             </Chip>
           ))}
-        </div>
+        </ChipRow>
       )}
 
       {drilldown && (
-        <div className="mt-2 flex flex-wrap gap-2 border-l-2 border-line pl-3 sm:ml-2">
+        <ChipRow className="mt-2 sm:ml-2 sm:border-l-2 sm:border-line sm:pl-3">
           <Chip active={activeSub === null} onClick={() => setActiveSub(null)}>
             All <Count>{drilldown.count}</Count>
           </Chip>
@@ -83,11 +83,11 @@ export function BrandProducts({
               {s.label} <Count>{s.count}</Count>
             </Chip>
           ))}
-        </div>
+        </ChipRow>
       )}
 
       {facets.mode === "subcategories" && (
-        <div className="mt-5 flex flex-wrap gap-2">
+        <ChipRow className="mt-5">
           <Chip active={activeSub === null} onClick={() => setActiveSub(null)}>
             All <Count>{products.length}</Count>
           </Chip>
@@ -96,7 +96,7 @@ export function BrandProducts({
               {s.label} <Count>{s.count}</Count>
             </Chip>
           ))}
-        </div>
+        </ChipRow>
       )}
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -118,6 +118,24 @@ function Count({ children }: { children: React.ReactNode }) {
   return <span className="opacity-60">{children}</span>;
 }
 
+/**
+ * Chips scroll as one row on phones — a brand with eight long subcategory labels would
+ * otherwise wrap into ~7 near-full-width rows and push the products off screen — and wrap
+ * normally from sm up, where they fit. The negative inline margin bleeds the row to the
+ * screen edge (matching Container's mobile px-4) so a half-visible chip signals there's more
+ * to swipe. -my-1/py-1 keeps focus rings from being clipped by overflow-x without changing
+ * the vertical rhythm.
+ */
+function ChipRow({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div className={className}>
+      <div className="-mx-4 -my-1 flex gap-2 overflow-x-auto scroll-smooth px-4 py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /** Same look as the category-page chips, as a button since this filters in place. */
 function Chip({
   active,
@@ -134,7 +152,9 @@ function Chip({
       onClick={onClick}
       aria-pressed={active}
       className={[
-        "rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors",
+        // shrink-0/nowrap: inside the mobile scroller flex would otherwise squeeze the pills
+        // and wrap their labels onto two lines.
+        "shrink-0 whitespace-nowrap rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors",
         active
           ? "border-ink bg-ink text-white"
           : "border-line bg-surface text-fg hover:border-brand-600",
