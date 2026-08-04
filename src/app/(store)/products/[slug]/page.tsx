@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { ProductPurchase } from "@/components/product/ProductPurchase";
 import { ProductJsonLd } from "@/components/analytics/ProductJsonLd";
+import { ProductDescription } from "@/components/product/ProductDescription";
 import { CATEGORY_MAP, productImageUrl } from "@/lib/products";
 import { catalogCartItem } from "@/lib/cart-item";
 import { getAllProducts, getProductBySlug, getRelatedProducts } from "@/lib/catalog";
@@ -163,15 +164,11 @@ export default async function ProductPage({
         </div>
 
         {/* Description */}
-        <section className="mt-14 max-w-3xl">
+        <section className="mt-14">
           <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
             Product details
           </h2>
-          <div className="mt-4 space-y-4 text-base leading-relaxed text-muted">
-            {product.description.map((para, i) => (
-              <p key={i}>{para}</p>
-            ))}
-          </div>
+          <ProductDescription description={product.description} name={product.name} />
         </section>
 
         {/* Related */}

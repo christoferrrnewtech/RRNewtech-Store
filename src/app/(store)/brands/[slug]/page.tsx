@@ -4,8 +4,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
-import { BrandProductCard } from "@/components/shop/BrandProductCard";
-import { getBrandBySlug, getBrands, youtubeEmbedId } from "@/lib/content";
+import { BrandProducts } from "@/components/shop/BrandProducts";
+import { getBrandBySlug, getBrands, getCategories, youtubeEmbedId } from "@/lib/content";
+import { brandProductFacets } from "@/lib/brand-facets";
 import { SITE } from "@/lib/constants";
 
 // Pre-render every published brand page at build time (indexable HTML). Falls back to on-demand
@@ -57,73 +58,67 @@ export default async function BrandPage({
 
   const products = brand.products;
   const videoId = youtubeEmbedId(brand.youtubeUrl);
-
-  // Small logo + name/tagline + Shop CTA — shared by the 2-column (with hero) and bar (no hero) layouts.
-  const headerInfo = (
-    <div className="flex flex-wrap items-center gap-4 sm:gap-5">
-      {/* Logos carry their own backgrounds, so they sit contained on a white plate. */}
-      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-line bg-white sm:h-20 sm:w-20">
-        <Image
-          src={brand.logo}
-          alt={brand.name}
-          fill
-          sizes="80px"
-          className="object-contain p-2.5"
-          priority={!brand.heroImage}
-        />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Brand</p>
-        <h1 className="mt-0.5 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-fg sm:text-3xl">
-          {brand.name}
-        </h1>
-        {brand.tagline && <p className="mt-1 text-muted">{brand.tagline}</p>}
-      </div>
-      {products.length > 0 && (
-        <LinkButton href="#brand-products" className="shrink-0">
-          Shop {brand.name}
-        </LinkButton>
-      )}
-    </div>
-  );
+  const facets = brandProductFacets(products, await getCategories().catch(() => []));
 
   return (
     <>
-      <Container className="py-10">
-        <nav aria-label="Breadcrumb" className="mb-6 text-sm text-muted">
-          <Link href="/" className="hover:text-brand-700">Home</Link>
-          <span className="mx-2 text-line-strong">/</span>
-          <Link href="/brands" className="hover:text-brand-700">Brands</Link>
-        </nav>
-
-        {/* Header — with a hero: two columns (hero left, logo+info right); without: the info bar. */}
+      {/* Full-bleed brand band, flush under the sticky header. Fixed heights rather than an
+          aspect ratio: at 16:5 a wide viewport renders a ~625px slab, mostly empty for the
+          brands that have no hero artwork. Those get the brand gradient instead, so every
+          brand page shares one structure. */}
+      <section className="relative h-[200px] w-full overflow-hidden bg-brand-900 sm:h-[280px] lg:h-[340px]">
         {brand.heroImage ? (
-          <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
-            <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border border-line bg-elevated">
+          <Image src={brand.heroImage} alt="" fill sizes="100vw" className="object-cover" priority />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-700 to-brand-900">
+            <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-400/20 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-brand-500/15 blur-3xl" />
+          </div>
+        )}
+
+        {/* Scrim keeps the breadcrumb legible over light hero photos. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/40 to-transparent" />
+
+        <Container className="relative pt-5">
+          <nav aria-label="Breadcrumb" className="text-sm text-white/80">
+            <Link href="/" className="hover:text-white">Home</Link>
+            <span className="mx-2 text-white/40">/</span>
+            <Link href="/brands" className="hover:text-white">Brands</Link>
+          </nav>
+        </Container>
+      </section>
+
+      <Container className="pb-10">
+        <header>
+          {/* Pulled up over the band's bottom edge; border-bg matches the page background, so
+              the tile reads as cut out of the band. */}
+          <div className="relative z-10 -mt-10 flex justify-center sm:-mt-12">
+            <div className="relative h-20 w-20 overflow-hidden rounded-2xl border-4 border-bg bg-white shadow-sm sm:h-24 sm:w-24">
               <Image
-                src={brand.heroImage}
-                alt=""
+                src={brand.logo}
+                alt={brand.name}
                 fill
-                sizes="(max-width: 1024px) 100vw, 560px"
-                className="object-cover"
-                priority
+                sizes="96px"
+                className="object-contain p-2.5"
+                priority={!brand.heroImage}
               />
             </div>
-            <div className="flex items-center rounded-2xl border border-line bg-surface p-6 sm:p-8">
-              {headerInfo}
-            </div>
           </div>
-        ) : (
-          <div className="border-b border-line pb-6">{headerInfo}</div>
-        )}
 
-        {brand.blurb && (
-          <p className="mt-5 max-w-2xl leading-relaxed text-muted">{brand.blurb}</p>
-        )}
+          <div className="mt-3 text-center">
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-fg sm:text-3xl">
+              {brand.name}
+            </h1>
+            {brand.tagline && <p className="mt-1 text-muted">{brand.tagline}</p>}
+            {brand.blurb && (
+              <p className="mx-auto mt-2 max-w-2xl leading-relaxed text-muted">{brand.blurb}</p>
+            )}
+          </div>
+        </header>
 
         {/* 3 · About the brand */}
         {brand.about.length > 0 && (
-          <section className="mt-14 max-w-3xl">
+          <section className="mt-14">
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
               About {brand.name}
             </h2>
@@ -190,17 +185,13 @@ export default async function BrandPage({
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
               {brand.name} products
             </h2>
-            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {products.map((p) => (
-                <BrandProductCard
-                  key={p.id}
-                  product={p}
-                  brandName={brand.name}
-                  brandSlug={brand.slug}
-                  brandLogo={brand.logo}
-                />
-              ))}
-            </div>
+            <BrandProducts
+              products={products}
+              brandName={brand.name}
+              brandSlug={brand.slug}
+              brandLogo={brand.logo}
+              facets={facets}
+            />
           </section>
         )}
 

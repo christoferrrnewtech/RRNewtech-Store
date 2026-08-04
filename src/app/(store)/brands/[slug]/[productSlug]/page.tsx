@@ -7,6 +7,7 @@ import { LinkButton } from "@/components/ui/Button";
 import { BrandProductCard } from "@/components/shop/BrandProductCard";
 import { BrandProductGallery, type GalleryImg } from "@/components/shop/BrandProductGallery";
 import { ProductPurchase } from "@/components/product/ProductPurchase";
+import { ProductDescription } from "@/components/product/ProductDescription";
 import { getBrandBySlug, getBrands, type Brand, type BrandProduct } from "@/lib/content";
 import { brandProductHref } from "@/lib/products";
 import { brandCartItem } from "@/lib/cart-item";
@@ -212,24 +213,30 @@ export default async function BrandProductPage({
 
         {/* Description */}
         {product.description && product.description.length > 0 && (
-          <section className="mt-14 max-w-3xl">
+          <section className="mt-14">
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
               Product details
             </h2>
-            <div className="mt-4 space-y-4 text-base leading-relaxed text-muted">
-              {product.description.map((para, i) => (
-                <p key={i}>{para}</p>
-              ))}
-            </div>
+            <ProductDescription description={product.description} name={product.name} />
           </section>
         )}
 
         {/* More from this brand */}
         {siblings.length > 0 && (
           <section className="mt-16">
-            <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
-              More from {brand.name}
-            </h2>
+            {/* flex-wrap + whitespace-nowrap so a long brand name pushes the link to its own line
+                instead of squashing it. */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
+                More from {brand.name}
+              </h2>
+              <Link
+                href={`/brands/${brand.slug}`}
+                className="whitespace-nowrap text-sm font-semibold text-brand-700 hover:text-brand-800"
+              >
+                View more →
+              </Link>
+            </div>
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {siblings.map((p) => (
                 <BrandProductCard
@@ -244,11 +251,6 @@ export default async function BrandProductPage({
           </section>
         )}
 
-        <div className="mt-12">
-          <Link href={`/brands/${brand.slug}`} className="text-sm font-semibold text-brand-700 hover:text-brand-800">
-            ← Back to {brand.name}
-          </Link>
-        </div>
       </Container>
     </>
   );

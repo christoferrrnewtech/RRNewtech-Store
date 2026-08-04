@@ -556,6 +556,33 @@ export async function saveBrandProductsAction(_prev: ActionState, form: FormData
       const existingImages = form.getAll("productImage").map(String);
       const files = form.getAll("productImageFile");
 
+      // ---- TEMPORARY DIAGNOSTIC — remove once the tag-loss cause is confirmed. Read-only. ----
+      // Untouched, collapsed rows have been losing their category on save; this shows whether the
+      // client posted an empty select, posted nothing at all, or posted a value we then dropped.
+      {
+        const before = new Map(brand.products.map((p) => [p.id, p.category]));
+        console.log("[products-save]", brand.slug, {
+          names: names.length,
+          ids: ids.length,
+          categories: categories.length,
+          subcategories: subcategories.length,
+          prices: prices.length,
+          inStocks: inStocks.length,
+          images: existingImages.length,
+          files: files.length,
+        });
+        names.forEach((n, i) => {
+          const was = before.get(ids[i] ?? "");
+          const posted = categories[i];
+          const flag = was && !String(posted ?? "").trim() ? "  <-- LOSES TAG" : "";
+          console.log(
+            `  [${String(i).padStart(2)}] id=${(ids[i] ?? "").slice(0, 8)} cat=${JSON.stringify(posted)}` +
+              ` sub=${JSON.stringify(subcategories[i])} was=${JSON.stringify(was)} ${String(n).slice(0, 32)}${flag}`,
+          );
+        });
+      }
+      // ---- END TEMPORARY DIAGNOSTIC ----
+
       const usedSlugs = new Set<string>();
       const out: BrandProduct[] = [];
       for (let i = 0; i < names.length; i++) {

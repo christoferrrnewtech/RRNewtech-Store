@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandProductCard } from "@/components/shop/BrandProductCard";
+import { ArrowButton } from "@/components/ui/ArrowButton";
 import { LinkButton } from "@/components/ui/Button";
 import type { BrandProduct } from "@/lib/content";
 
@@ -131,39 +132,3 @@ export function BrandProductRail({
 
 /** Blue circular scroll arrow — hidden on phones where touch/swipe is primary. Disabled (dimmed,
  *  not clickable) when the rail can't scroll further in that direction. */
-function ArrowButton({
-  dir,
-  onClick,
-  disabled = false,
-  className,
-}: {
-  dir: "left" | "right";
-  onClick: () => void;
-  disabled?: boolean;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={dir === "left" ? "Scroll products left" : "Scroll products right"}
-      className={[
-        "hidden h-9 w-9 shrink-0 items-center justify-center rounded-full sm:flex",
-        "bg-brand-600 text-white shadow-md transition-colors hover:bg-brand-700",
-        "disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand-600",
-        className ?? "",
-      ].join(" ")}
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d={dir === "left" ? "M15 18l-6-6 6-6" : "M9 6l6 6-6 6"}
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
-  );
-}
