@@ -86,6 +86,24 @@ export function storeDoc(name: string) {
   return getDb().collection(LANDING).doc(name);
 }
 
+/**
+ * Transactional records — one document per record, in their own top-level collections.
+ *
+ * Deliberately NOT the keyed-map-in-one-document shape used for CMS content above. That shape
+ * suits a fixed handful of brands or banners; orders and inquiries grow without bound, and a
+ * Firestore document is capped at 1 MiB. One document per record also means Firestore can do the
+ * sorting, status filtering and paging server-side instead of us pulling everything into memory.
+ */
+export const COLLECTIONS = {
+  orders: "storeOrders",
+  inquiries: "storeInquiries",
+} as const;
+
+/** A real collection (one doc per record), unlike storeDoc's keyed-map documents. */
+export function storeCollection(name: string) {
+  return getDb().collection(name);
+}
+
 /** Storage bucket for uploaded images. Requires FIREBASE_STORAGE_BUCKET. */
 export function getBucket() {
   return getStorage(initAdminApp()).bucket();

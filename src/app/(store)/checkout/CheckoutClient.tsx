@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
-import { Button, LinkButton } from "@/components/ui/Button";
+import { LinkButton } from "@/components/ui/Button";
+import { FormMessage, Honeypot, SubmitButton } from "@/components/ui/FormControls";
 import { useCart } from "@/lib/cart";
 import { formatPHP } from "@/lib/format";
-import { FREE_SHIPPING_THRESHOLD, SITE } from "@/lib/constants";
+import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
+import { placeOrderAction } from "@/app/(store)/actions";
+import type { ActionState } from "@/lib/form-data";
 
 const field =
   "w-full rounded-lg border border-line bg-surface px-3.5 py-2 text-sm text-fg placeholder:text-muted-light focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
@@ -34,25 +37,19 @@ function Field({
 }
 
 /**
- * Phase 1 checkout — a bold, brand-forward split screen (compact shipping form on white, order
- * summary on a full-height brand-blue panel), but with no payment backend yet: "Place order"
- * composes a pre-filled order email (mailto) to the sales inbox. Phase 2 swaps the submit for a
- * POST + payment gateway.
+ * Checkout — a bold, brand-forward split screen (compact shipping form on white, order summary on a
+ * full-height brand-blue panel). "Place order" records the order in Firestore via `placeOrderAction`
+ * and redirects to the confirmation page; there is still no payment gateway, so the team confirms
+ * stock and payment afterwards.
+ *
+ * The inputs are uncontrolled: the server action reads the FormData, so mirroring every field into
+ * React state would buy nothing. `lines` posts the cart for the server to REPRICE — the prices in
+ * that payload are never used, since a cart in localStorage can be stale or hand-edited.
  */
 export function CheckoutClient() {
   const { items, subtotal } = useCart();
   const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-
-  const [email, setEmail] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [address, setAddress] = useState("");
-  const [apartment, setApartment] = useState("");
-  const [barangay, setBarangay] = useState("");
-  const [city, setCity] = useState("");
-  const [postal, setPostal] = useState("");
-  const [region, setRegion] = useState("");
-  const [phone, setPhone] = useState("");
+  const [state, action] = useActionState<ActionState, FormData>(placeOrderAction, {});
 
   if (items.length === 0) {
     return (
@@ -70,33 +67,11 @@ export function CheckoutClient() {
     );
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const name = `${firstName} ${lastName}`.trim();
-    const orderLines = items
-      .map(
-        (i) =>
-          `• ${i.quantity} × ${i.name}${i.sku ? ` (${i.sku})` : ""} — ${formatPHP(
-            i.price * i.quantity,
-          )}`,
-      )
-      .join("\n");
-    const shipping = [
-      address + (apartment ? `, ${apartment}` : ""),
-      [barangay, city].filter(Boolean).join(", "),
-      [region, postal].filter(Boolean).join(" "),
-      "Philippines",
-    ]
-      .filter((line) => line.trim())
-      .join("\n");
-    const body =
-      `Name: ${name}\nEmail: ${email}\nPhone: ${phone}\n\n` +
-      `Shipping address:\n${shipping}\n\n` +
-      `Order:\n${orderLines}\n\nSubtotal: ${formatPHP(subtotal)}`;
-    window.location.href = `mailto:${SITE.email}?subject=${encodeURIComponent(
-      `Order from ${name || "website"}`,
-    )}&body=${encodeURIComponent(body)}`;
-  }
+  // Only what identifies a line. Names and prices are re-read from the catalog server-side; `href`
+  // is how a brand line's brand is recovered, since a cart line stores the product id but not it.
+  const linesPayload = JSON.stringify(
+    items.map((i) => ({ source: i.source, id: i.id, quantity: i.quantity, href: i.href })),
+  );
 
   return (
     // -mb-20 cancels SiteFooter's mt-20 so this full-bleed page runs straight into the footer
@@ -164,15 +139,18 @@ export function CheckoutClient() {
             </Link>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-5">
+          <form action={action} className="mt-6 flex flex-col gap-5">
+            <input type="hidden" name="lines" value={linesPayload} />
+            <Honeypot />
+
             <section>
               <h2 className="text-sm font-bold uppercase tracking-wide text-brand-600">Contact</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Field label="Email">
-                  <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={field} placeholder="you@email.com" />
+                  <input required type="email" name="email" className={field} placeholder="you@email.com" />
                 </Field>
                 <Field label="Phone">
-                  <input required value={phone} onChange={(e) => setPhone(e.target.value)} className={field} placeholder="09xx xxx xxxx" inputMode="tel" />
+                  <input required name="phone" className={field} placeholder="09xx xxx xxxx" inputMode="tel" />
                 </Field>
               </div>
             </section>
@@ -184,14 +162,14 @@ export function CheckoutClient() {
               <div className="mt-3 flex flex-col gap-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="First name">
-                    <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} className={field} placeholder="Juan" />
+                    <input required name="firstName" className={field} placeholder="Juan" />
                   </Field>
                   <Field label="Last name">
-                    <input required value={lastName} onChange={(e) => setLastName(e.target.value)} className={field} placeholder="dela Cruz" />
+                    <input required name="lastName" className={field} placeholder="dela Cruz" />
                   </Field>
                 </div>
                 <Field label="Address">
-                  <input required value={address} onChange={(e) => setAddress(e.target.value)} className={field} placeholder="House / unit no. and street" />
+                  <input required name="address" className={field} placeholder="House / unit no. and street" />
                 </Field>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field
@@ -201,34 +179,35 @@ export function CheckoutClient() {
                       </>
                     }
                   >
-                    <input value={apartment} onChange={(e) => setApartment(e.target.value)} className={field} placeholder="Unit, floor, building" />
+                    <input name="apartment" className={field} placeholder="Unit, floor, building" />
                   </Field>
                   <Field label="Barangay">
-                    <input required value={barangay} onChange={(e) => setBarangay(e.target.value)} className={field} />
+                    <input required name="barangay" className={field} />
                   </Field>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label="City / Municipality">
-                    <input required value={city} onChange={(e) => setCity(e.target.value)} className={field} />
+                    <input required name="city" className={field} />
                   </Field>
                   <Field label="Region / Province">
-                    <input required value={region} onChange={(e) => setRegion(e.target.value)} className={field} />
+                    <input required name="region" className={field} />
                   </Field>
                   <Field label="Postal code">
-                    <input required value={postal} onChange={(e) => setPostal(e.target.value)} className={field} inputMode="numeric" />
+                    <input required name="postal" className={field} inputMode="numeric" />
                   </Field>
                 </div>
               </div>
             </section>
 
             <div>
-              <Button type="submit" className="w-full sm:w-auto">
+              <FormMessage state={state} />
+              <SubmitButton pendingLabel="Placing order…" className={`w-full sm:w-auto ${state.error ? "mt-3" : ""}`}>
                 Place order
-              </Button>
+              </SubmitButton>
               <p className="mt-3 text-xs leading-relaxed text-muted-light">
                 Online payment (GCash, Maya, card) via a secure Philippine gateway is coming soon.
-                For now, placing your order opens your email pre-filled to {SITE.email}, and our team
-                confirms stock, shipping, and payment.
+                For now we record your order and our team confirms stock, shipping, and payment
+                before anything is charged.
               </p>
             </div>
           </form>

@@ -590,6 +590,24 @@ export function brandProductHref(
   return `/brands/${brandSlugValue}/${product.slug ?? product.id}`;
 }
 
+/**
+ * "Contact a sales agent" URL for a product priced on request.
+ *
+ * Carries which product is being asked about, so the inquiry that lands in /admin/inquiries names
+ * it instead of arriving as an anonymous "how much is this?". The contact page re-resolves both
+ * slugs against Firestore, so a mangled link degrades to the plain form rather than breaking.
+ */
+export function contactSalesHref(
+  brandSlugValue: string,
+  product: { slug?: string; id: string },
+): string {
+  const params = new URLSearchParams({
+    product: product.slug ?? product.id,
+    brand: brandSlugValue,
+  });
+  return `/contact?${params}`;
+}
+
 /** Keyword search over name, brand, and summary (case-insensitive). */
 export function searchProducts(list: Product[], q: string): Product[] {
   const needle = q.trim().toLowerCase();

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { AddToCartButton } from "@/components/shop/AddToCartButton";
 import type { BrandProduct } from "@/lib/content";
-import { brandProductHref } from "@/lib/products";
+import { brandProductHref, contactSalesHref } from "@/lib/products";
 import { brandCartItem } from "@/lib/cart-item";
 import { discountPercent, formatPHP } from "@/lib/format";
 
@@ -94,7 +94,11 @@ export function BrandProductCard({
 
         <div className="mt-4 flex-1" />
         {product.contactSales ? (
-          <LinkButton href="/contact" size="sm" className="w-full whitespace-nowrap">
+          <LinkButton
+            href={contactSalesHref(brandSlug, product)}
+            size="sm"
+            className="w-full whitespace-nowrap"
+          >
             Contact a sales agent
           </LinkButton>
         ) : (

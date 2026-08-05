@@ -9,7 +9,7 @@ import { BrandProductGallery, type GalleryImg } from "@/components/shop/BrandPro
 import { ProductPurchase } from "@/components/product/ProductPurchase";
 import { ProductDescription } from "@/components/product/ProductDescription";
 import { getBrandBySlug, getBrands, type Brand, type BrandProduct } from "@/lib/content";
-import { brandProductHref } from "@/lib/products";
+import { brandProductHref, contactSalesHref } from "@/lib/products";
 import { brandCartItem } from "@/lib/cart-item";
 import { discountPercent, formatPHP } from "@/lib/format";
 import { SITE } from "@/lib/constants";
@@ -151,7 +151,9 @@ export default async function BrandProductPage({
                   <p className="mt-3 text-base leading-relaxed text-muted">{product.summary}</p>
                 )}
                 <div className="mt-6">
-                  <LinkButton href="/contact" size="lg">Contact a sales agent</LinkButton>
+                  <LinkButton href={contactSalesHref(brand.slug, product)} size="lg">
+                    Contact a sales agent
+                  </LinkButton>
                 </div>
               </>
             ) : (

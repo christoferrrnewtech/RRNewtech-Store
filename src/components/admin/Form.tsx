@@ -2,7 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import { useState, type ReactNode } from "react";
-import type { ActionState } from "@/app/(admin)/admin/actions";
+import type { ActionState } from "@/lib/form-data";
 
 /** Submit button that disables and relabels itself while its form is pending. */
 export function SubmitButton({

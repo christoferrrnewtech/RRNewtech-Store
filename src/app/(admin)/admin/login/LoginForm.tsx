@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { loginAction, type ActionState } from "@/app/(admin)/admin/actions";
+import { loginAction, } from "@/app/(admin)/admin/actions";
+import type { ActionState } from "@/lib/form-data";
 import { Field, FormMessage, SubmitButton, TextInput } from "@/components/admin/Form";
 
 export function LoginForm() {

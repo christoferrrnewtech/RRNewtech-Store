@@ -13,8 +13,8 @@ import {
   saveBrandReasonsAction,
   saveBrandStatusAction,
   saveBrandVideoAction,
-  type ActionState,
 } from "@/app/(admin)/admin/actions";
+import type { ActionState } from "@/lib/form-data";
 import {
   Field,
   FormMessage,

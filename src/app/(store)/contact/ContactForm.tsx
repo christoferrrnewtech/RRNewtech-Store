@@ -1,66 +1,100 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { SITE } from "@/lib/constants";
+import { useActionState } from "react";
+import Link from "next/link";
+import { LinkButton } from "@/components/ui/Button";
+import { FormMessage, Honeypot, SubmitButton } from "@/components/ui/FormControls";
+import { sendInquiryAction } from "@/app/(store)/actions";
+import type { ActionState } from "@/lib/form-data";
 
 /**
- * Phase 1 contact form. There is no backend yet, so on submit we compose a pre-filled email
- * (mailto:) to the sales inbox — the form still "works" end-to-end with zero server code.
- * Phase 2 swaps this for a POST to an API route (Resend + DB). Cart/checkout has its own page
- * (/checkout); this form is purely "contact us".
+ * Contact / sales inquiry form. Submits to `sendInquiryAction`, which records the message in
+ * Firestore for the team to work from /admin/inquiries.
+ *
+ * When the visitor arrived from a product priced on request ("Contact a sales agent"), the page
+ * passes that product down and the hidden slug fields travel with the message — the action
+ * re-resolves them server-side, so the stored record can't be faked from the query string.
  */
-export function ContactForm() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [message, setMessage] = useState("");
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const subject = `Website inquiry from ${name || "website"}`;
-    const body = `Name: ${name}\nEmail: ${email}\nPhone: ${phone}\n\n${message}`.trim();
-    window.location.href = `mailto:${SITE.email}?subject=${encodeURIComponent(
-      subject,
-    )}&body=${encodeURIComponent(body)}`;
-  }
+export function ContactForm({
+  product,
+}: {
+  product?: { brandSlug: string; productSlug: string; name: string; href: string };
+}) {
+  const [state, action] = useActionState<ActionState, FormData>(sendInquiryAction, {});
 
   const field =
     "w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-muted-light focus:border-brand-500";
 
+  // On success the form is replaced rather than reset: re-submitting the same message by accident
+  // would just create a duplicate for sales to dedupe.
+  if (state.ok) {
+    return (
+      <div className="rounded-2xl border border-line bg-surface p-8 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand-50">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-brand-600" aria-hidden="true">
+            <path d="M5 12l4 4L19 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <h2 className="mt-4 font-[family-name:var(--font-display)] text-lg font-bold text-fg">
+          Message sent
+        </h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted">{state.ok}</p>
+        <LinkButton href="/" variant="secondary" className="mt-6">
+          Continue shopping
+        </LinkButton>
+      </div>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form action={action} className="flex flex-col gap-4">
+      <Honeypot />
+
+      {product && (
+        <input type="hidden" name="brand" value={product.brandSlug} />
+      )}
+      {product && (
+        <input type="hidden" name="product" value={product.productSlug} />
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
           Name
-          <input required value={name} onChange={(e) => setName(e.target.value)} className={field} placeholder="Juan dela Cruz" />
+          <input required name="name" className={field} placeholder="Juan dela Cruz" />
         </label>
         <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
           Phone
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} className={field} placeholder="09xx xxx xxxx" />
+          <input name="phone" className={field} placeholder="09xx xxx xxxx" />
         </label>
       </div>
       <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
         Email
-        <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={field} placeholder="you@email.com" />
+        <input required type="email" name="email" className={field} placeholder="you@email.com" />
       </label>
       <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
         Message
         <textarea
           required
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          name="message"
           rows={5}
           className={field}
+          defaultValue={product ? `I'd like a quote for ${product.name}.\n\n` : ""}
           placeholder="How can we help?"
         />
       </label>
-      <Button type="submit" size="lg" className="sm:self-start">
+
+      <FormMessage state={state} />
+
+      <SubmitButton size="lg" className="sm:self-start">
         Send message
-      </Button>
+      </SubmitButton>
+
       <p className="text-xs text-muted-light">
-        This opens your email app pre-filled to {SITE.email}. Secure online submission &amp; payment
-        are coming soon.
+        We usually reply within one business day. Prefer to talk?{" "}
+        <Link href="/about" className="font-medium text-brand-700 hover:underline">
+          More ways to reach us
+        </Link>
+        .
       </p>
     </form>
   );

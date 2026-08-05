@@ -6,8 +6,8 @@ import {
   createUserAction,
   deleteUserAction,
   updateUserBrandsAction,
-  type ActionState,
 } from "@/app/(admin)/admin/actions";
+import type { ActionState } from "@/lib/form-data";
 import { Field, FormMessage, SubmitButton, TextInput } from "@/components/admin/Form";
 
 export type Teammate = { uid: string; name: string; email: string; brandSlugs: string[] };

@@ -11,8 +11,8 @@ import {
   renameSubcategoryAction,
   deleteSubcategoryAction,
   reorderSubcategoriesAction,
-  type ActionState,
 } from "@/app/(admin)/admin/actions";
+import type { ActionState } from "@/lib/form-data";
 import { FormMessage, SubmitButton, TextInput } from "@/components/admin/Form";
 import type { StoreCategory, Subcategory } from "@/lib/content";
 

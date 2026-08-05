@@ -58,12 +58,24 @@ import {
   requireUser,
 } from "@/lib/auth";
 import { getBucket } from "@/lib/firebase";
+import { setOrderStatus, setOrderNote } from "@/lib/orders";
+import { setInquiryStatus, setInquiryNote } from "@/lib/inquiries";
+import { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
+import {
+  INQUIRY_STATUSES,
+  INQUIRY_STATUS_LABELS,
+  type InquiryStatus,
+} from "@/lib/inquiry-status";
 import { brandSlug, brandProductSlugify } from "@/lib/products";
 import { BRAND_GROUPS } from "@/lib/constants";
-
-export type ActionState = { ok?: string; error?: string };
+// NB: ActionState is NOT re-exported from here. A `export type { … }` in a "use server" module is
+// picked up by the server-action transform as a runtime export and fails the build — consumers
+// import the type straight from @/lib/form-data instead.
+import { text, textList, type ActionState } from "@/lib/form-data";
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+/** Internal notes on an order or inquiry. Long enough for context, short enough to bound the doc. */
+const MAX_NOTE = 2000;
 // SVG is deliberately excluded — it can carry script and would be served from our own origin.
 const ALLOWED_TYPES: Record<string, string> = {
   "image/png": "png",
@@ -117,20 +129,6 @@ async function storeUpload(file: FormDataEntryValue | null, prefix: string): Pro
   return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(
     name,
   )}?alt=media&token=${token}`;
-}
-
-function text(form: FormData, key: string): string {
-  const value = form.get(key);
-  return typeof value === "string" ? value.trim() : "";
-}
-
-/** Multi-value text inputs (repeatable rows), with blanks dropped. */
-function textList(form: FormData, key: string): string[] {
-  return form
-    .getAll(key)
-    .filter((v): v is string => typeof v === "string")
-    .map((v) => v.trim())
-    .filter(Boolean);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -730,4 +728,98 @@ export async function deleteUserAction(form: FormData): Promise<void> {
   await deleteFirebaseUser(uid).catch(() => {});
   await deleteAdminUserDoc(uid);
   redirect("/admin/users");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Orders & inquiries
+//
+// These render nowhere on the storefront, so they deliberately do NOT call
+// revalidateStorefront(). They revalidate their own admin paths instead — including the layout,
+// since the sidebar's unread badges are computed there.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function revalidateQueue(section: "orders" | "inquiries", id?: string) {
+  // "layout" so the sidebar badge recounts, not just the list body.
+  revalidatePath(`/admin/${section}`, "layout");
+  if (id) revalidatePath(`/admin/${section}/${id}`);
+}
+
+export async function setOrderStatusAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const id = text(form, "id");
+  const status = text(form, "status") as OrderStatus;
+  if (!id) return { error: "That order no longer exists." };
+  if (!ORDER_STATUSES.includes(status)) return { error: "Pick a valid status." };
+
+  try {
+    await setOrderStatus(id, status);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not update the order." };
+  }
+
+  revalidateQueue("orders", id);
+  return { ok: `Marked as ${ORDER_STATUS_LABELS[status].toLowerCase()}.` };
+}
+
+export async function setOrderNoteAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const id = text(form, "id");
+  if (!id) return { error: "That order no longer exists." };
+
+  try {
+    await setOrderNote(id, text(form, "note").slice(0, MAX_NOTE));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not save the note." };
+  }
+
+  revalidateQueue("orders", id);
+  return { ok: "Note saved." };
+}
+
+export async function setInquiryStatusAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const id = text(form, "id");
+  const status = text(form, "status") as InquiryStatus;
+  if (!id) return { error: "That inquiry no longer exists." };
+  if (!INQUIRY_STATUSES.includes(status)) return { error: "Pick a valid status." };
+
+  try {
+    await setInquiryStatus(id, status);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not update the inquiry." };
+  }
+
+  revalidateQueue("inquiries", id);
+  return { ok: `Marked as ${INQUIRY_STATUS_LABELS[status].toLowerCase()}.` };
+}
+
+export async function setInquiryNoteAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const id = text(form, "id");
+  if (!id) return { error: "That inquiry no longer exists." };
+
+  try {
+    await setInquiryNote(id, text(form, "note").slice(0, MAX_NOTE));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not save the note." };
+  }
+
+  revalidateQueue("inquiries", id);
+  return { ok: "Note saved." };
 }

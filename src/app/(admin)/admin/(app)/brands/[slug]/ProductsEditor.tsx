@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { useActionState, useState } from "react";
-import { saveBrandProductsAction, type ActionState } from "@/app/(admin)/admin/actions";
+import { saveBrandProductsAction, } from "@/app/(admin)/admin/actions";
+import type { ActionState } from "@/lib/form-data";
 import { FormMessage, SubmitButton, TextArea, TextInput } from "@/components/admin/Form";
 import type { Brand, BrandProduct, StoreCategory } from "@/lib/content";
 import { formatPHP } from "@/lib/format";

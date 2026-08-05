@@ -4,7 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-export type AdminNavItem = { href: string; label: string; icon: keyof typeof ICONS };
+export type AdminNavItem = {
+  href: string;
+  label: string;
+  icon: keyof typeof ICONS;
+  /** Count of records still needing attention. Omitted or 0 renders nothing. */
+  badge?: number;
+};
 
 /** A brand link shown in the collapsible "Brands" group. */
 export type AdminBrandLink = { slug: string; name: string; status: "draft" | "published" };
@@ -13,6 +19,8 @@ const BRANDS_HREF = "/admin/brands";
 
 const ICONS = {
   dashboard: "M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6V11h-6v9Zm0-16v5h6V4h-6Z",
+  orders: "M6 2h12l2 5H4l2-5Zm-2 5v13h16V7M9 11a3 3 0 0 0 6 0",
+  inquiries: "M21 12a8 8 0 0 1-8 8H4l2.5-3A8 8 0 1 1 21 12Z",
   banner: "M4 5h16v14H4V5Zm0 10 4-4 3 3 4-5 5 6",
   about: "M5 6h11M5 12h14M5 18h9",
   categories: "M4 5h6v6H4V5Zm10 0h6v6h-6V5ZM4 15h6v4H4v-4Zm10-1h6v6h-6v-6Z",
@@ -78,10 +86,25 @@ export function AdminNav({
           >
             <NavIcon icon={item.icon} />
             {item.label}
+            <NavBadge count={item.badge} label={item.label} />
           </Link>
         );
       })}
     </nav>
+  );
+}
+
+/**
+ * Unread count for a work queue. `ml-auto` pushes it to the rail's right edge; the visually hidden
+ * suffix is what makes "Orders 3" read as "Orders, 3 new" to a screen reader.
+ */
+function NavBadge({ count, label }: { count?: number; label: string }) {
+  if (!count) return null;
+  return (
+    <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1.5 text-[11px] font-bold text-white">
+      {count > 99 ? "99+" : count}
+      <span className="sr-only"> new {label.toLowerCase()}</span>
+    </span>
   );
 }
 

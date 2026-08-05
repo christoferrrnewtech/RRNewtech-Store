@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { saveAboutAction, type ActionState } from "@/app/(admin)/admin/actions";
+import { saveAboutAction, } from "@/app/(admin)/admin/actions";
+import type { ActionState } from "@/lib/form-data";
 import {
   Field,
   FormMessage,

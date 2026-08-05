@@ -2,6 +2,8 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { logoutAction } from "@/app/(admin)/admin/actions";
 import { getAllBrandsForAdmin } from "@/lib/content";
+import { countNewOrders } from "@/lib/orders";
+import { countNewInquiries } from "@/lib/inquiries";
 import { AdminNav, type AdminBrandLink, type AdminNavItem } from "@/components/admin/AdminNav";
 
 /**
@@ -14,8 +16,22 @@ export default async function AdminAppLayout({
   const user = await requireUser();
   const isAdmin = user.role === "admin";
 
+  // Unread counts for the two work queues. Only admins see those sections, so marketing users
+  // never pay for the reads. A Firestore hiccup must not take down the whole admin shell.
+  const [newOrders, newInquiries] = isAdmin
+    ? await Promise.all([countNewOrders().catch(() => 0), countNewInquiries().catch(() => 0)])
+    : [0, 0];
+
   const nav: (AdminNavItem & { show: boolean })[] = [
     { href: "/admin", label: "Dashboard", icon: "dashboard", show: true },
+    { href: "/admin/orders", label: "Orders", icon: "orders", badge: newOrders, show: isAdmin },
+    {
+      href: "/admin/inquiries",
+      label: "Inquiries",
+      icon: "inquiries",
+      badge: newInquiries,
+      show: isAdmin,
+    },
     { href: "/admin/banner", label: "Home banner", icon: "banner", show: isAdmin },
     { href: "/admin/about", label: "About section", icon: "about", show: isAdmin },
     { href: "/admin/categories", label: "Categories", icon: "categories", show: isAdmin },
@@ -24,7 +40,7 @@ export default async function AdminAppLayout({
   ];
   const items: AdminNavItem[] = nav
     .filter((n) => n.show)
-    .map(({ href, label, icon }) => ({ href, label, icon }));
+    .map(({ href, label, icon, badge }) => ({ href, label, icon, badge }));
 
   // Brand quick-nav in the sidebar (marketing users see only their assigned brands).
   const brandLinks: AdminBrandLink[] = (await getAllBrandsForAdmin().catch(() => []))
