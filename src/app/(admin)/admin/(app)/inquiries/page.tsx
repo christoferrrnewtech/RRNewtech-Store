@@ -86,7 +86,7 @@ export default async function AdminInquiriesPage({
 
       <QueuePager
         basePath="/admin/inquiries"
-        status={status}
+        params={{ status }}
         lastCreatedAt={inquiries.at(-1)?.createdAt}
         full={inquiries.length === PAGE_SIZE}
       />

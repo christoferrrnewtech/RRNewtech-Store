@@ -9,6 +9,9 @@ import { FormMessage, Honeypot, SubmitButton } from "@/components/ui/FormControl
 import { useCart } from "@/lib/cart";
 import { formatPHP } from "@/lib/format";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
+import { FLAT_SHIPPING_FEE, quoteShipping } from "@/lib/shipping";
+import { PAYMENT_METHODS_SENTENCE } from "@/lib/payment-methods";
+import { PendingPaymentNotice } from "@/components/checkout/PendingPaymentNotice";
 import { placeOrderAction } from "@/app/(store)/actions";
 import type { ActionState } from "@/lib/form-data";
 
@@ -38,18 +41,50 @@ function Field({
 
 /**
  * Checkout — a bold, brand-forward split screen (compact shipping form on white, order summary on a
- * full-height brand-blue panel). "Place order" records the order in Firestore via `placeOrderAction`
- * and redirects to the confirmation page; there is still no payment gateway, so the team confirms
- * stock and payment afterwards.
+ * full-height brand-blue panel). Submitting records the order in Firestore via `placeOrderAction`
+ * as `awaiting_payment` and sends the customer to `/checkout/pay`, which is where the hand-off to
+ * PayMongo happens. With PayMongo unconfigured it keeps the older behaviour: record the order,
+ * team arranges payment.
+ *
+ * The totals here are DISPLAY ONLY and come from a localStorage cart that can be weeks stale — the
+ * server reprices everything and re-quotes shipping before charging a peso. `quoteShipping` is the
+ * same function the action uses, so the two agree whenever the cart is current.
  *
  * The inputs are uncontrolled: the server action reads the FormData, so mirroring every field into
  * React state would buy nothing. `lines` posts the cart for the server to REPRICE — the prices in
  * that payload are never used, since a cart in localStorage can be stale or hand-edited.
  */
-export function CheckoutClient() {
+/** The resume notice's data, resolved server-side in `page.tsx`. */
+export type PendingCheckout = {
+  ref: string;
+  total: number;
+  expiresAt: number;
+  retry: boolean;
+};
+
+export function CheckoutClient({
+  paymentsEnabled,
+  cancelled,
+  pending,
+}: {
+  paymentsEnabled: boolean;
+  cancelled: boolean;
+  pending: PendingCheckout | null;
+}) {
   const { items, subtotal } = useCart();
   const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+  const shippingFee = quoteShipping(subtotal);
+  const total = subtotal + shippingFee;
   const [state, action] = useActionState<ActionState, FormData>(placeOrderAction, {});
+
+  const notice = pending ? (
+    <PendingPaymentNotice
+      orderRef={pending.ref}
+      expiresAt={pending.expiresAt}
+      total={pending.total}
+      retry={pending.retry}
+    />
+  ) : null;
 
   if (items.length === 0) {
     return (
@@ -57,6 +92,9 @@ export function CheckoutClient() {
         <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-fg">
           Checkout
         </h1>
+        {/* Shown even with an empty cart: someone who cleared it still needs a route back to a
+            payment they already owe. */}
+        {notice && <div className="mt-6">{notice}</div>}
         <div className="mt-8 rounded-2xl border border-line bg-surface p-10 text-center">
           <p className="text-muted">Your cart is empty — nothing to check out yet.</p>
           <LinkButton href="/" className="mt-5">
@@ -108,8 +146,8 @@ export function CheckoutClient() {
             </div>
             <div className="flex justify-between">
               <span className="text-white/70">Shipping</span>
-              <span className="text-white/70">
-                {remaining > 0 ? "Calculated at checkout" : "Free"}
+              <span className={shippingFee === 0 ? "text-white/70" : "font-semibold"}>
+                {shippingFee === 0 ? "Free" : formatPHP(shippingFee)}
               </span>
             </div>
           </div>
@@ -122,7 +160,7 @@ export function CheckoutClient() {
 
           <div className="mt-5 flex items-baseline justify-between border-t border-white/15 pt-5">
             <span className="font-semibold">Total</span>
-            <span className="text-xl font-extrabold">{formatPHP(subtotal)}</span>
+            <span className="text-xl font-extrabold">{formatPHP(total)}</span>
           </div>
         </div>
       </aside>
@@ -138,6 +176,18 @@ export function CheckoutClient() {
               ← Back to cart
             </Link>
           </div>
+
+          {notice && <div className="mt-5">{notice}</div>}
+
+          {cancelled && (
+            <p
+              role="status"
+              className="mt-5 rounded-lg bg-danger/10 px-4 py-2.5 text-sm text-danger"
+            >
+              Payment wasn&apos;t completed — nothing was charged. Your cart is still here, so you
+              can try again below.
+            </p>
+          )}
 
           <form action={action} className="mt-6 flex flex-col gap-5">
             <input type="hidden" name="lines" value={linesPayload} />
@@ -201,13 +251,32 @@ export function CheckoutClient() {
 
             <div>
               <FormMessage state={state} />
-              <SubmitButton pendingLabel="Placing order…" className={`w-full sm:w-auto ${state.error ? "mt-3" : ""}`}>
-                Place order
+              {/* No amount on the button: the figure above comes from a cart that may be weeks
+                  stale, and a button reading "Pay ₱3,150" beside a gateway charging ₱3,400 costs
+                  far more trust than a generic label costs conversion. */}
+              {/* "Review and pay", not "Continue to payment" — that label now belongs to the
+                  button on /checkout/pay, and two buttons meaning different things would be a
+                  small cruelty. This one only places the order. */}
+              <SubmitButton
+                pendingLabel={paymentsEnabled ? "Placing your order…" : "Placing order…"}
+                className={`w-full sm:w-auto ${state.error ? "mt-3" : ""}`}
+              >
+                {paymentsEnabled ? "Review and pay" : "Place order"}
               </SubmitButton>
               <p className="mt-3 text-xs leading-relaxed text-muted-light">
-                Online payment (GCash, Maya, card) via a secure Philippine gateway is coming soon.
-                For now we record your order and our team confirms stock, shipping, and payment
-                before anything is charged.
+                {paymentsEnabled ? (
+                  <>
+                    We&apos;ll show you a summary, then take you to PayMongo to pay securely with{" "}
+                    {PAYMENT_METHODS_SENTENCE}. Prices and stock are re-checked before payment.
+                    Shipping is a flat {formatPHP(FLAT_SHIPPING_FEE)}, free on orders over{" "}
+                    {formatPHP(FREE_SHIPPING_THRESHOLD)}.
+                  </>
+                ) : (
+                  <>
+                    Online payment is being finalised. For now we record your order and our team
+                    confirms stock, shipping, and payment before anything is charged.
+                  </>
+                )}
               </p>
             </div>
           </form>

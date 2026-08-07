@@ -3,10 +3,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
-import { getOrder } from "@/lib/orders";
+import { getOrder, PAYMENT_STATUS_LABELS } from "@/lib/orders";
+import { isPayWindowOpen } from "@/lib/pay-window";
 import { formatPHP } from "@/lib/format";
 import { StatusBadge, formatWhen } from "@/components/admin/Queue";
-import { orderTone } from "../tone";
+import { orderTone, paymentTone } from "../tone";
 import { OrderControls } from "./OrderControls";
 
 export const metadata: Metadata = { title: "Order" };
@@ -41,6 +42,10 @@ export default async function AdminOrderPage({
           {order.ref}
         </h1>
         <StatusBadge label={order.status} tone={orderTone(order.status)} />
+        <StatusBadge
+          label={PAYMENT_STATUS_LABELS[order.paymentStatus]}
+          tone={paymentTone(order.paymentStatus)}
+        />
       </div>
       <p className="mt-2 text-muted">Placed {formatWhen(order.createdAt)}</p>
 
@@ -80,23 +85,116 @@ export default async function AdminOrderPage({
                 </li>
               ))}
             </ul>
-            <div className="flex items-baseline justify-between border-t border-line px-5 py-4">
-              <span className="font-semibold text-fg">Subtotal</span>
-              <span className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
-                {formatPHP(order.subtotal)}
-              </span>
-            </div>
+            <dl className="space-y-2 border-t border-line px-5 py-4 text-sm">
+              <div className="flex items-baseline justify-between">
+                <dt className="text-muted">Subtotal</dt>
+                <dd className="font-medium text-fg">{formatPHP(order.subtotal)}</dd>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <dt className="text-muted">Shipping</dt>
+                <dd className="font-medium text-fg">
+                  {order.shippingFee === 0 ? "Free" : formatPHP(order.shippingFee)}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between border-t border-line pt-2">
+                <dt className="font-semibold text-fg">Total</dt>
+                <dd className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
+                  {formatPHP(order.total)}
+                </dd>
+              </div>
+            </dl>
             <p className="border-t border-line bg-bg px-5 py-3 text-xs text-muted">
-              Prices were re-read from the catalog when the order was placed. Shipping and VAT are
-              not included.
+              Prices were re-read from the catalog when the order was placed. VAT is not itemised.
             </p>
           </section>
 
-          <OrderControls id={order.id} status={order.status} note={order.note} />
+          <OrderControls
+            id={order.id}
+            status={order.status}
+            note={order.note}
+            paymentStatus={order.paymentStatus}
+            hasSession={Boolean(order.checkoutSessionId)}
+          />
         </div>
 
-        {/* Customer + delivery */}
+        {/* Payment + customer + delivery */}
         <aside className="space-y-6">
+          <section className="rounded-2xl border border-line bg-surface p-5">
+            <h2 className="font-semibold text-fg">Payment</h2>
+            <dl className="mt-3 space-y-3 text-sm">
+              <div>
+                <dt className="text-muted-light">Status</dt>
+                <dd className="font-medium text-fg">
+                  {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-light">Method</dt>
+                <dd className="font-medium text-fg">
+                  {order.paymentMethod === "manual"
+                    ? "Recorded offline"
+                    : order.paymentMethod || "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-light">Paid</dt>
+                <dd className="font-medium text-fg">{formatWhen(order.paidAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-light">Payment window</dt>
+                {/* formatWhen renders "—" for 0, so orders predating the window read correctly. */}
+                <dd className="font-medium text-fg">{formatWhen(order.checkoutExpiresAt)}</dd>
+              </div>
+              {order.checkoutSessionId && (
+                <div>
+                  <dt className="text-muted-light">PayMongo session</dt>
+                  {/* Quoted verbatim in support tickets — keep it selectable and monospaced. */}
+                  <dd className="break-all font-mono text-xs text-muted">
+                    {order.checkoutSessionId}
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            {/* The session already exists, so re-sending its link costs nothing and is the
+                fastest way to rescue an abandoned checkout — but only while the window is open.
+                Without this branch staff have no way to tell a live link from a dead one, and
+                sending a dead one is a support ticket that looks like a bug. */}
+            {order.paymentStatus === "awaiting_payment" && order.checkoutUrl && (
+              <p className="mt-4 border-t border-line pt-4 text-xs">
+                <span className="text-muted-light">Payment link</span>
+                <a
+                  href={order.checkoutUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`mt-1 block break-all font-medium hover:underline ${
+                    isPayWindowOpen(order.checkoutExpiresAt)
+                      ? "text-brand-700"
+                      : "text-muted-light line-through"
+                  }`}
+                >
+                  {order.checkoutUrl}
+                </a>
+              </p>
+            )}
+
+            {order.checkoutUrl &&
+              order.paymentStatus !== "paid" &&
+              !isPayWindowOpen(order.checkoutExpiresAt) && (
+                <p className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-xs leading-relaxed text-danger">
+                  This link&apos;s payment window lapsed {formatWhen(order.checkoutExpiresAt)} and
+                  it has most likely been expired at PayMongo. Don&apos;t send it — ask the
+                  customer to place a new order so prices and stock are re-checked.
+                </p>
+              )}
+
+            {order.paymentError && (
+              <p className="mt-4 rounded-lg bg-danger/10 px-3 py-2 text-xs leading-relaxed text-danger">
+                {order.paymentError}
+              </p>
+            )}
+          </section>
+
           <section className="rounded-2xl border border-line bg-surface p-5">
             <h2 className="font-semibold text-fg">Customer</h2>
             <dl className="mt-3 space-y-3 text-sm">

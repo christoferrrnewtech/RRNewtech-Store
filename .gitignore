@@ -35,6 +35,27 @@ next-env.d.ts
 /public/uploads/*
 !/public/uploads/.gitkeep
 
-# firebase deploy artifacts
+# firebase deploy artifacts + emulator noise
 .firebase/
 firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+database-debug.log
+pubsub-debug.log
+dataconnect-debug.log
+ui-debug.log
+# Emulator data dumps from `firebase emulators:export`
+firebase-export-*/
+
+# Legacy `firebase functions:config` output — CAN CONTAIN SECRETS, never commit it.
+# (This project uses defineSecret/Secret Manager instead, so it should never appear.)
+.runtimeconfig.json
+
+# Cloud Functions build output. functions/.gitignore covers the .js it emits today; this catches
+# the whole directory so a tsconfig change that starts emitting .d.ts can't leak compiled code in.
+/functions/lib/
+# Belt and braces — the nested .gitignore already handles this.
+/functions/node_modules/
+
+# firebase CLI scaffold convention for machine-local overrides
+*.local

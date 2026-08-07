@@ -1,0 +1,51 @@
+{
+  "indexes": [
+    {
+      "//": "Admin /admin/orders filtered by fulfillment status, newest first.",
+      "collectionGroup": "storeOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "//": "Admin /admin/orders filtered by payment status, newest first.",
+      "collectionGroup": "storeOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "paymentStatus", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "//": "Admin /admin/orders with both filter chips active.",
+      "collectionGroup": "storeOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "paymentStatus", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "//": "countNewOrders() — the sidebar badge, new AND paid.",
+      "collectionGroup": "storeOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "paymentStatus", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "//": "functions/src/sweep-expired-payments.ts — lapsed checkouts.",
+      "collectionGroup": "storeOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "paymentStatus", "order": "ASCENDING"},
+        {"fieldPath": "checkoutExpiresAt", "order": "ASCENDING"}
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

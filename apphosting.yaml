@@ -7,6 +7,8 @@
 #   firebase apphosting:secrets:set FIREBASE_PRIVATE_KEY
 #   firebase apphosting:secrets:set FIREBASE_WEB_API_KEY
 #   firebase apphosting:secrets:set ADMIN_SESSION_SECRET
+#   firebase apphosting:secrets:set PAYMONGO_SECRET_KEY
+#   firebase apphosting:secrets:set PAYMONGO_WEBHOOK_SECRET
 # (each command prompts for the value and offers to grant access automatically).
 
 runConfig:
@@ -55,3 +57,19 @@ env:
   - variable: ADMIN_SESSION_SECRET
     secret: ADMIN_SESSION_SECRET
     availability: [BUILD, RUNTIME]
+
+  # --- PayMongo (checkout) ---
+  # RUNTIME only, unlike the FIREBASE_* secrets above: nothing at build time touches PayMongo
+  # (those need BUILD because catalog content is read during static generation), so there is no
+  # reason to expose these to the build and its logs.
+  #
+  # The webhook secret comes from the webhook resource itself, NOT the API keys page, and is shown
+  # only once when you create it. Test and live webhooks are separate resources with separate
+  # secrets — swapping to live keys means creating a live webhook too.
+  - variable: PAYMONGO_SECRET_KEY
+    secret: PAYMONGO_SECRET_KEY
+    availability: [RUNTIME]
+
+  - variable: PAYMONGO_WEBHOOK_SECRET
+    secret: PAYMONGO_WEBHOOK_SECRET
+    availability: [RUNTIME]

@@ -15,14 +15,16 @@ import type { ReactNode } from "react";
  * Built from the brand scale rather than a traffic-light palette — there is no `warning` token, and
  * `accent` is reserved for sale/savings badges (see globals.css). Weight carries the urgency
  * instead: a solid fill for "needs attention", tints for work in progress, grey once it's over.
+ * `alert` is the one exception — a failed payment is a problem, not a stage, and reads as one.
  */
-export type QueueTone = "new" | "active" | "done" | "dead";
+export type QueueTone = "new" | "active" | "done" | "dead" | "alert";
 
 const TONES: Record<QueueTone, string> = {
   new: "bg-brand-600 text-white",
   active: "bg-brand-50 text-brand-700",
   done: "bg-success/10 text-success",
   dead: "bg-elevated text-muted",
+  alert: "bg-danger/10 text-danger",
 };
 
 export function StatusBadge({ label, tone }: { label: string; tone: QueueTone }) {
@@ -35,27 +37,50 @@ export function StatusBadge({ label, tone }: { label: string; tone: QueueTone })
   );
 }
 
+/** Drop empty values, so a link never carries `?status=&payment=paid`. */
+function queryString(params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
+}
+
 /**
  * Status filter chips. Links, not buttons — the filter lives in the URL so a filtered queue can be
  * bookmarked and shared with whoever is working it. Scrolls on mobile, same as the storefront's
  * brand filter.
+ *
+ * `param` and `preserve` exist because /admin/orders has two independent filters (fulfillment and
+ * payment). Each bar writes its own key and carries the other's current value through, so picking
+ * a status doesn't silently drop the payment filter.
  */
 export function StatusFilter({
   basePath,
   active,
   options,
+  param = "status",
+  preserve,
+  allLabel = "All",
 }: {
   basePath: string;
   active?: string;
   options: { value: string; label: string }[];
+  param?: string;
+  preserve?: Record<string, string | undefined>;
+  allLabel?: string;
 }) {
+  const href = (value?: string) =>
+    `${basePath}${queryString({ ...preserve, [param]: value })}`;
+
   return (
     <div className="-mx-4 -my-1 mt-6 flex gap-2 overflow-x-auto px-4 py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
-      <Chip href={basePath} active={!active}>
-        All
+      <Chip href={href(undefined)} active={!active}>
+        {allLabel}
       </Chip>
       {options.map((o) => (
-        <Chip key={o.value} href={`${basePath}?status=${o.value}`} active={active === o.value}>
+        <Chip key={o.value} href={href(o.value)} active={active === o.value}>
           {o.label}
         </Chip>
       ))}
@@ -115,24 +140,22 @@ export function QueueRow({ href, children }: { href: string; children: ReactNode
  */
 export function QueuePager({
   basePath,
-  status,
+  params,
   lastCreatedAt,
   full,
 }: {
   basePath: string;
-  status?: string;
+  /** Every active filter, so paging doesn't drop one. Empty values are omitted. */
+  params?: Record<string, string | undefined>;
   lastCreatedAt?: number;
   full: boolean;
 }) {
   if (!full || !lastCreatedAt) return null;
 
-  const params = new URLSearchParams({ before: String(lastCreatedAt) });
-  if (status) params.set("status", status);
-
   return (
     <div className="mt-6 flex justify-center">
       <Link
-        href={`${basePath}?${params}`}
+        href={`${basePath}${queryString({ ...params, before: String(lastCreatedAt) })}`}
         className="rounded-lg border border-line bg-surface px-5 py-2.5 text-sm font-semibold text-fg hover:bg-elevated"
       >
         Show older

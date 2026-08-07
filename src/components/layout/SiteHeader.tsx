@@ -52,8 +52,8 @@ export function SiteHeader({
       {/* Promo bar */}
       <div className="relative z-40 bg-ink text-center text-xs font-medium text-white/90">
         <Container className="py-2">
-          Free nationwide shipping on orders over {formatPHP(FREE_SHIPPING_THRESHOLD)} · GCash &amp;
-          Maya coming soon
+          Free nationwide shipping on orders over {formatPHP(FREE_SHIPPING_THRESHOLD)} · Pay with
+          GCash, Maya, GrabPay, QR Ph or card
         </Container>
       </div>
 

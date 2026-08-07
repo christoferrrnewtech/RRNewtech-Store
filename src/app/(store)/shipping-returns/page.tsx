@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Container } from "@/components/ui/Container";
 import { SITE, FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
+import { FLAT_SHIPPING_FEE } from "@/lib/shipping";
 import { formatPHP } from "@/lib/format";
 
 export const metadata: Metadata = {
@@ -32,8 +33,10 @@ export default function ShippingReturnsPage() {
         <section>
           <h2 className="text-lg font-bold text-fg">Shipping fees</h2>
           <p className="mt-2">
-            Shipping is computed at checkout based on destination and order weight. Orders over{" "}
-            {formatPHP(FREE_SHIPPING_THRESHOLD)} qualify for free standard nationwide shipping.
+            Standard nationwide delivery is a flat {formatPHP(FLAT_SHIPPING_FEE)}, shown on your
+            order summary before you pay. Orders over {formatPHP(FREE_SHIPPING_THRESHOLD)} ship free.
+            Bulk or oversized equipment orders may be quoted separately — our team will confirm
+            before dispatch.
           </p>
         </section>
         <section>

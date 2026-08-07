@@ -97,6 +97,12 @@ export function storeDoc(name: string) {
 export const COLLECTIONS = {
   orders: "storeOrders",
   inquiries: "storeInquiries",
+  /**
+   * One document per PayMongo webhook event, keyed by the gateway's own event id. Written with
+   * `.create()` so a redelivery fails ALREADY_EXISTS and short-circuits — see the webhook route.
+   * Grows without bound; prune with a Firestore TTL policy on `expireAt` if it ever matters.
+   */
+  paymentEvents: "storePaymentEvents",
 } as const;
 
 /** A real collection (one doc per record), unlike storeDoc's keyed-map documents. */

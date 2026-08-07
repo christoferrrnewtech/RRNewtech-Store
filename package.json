@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "tsx scripts/seed-firestore.ts"
+    "seed": "tsx scripts/seed-firestore.ts",
+    "backfill:payments": "tsx scripts/backfill-order-payments.ts",
+    "webhook:test": "tsx scripts/paymongo-webhook.ts"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",

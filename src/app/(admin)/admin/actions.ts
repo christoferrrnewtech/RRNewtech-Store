@@ -58,7 +58,13 @@ import {
   requireUser,
 } from "@/lib/auth";
 import { getBucket } from "@/lib/firebase";
-import { setOrderStatus, setOrderNote } from "@/lib/orders";
+import {
+  applyOrderPayment,
+  getOrder,
+  setOrderNote,
+  setOrderStatus,
+} from "@/lib/orders";
+import { expireCheckoutSession, getCheckoutSession } from "@/lib/paymongo";
 import { setInquiryStatus, setInquiryNote } from "@/lib/inquiries";
 import { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import {
@@ -757,12 +763,115 @@ export async function setOrderStatusAction(
 
   try {
     await setOrderStatus(id, status);
+
+    // Cancelling an unpaid order kills its payment link too, so a customer can't pay it from a
+    // stale tab. Best effort — this legitimately fails when the session is already expired or has
+    // a payment in flight, and neither should block the cancellation.
+    if (status === "cancelled") {
+      const order = await getOrder(id);
+      if (order?.paymentStatus === "awaiting_payment" && order.checkoutSessionId) {
+        await expireCheckoutSession(order.checkoutSessionId).catch(() => false);
+      }
+    }
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not update the order." };
   }
 
   revalidateQueue("orders", id);
   return { ok: `Marked as ${ORDER_STATUS_LABELS[status].toLowerCase()}.` };
+}
+
+/**
+ * Ask PayMongo what actually happened to this order's payment.
+ *
+ * The escape hatch for when the webhook is down or was never registered. Zero risk — it only
+ * reads the gateway's own truth and feeds it through the same transaction the webhook uses.
+ */
+export async function recheckPaymentAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const id = text(form, "id");
+  if (!id) return { error: "That order no longer exists." };
+
+  try {
+    const order = await getOrder(id);
+    if (!order) return { error: "That order no longer exists." };
+    if (!order.checkoutSessionId) return { error: "This order has no PayMongo session to check." };
+
+    const session = await getCheckoutSession(order.checkoutSessionId);
+    if (!session) return { error: "PayMongo doesn't recognise that session." };
+
+    if (session.paymentStatus === "paid") {
+      const changed = await applyOrderPayment(id, {
+        paymentStatus: "paid",
+        paidAt: session.paidAt,
+        paymentMethod: session.paymentMethod,
+      });
+      revalidateQueue("orders", id);
+      return { ok: changed ? "Payment confirmed." : "Already marked paid." };
+    }
+
+    if (session.paymentStatus === "failed") {
+      await applyOrderPayment(id, { paymentStatus: "failed" });
+      revalidateQueue("orders", id);
+      return { ok: "PayMongo reports the payment failed." };
+    }
+
+    return { ok: "PayMongo has no completed payment for this order yet." };
+  } catch (err) {
+    console.error("[admin] recheck payment failed:", err);
+    return { error: "Could not reach PayMongo. Try again in a moment." };
+  }
+}
+
+/**
+ * Record a payment that happened off-platform — bank transfer, cash on pickup, or a gateway hiccup
+ * settled by hand.
+ *
+ * This exists because the alternative is editing Firestore directly, which leaves no trace at all.
+ * The guardrails matter more than the feature:
+ *
+ *   - `paymentMethod: "manual"` keeps gateway money and off-platform money distinguishable when
+ *     anyone reconciles the books
+ *   - an audit line naming the admin is appended to the order's note, so "who decided this?" has
+ *     an answer a year from now
+ *   - ONE WAY. There is no un-mark. A mistake gets another note, not rewritten history — and
+ *     `applyOrderPayment` refuses to move anything off `paid` regardless.
+ */
+export async function markOrderPaidAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  // Never rely on the UI hiding the button — authorize the action itself.
+  const user = await requireAdmin();
+
+  const id = text(form, "id");
+  if (!id) return { error: "That order no longer exists." };
+
+  try {
+    const order = await getOrder(id);
+    if (!order) return { error: "That order no longer exists." };
+    if (order.paymentStatus === "paid") return { ok: "Already marked paid." };
+
+    const changed = await applyOrderPayment(id, {
+      paymentStatus: "paid",
+      paidAt: Date.now(),
+      paymentMethod: "manual",
+    });
+    if (!changed) return { ok: "Already marked paid." };
+
+    const stamp = new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
+    const audit = `[${stamp}] Marked paid offline by ${user.email}`;
+    await setOrderNote(id, `${order.note ? `${order.note}\n` : ""}${audit}`.slice(0, MAX_NOTE));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not mark the order paid." };
+  }
+
+  revalidateQueue("orders", id);
+  return { ok: "Marked as paid offline." };
 }
 
 export async function setOrderNoteAction(

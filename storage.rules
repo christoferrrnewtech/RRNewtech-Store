@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// One Denta Cloud Storage rules.
+// Public images (blog covers, before/after gallery) are world-readable; only
+// authenticated admins may upload/replace/delete them.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'admin@onedenta.com'
+        ];
+    }
+
+    match /public/{allPaths=**} {
+      allow read: if true;
+      // Uploads/replacements must be images under 10 MB. Delete has no incoming
+      // resource, so it's a separate rule (otherwise the size/type checks on a
+      // null request.resource would block admins from deleting).
+      allow create, update: if isAdmin()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isAdmin();
+    }
+  }
+}
