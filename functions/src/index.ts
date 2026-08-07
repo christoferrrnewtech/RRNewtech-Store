@@ -5,6 +5,13 @@
  * the admin. This codebase exists only for work that has to happen when nobody is looking.
  *
  * See ./sweep-expired-payments.ts for the one job it runs today.
+ *
+ * SEPARATE PACKAGE, SEPARATE BUILD. This directory has its own package.json, node_modules and
+ * tsconfig, and is deployed with `firebase deploy --only functions` — never by the App Hosting
+ * build. The root tsconfig.json therefore lists "functions" in its `exclude`: App Hosting installs
+ * only the root dependencies, so if `next build` type-checked these files it would fail on the
+ * build machine with "Cannot find module 'firebase-functions'" while passing on any laptop that
+ * happens to have run `npm install` in here. Don't remove that exclude.
  */
 
 import {setGlobalOptions} from "firebase-functions";
