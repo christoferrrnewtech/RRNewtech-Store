@@ -9,7 +9,10 @@
     "lint": "eslint",
     "seed": "tsx scripts/seed-firestore.ts",
     "backfill:payments": "tsx scripts/backfill-order-payments.ts",
-    "webhook:test": "tsx scripts/paymongo-webhook.ts"
+    "webhook:test": "tsx scripts/paymongo-webhook.ts",
+    "test:jrs": "tsx scripts/jrs-check.ts",
+    "jrs:rate": "tsx scripts/jrs-rate.ts",
+    "sync:locations": "tsx scripts/sync-locations.ts"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",

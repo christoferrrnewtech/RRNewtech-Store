@@ -9,6 +9,7 @@ import { formatPHP } from "@/lib/format";
 import { StatusBadge, formatWhen } from "@/components/admin/Queue";
 import { orderTone, paymentTone } from "../tone";
 import { OrderControls } from "./OrderControls";
+import { JrsShipmentCard } from "./JrsShipmentCard";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -90,10 +91,16 @@ export default async function AdminOrderPage({
                 <dt className="text-muted">Subtotal</dt>
                 <dd className="font-medium text-fg">{formatPHP(order.subtotal)}</dd>
               </div>
-              <div className="flex items-baseline justify-between">
-                <dt className="text-muted">Shipping</dt>
-                <dd className="font-medium text-fg">
-                  {order.shippingFee === 0 ? "Free" : formatPHP(order.shippingFee)}
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-muted">Shipping charged</dt>
+                {/* What the CUSTOMER paid. What JRS charges us is in the Shipping (JRS) card —
+                    the two differ on every order over the free-shipping threshold. */}
+                <dd className="text-right font-medium text-fg">
+                  {order.shippingFee > 0
+                    ? formatPHP(order.shippingFee)
+                    : order.jrsShipment
+                      ? "Free (over threshold)"
+                      : "Not rated"}
                 </dd>
               </div>
               <div className="flex items-baseline justify-between border-t border-line pt-2">
@@ -235,6 +242,13 @@ export default async function AdminOrderPage({
               ))}
             </address>
           </section>
+
+          <JrsShipmentCard
+            id={order.id}
+            shipment={order.jrsShipment}
+            booking={order.jrsBooking}
+            paid={order.paymentStatus === "paid"}
+          />
         </aside>
       </div>
     </div>

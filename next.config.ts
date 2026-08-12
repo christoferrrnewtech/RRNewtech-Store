@@ -8,6 +8,13 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "6mb" },
   },
+  // `src/lib/locations.ts` reads data/ph-locations.json with a path built at RUNTIME, which Next's
+  // file tracing cannot see — so without this the file is left out of the deployed bundle and the
+  // checkout address dropdowns come up empty in production while working perfectly in dev.
+  outputFileTracingIncludes: {
+    "/checkout": ["./data/ph-locations.json"],
+    "/checkout/**": ["./data/ph-locations.json"],
+  },
   // Placeholder product imagery is served from picsum.photos in the seed catalog.
   // Swap/remove these remote patterns once real product images are hosted (Phase 4 admin).
   images: {

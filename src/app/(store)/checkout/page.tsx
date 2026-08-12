@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { isPayMongoConfigured } from "@/lib/paymongo";
 import { getOrder } from "@/lib/orders";
 import { isPayWindowOpen, PAY_COOKIE, parsePendingPayment } from "@/lib/pay-window";
+import { getProvinces } from "@/lib/locations";
 import { CheckoutClient, type PendingCheckout } from "./CheckoutClient";
 
 export const metadata: Metadata = {
@@ -31,6 +32,10 @@ export default async function CheckoutPage({
       paymentsEnabled={isPayMongoConfigured()}
       cancelled={payment === "cancelled"}
       pending={await pendingCheckout()}
+      // Rendered in, not fetched: 82 names is nothing to send, and it means the first dropdown is
+      // usable on first paint rather than after a round-trip. Cities and barangays still come from
+      // Server Actions — 42,000 barangays have no business in a page payload.
+      provinces={getProvinces()}
     />
   );
 }

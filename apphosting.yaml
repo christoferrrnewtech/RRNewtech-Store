@@ -9,6 +9,7 @@
 #   firebase apphosting:secrets:set ADMIN_SESSION_SECRET
 #   firebase apphosting:secrets:set PAYMONGO_SECRET_KEY
 #   firebase apphosting:secrets:set PAYMONGO_WEBHOOK_SECRET
+#   firebase apphosting:secrets:set JRS_API_KEY
 # (each command prompts for the value and offers to grant access automatically).
 
 runConfig:
@@ -72,4 +73,12 @@ env:
 
   - variable: PAYMONGO_WEBHOOK_SECRET
     secret: PAYMONGO_WEBHOOK_SECRET
+    availability: [RUNTIME]
+
+  # --- JRS Express (shipping rates) ---
+  # RUNTIME only, same reasoning as PayMongo: nothing at build time calls a courier, so there is no
+  # reason to expose this to the build or its logs. It is the Azure API Management subscription key
+  # sent as Ocp-Apim-Subscription-Key — server-side only, never in a browser bundle.
+  - variable: JRS_API_KEY
+    secret: JRS_API_KEY
     availability: [RUNTIME]

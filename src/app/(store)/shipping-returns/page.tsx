@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Container } from "@/components/ui/Container";
 import { SITE, FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
-import { FLAT_SHIPPING_FEE } from "@/lib/shipping";
 import { formatPHP } from "@/lib/format";
 
 export const metadata: Metadata = {
@@ -25,17 +24,18 @@ export default function ShippingReturnsPage() {
         <section>
           <h2 className="text-lg font-bold text-fg">Nationwide shipping</h2>
           <p className="mt-2">
-            We deliver to clinics and homes across the Philippines through trusted couriers, with
-            tracking on every order. Delivery typically takes 2–5 business days for Metro Manila and
-            3–7 business days for provincial addresses, depending on the courier and location.
+            We deliver to clinics and homes across the Philippines with JRS Express, with tracking on
+            every order. Delivery typically takes 2–5 business days for Metro Manila and 3–7 business
+            days for provincial addresses, depending on the location.
           </p>
         </section>
         <section>
           <h2 className="text-lg font-bold text-fg">Shipping fees</h2>
           <p className="mt-2">
-            Standard nationwide delivery is a flat {formatPHP(FLAT_SHIPPING_FEE)}, shown on your
-            order summary before you pay. Orders over {formatPHP(FREE_SHIPPING_THRESHOLD)} ship free.
-            Bulk or oversized equipment orders may be quoted separately — our team will confirm
+            Delivery is rated by JRS Express from the size and weight of your order and the city and
+            province it&apos;s going to, so you see the actual courier charge on your order summary
+            before you pay — not an estimate. Orders over {formatPHP(FREE_SHIPPING_THRESHOLD)} ship
+            free. Bulk or oversized equipment orders may be quoted separately — our team will confirm
             before dispatch.
           </p>
         </section>

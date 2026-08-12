@@ -6,6 +6,7 @@ import { saveBrandProductsAction, } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
 import { FormMessage, SubmitButton, TextArea, TextInput } from "@/components/admin/Form";
 import type { Brand, BrandProduct, StoreCategory } from "@/lib/content";
+import { isMeasured } from "@/lib/jrs-packaging";
 import { formatPHP } from "@/lib/format";
 import { Section } from "./Section";
 
@@ -157,6 +158,40 @@ function ProductRows({
 const selectClass =
   "mt-1 block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:opacity-60";
 
+/**
+ * One parcel dimension. Uncontrolled like every other field in this row — `onChange` only mirrors
+ * the value out so the status dot can react while the admin types.
+ *
+ * `step="any"` because JRS's own boxes are measured to the hundredth of a centimetre, and a control
+ * that silently rejects 4.5 would be worse than one that accepts a wrong number.
+ */
+function DimensionInput({
+  label,
+  name,
+  value,
+  onChange,
+}: {
+  label: string;
+  name: string;
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-muted">{label}</span>
+      <TextInput
+        name={name}
+        type="number"
+        min={0}
+        step="any"
+        defaultValue={value || ""}
+        onChange={(e) => onChange(Number(e.target.value) || undefined)}
+        placeholder="—"
+      />
+    </label>
+  );
+}
+
 /** One product: a collapsed summary line that expands to the full editor. */
 function ProductRow({
   row,
@@ -181,6 +216,15 @@ function ProductRow({
   // gets posted — these never feed the form, they just keep the one-liner from going stale.
   const [name, setName] = useState(row.name);
   const [price, setPrice] = useState(row.price);
+  // Same idea for the four parcel dimensions, which drive the status dot: without a mirror the dot
+  // would stay amber until the page reloads, so the admin couldn't tell whether it had worked.
+  const [dims, setDims] = useState({
+    length: row.length,
+    width: row.width,
+    height: row.height,
+    weight: row.weight,
+  });
+  const measured = isMeasured(dims);
   // A blank name means a just-added row, so start it open. Saved products always have a name.
   const [open, setOpen] = useState(!row.name);
 
@@ -212,9 +256,20 @@ function ProductRow({
         <span className="shrink-0 text-sm font-semibold tabular-nums text-muted">
           {row.contactSales ? "On request" : price > 0 ? formatPHP(price) : "—"}
         </span>
+        {/* Three states, in precedence order. Out of stock wins — nothing else matters if it
+            can't be sold. Amber is the new one: the product ships, but with no dimensions we
+            can't rate it, so its share of every order it lands in is guesswork. */}
         <span
-          title={row.inStock ? "In stock" : "Out of stock"}
-          className={`h-2 w-2 shrink-0 rounded-full ${row.inStock ? "bg-success" : "bg-muted-light"}`}
+          title={
+            !row.inStock
+              ? "Out of stock"
+              : !measured
+                ? "Missing dimensions — shipping can't be rated for this product"
+                : "In stock"
+          }
+          className={`h-2 w-2 shrink-0 rounded-full ${
+            !row.inStock ? "bg-muted-light" : !measured ? "bg-warn" : "bg-success"
+          }`}
         />
         <svg
           width="16"
@@ -337,6 +392,46 @@ function ProductRow({
                 </select>
               </label>
             </div>
+
+            {/* Parcel size, for the JRS rate at checkout. Optional, but ALL FOUR or none — a
+                product missing any one of them is invisible to the box-fitting aggregate and the
+                order falls back to declaring a 1 Pounder. Measure the item as it ships, boxed. */}
+            <div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <DimensionInput
+                  label="Length (cm)"
+                  name="productLength"
+                  value={row.length}
+                  onChange={(length) => setDims((d) => ({ ...d, length }))}
+                />
+                <DimensionInput
+                  label="Width (cm)"
+                  name="productWidth"
+                  value={row.width}
+                  onChange={(width) => setDims((d) => ({ ...d, width }))}
+                />
+                <DimensionInput
+                  label="Height (cm)"
+                  name="productHeight"
+                  value={row.height}
+                  onChange={(height) => setDims((d) => ({ ...d, height }))}
+                />
+                <DimensionInput
+                  label="Weight (g)"
+                  name="productWeight"
+                  value={row.weight}
+                  onChange={(weight) => setDims((d) => ({ ...d, weight }))}
+                />
+              </div>
+              {!measured && (
+                <p className="mt-1.5 text-xs text-warn">
+                  Fill in all four to have JRS rate this product at checkout. Without them we
+                  declare a 1 Pounder box for the whole order and JRS bills the overflow as an
+                  excess charge.
+                </p>
+              )}
+            </div>
+
             <div className="flex items-center justify-between">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <label className="flex items-center gap-2 text-sm text-fg">
