@@ -15,13 +15,18 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   aggregate,
   buildParcel,
   determineProductName,
   FALLBACK_PACKAGING,
   FALLBACK_PARCEL,
+  fitsIn2D,
+  fitsIn3D,
   isMeasured,
+  JRS_PACKAGING,
   packagingForCart,
   toParcelItem,
   type ParcelItem,
@@ -97,16 +102,19 @@ check("an empty cart aggregates to zeroes, not -Infinity", () => {
   });
 });
 
-console.log("\ndetermineProductName — first match, smallest to largest");
+console.log("\ndetermineProductName — cheapest of the boxes it physically fits");
 
 check("Express Letter: under 100 g and inside 24.13 × 16.00", () => {
   assert.equal(determineProductName([item(24, 15, 1, 90)]), "Express Letter");
 });
 
-check("Express Letter has NO thickness limit — it's a flexible pouch", () => {
-  // 20 cm tall, still a letter, because only weight and footprint are capped.
+check("Express Letter has a 2 cm depth — a 20 cm stack is not a document pouch", () => {
+  // JRS's tariff would price this as a letter without complaint (dimensions are never checked),
+  // which is exactly why the limit has to live here: the rider is the one who'd refuse it.
   const tall = Array.from({ length: 20 }, () => item(20, 12, 1, 5));
-  assert.equal(determineProductName(tall), "Express Letter");
+  assert.notEqual(determineProductName(tall), "Express Letter");
+  // Two 1 cm items still fit, at 2 cm exactly.
+  assert.equal(determineProductName([item(20, 12, 1, 5), item(20, 12, 1, 5)]), "Express Letter");
 });
 
 check("rotation independence: 15 × 24 fits the 24.13 × 16.00 letter turned round", () => {
@@ -144,10 +152,14 @@ check("a wide flat parcel skips Bulilit and lands on the 5 Pounder", () => {
   assert.equal(determineProductName([item(50, 34, 9, 2000)]), "5 Pounder");
 });
 
-check("5 Pounder respects its 10 cm lid and 2500 g cap", () => {
+check("5 Pounder: the lid is hard, the weight band is not", () => {
   assert.equal(determineProductName([item(50, 35, 10, 2500)]), "5 Pounder");
+  // Past the lid nothing fits — the footprint is too big for every other packaging.
   assert.equal(determineProductName([item(50, 35, 10.1, 2500)]), undefined);
-  assert.equal(determineProductName([item(50, 35, 10, 2501)]), undefined);
+  // Past the WEIGHT BAND is fine: JRS bills a surcharge rather than refusing, so one step over
+  // still declares a 5 Pounder. Only the physical ceiling (3000 g) ends it.
+  assert.equal(determineProductName([item(50, 35, 10, 2501)]), "5 Pounder");
+  assert.equal(determineProductName([item(50, 35, 10, 3001)]), undefined);
 });
 
 check("General Cargo (undefined) for anything past every box", () => {
@@ -163,6 +175,48 @@ check("quantity stacks: three 3 cm items break the 1 Pounder's 5 cm lid", () => 
   assert.equal(determineProductName([one]), "1 Pounder");
   assert.equal(determineProductName([one, one]), "3 Pounder"); // 6 cm > 5
   assert.equal(determineProductName([one, one, one]), "5 Pounder"); // 9 cm > 7
+});
+
+check("above every weight band, Bulilit takes it flat instead of falling to General Cargo", () => {
+  // Old rule: 3000 g exceeded every cap → General Cargo, priced by JRS at whatever it liked.
+  // Bulilit is a flat ₱367.50 up there, and 28×19×9 fits it.
+  assert.equal(determineProductName([item(28, 19, 9, 3000)]), "Bulilit Box");
+});
+
+check("cost never overrides fit — a parcel that only fits one box gets that box", () => {
+  // 50 cm long fits nothing but the 5 Pounder, and it is the dearest at this weight.
+  assert.equal(determineProductName([item(50, 34, 2, 300)]), "5 Pounder");
+});
+
+console.log("\ncost model — reproduces the measured tariff exactly");
+
+check("every reading in data/jrs-tariff.json matches the model", () => {
+  // The zone the cost model was built from. Other zones live under their own keys and are for
+  // `npm run jrs:limits -- --ratios` to compare, not for validating these numbers.
+  const ZONE = "Cebu City, Cebu";
+  let tariff: Record<string, { weight?: { at: number; baseRate: number; excess: number }[] }>;
+  try {
+    const all = JSON.parse(readFileSync(join(process.cwd(), "data", "jrs-tariff.json"), "utf8"));
+    tariff = all[ZONE] ?? {};
+  } catch {
+    console.log("      (no data/jrs-tariff.json — run `npm run jrs:limits:*` to regenerate)");
+    return;
+  }
+
+  let compared = 0;
+  for (const box of JRS_PACKAGING) {
+    for (const reading of tariff[box.name]?.weight ?? []) {
+      // The probe's own numbers: base plus whatever surcharge JRS added.
+      const measured = reading.baseRate + reading.excess;
+      assert.equal(
+        box.cost(reading.at),
+        measured,
+        `${box.name} at ${reading.at}g: model says ${box.cost(reading.at)}, JRS charged ${measured}`,
+      );
+      compared++;
+    }
+  }
+  assert.ok(compared >= 16, `only ${compared} readings compared — is the tariff file complete?`);
 });
 
 console.log("\npackagingForCart — the fallback floor when something is unmeasured");
@@ -235,8 +289,10 @@ check("expands by quantity, one entry per unit", () => {
     height: 1,
     weight: 300,
   });
-  // 3 cm of stack, 900 g — past the 1 Pounder's 500 g cap, inside the 3 Pounder.
-  assert.equal(packagingName, "3 Pounder");
+  // 3 cm of stack, 900 g. THE ₱63.50 CASE: 900 g is past the 1 Pounder's 500 g band, and the old
+  // "smallest that fits" rule stepped up to a 3 Pounder at ₱293. One surcharge step on a
+  // 1 Pounder is ₱229.50, so staying put and paying it is cheaper — and it still physically fits.
+  assert.equal(packagingName, "1 Pounder");
 });
 
 check("unmeasured units collapse into ONE remainder carrying their whole declared value", () => {
@@ -245,17 +301,112 @@ check("unmeasured units collapse into ONE remainder carrying their whole declare
     { price: 250, quantity: 4, parcel: undefined },
   ]);
   assert.equal(shipmentItems.length, 2, "one measured entry + one remainder, not five");
-  assert.deepEqual(shipmentItems[1], { declaredValue: 1000, ...FALLBACK_PARCEL });
+  assert.equal(shipmentItems[1].declaredValue, 1000, "all four unmeasured units' value");
   // The measured item alone would be a 1 Pounder; the floor raises it.
   assert.equal(packagingName, FALLBACK_PACKAGING);
 });
 
-check("a wholly unmeasured cart is one fallback entry at the full order value", () => {
+check("the remainder fills the allowance rather than adding to it", () => {
+  // THE REGRESSION: a flat 500 g remainder on top of 300 g measured declares 800 g inside a 500 g
+  // box, and JRS bills the 300 g overflow as Excess — a charge we invented ourselves.
+  const { shipmentItems } = buildParcel([
+    { price: 500, quantity: 1, parcel: item(20, 14, 1, 300) },
+    { price: 250, quantity: 1, parcel: undefined },
+  ]);
+  assert.equal(shipmentItems[1].weight, 200, "500 g allowance − 300 g measured");
+  assert.equal(shipmentItems[1].height, 4, "5 cm lid − 1 cm measured");
+  assert.equal(
+    shipmentItems.reduce((sum, i) => sum + i.weight, 0),
+    FALLBACK_PARCEL.weight,
+    "the whole declaration comes to exactly one 1 Pounder",
+  );
+});
+
+check("a used-up allowance collapses the remainder instead of going negative", () => {
+  // Measured items already past the 1 Pounder: the remainder must not be a negative weight, and
+  // the packaging has moved up a size anyway so there is nothing left to reserve.
+  const { shipmentItems, packagingName } = buildParcel([
+    { price: 500, quantity: 1, parcel: item(30, 20, 6, 900) },
+    { price: 250, quantity: 1, parcel: undefined },
+  ]);
+  assert.ok(shipmentItems[1].weight > 0, "never zero or negative — JRS can't price that");
+  assert.ok(shipmentItems[1].height > 0);
+  assert.equal(packagingName, "3 Pounder", "the floor raises, it never caps");
+});
+
+check("a wholly unmeasured cart is one entry at the full allowance and order value", () => {
   const { shipmentItems, packagingName } = buildParcel([
     { price: 300, quantity: 2, parcel: undefined },
   ]);
   assert.deepEqual(shipmentItems, [{ declaredValue: 600, ...FALLBACK_PARCEL }]);
   assert.equal(packagingName, FALLBACK_PACKAGING);
+});
+
+check("a remainder that overflows the named box steps UP a size instead of paying excess", () => {
+  // Measured item fills the 3 Pounder's 7 cm lid exactly. Choosing from `measured` alone would
+  // name the 3 Pounder, then the remainder's 1 cm would make the declared stack 8 cm — 1 cm of
+  // overflow inside a box we just told JRS it fits in, billed straight back to us as Excess.
+  const { packagingName } = buildParcel([
+    { price: 500, quantity: 1, parcel: item(45, 34, 7, 1400) },
+    { price: 250, quantity: 1, parcel: undefined },
+  ]);
+  assert.equal(packagingName, "5 Pounder", "stepped up rather than overflowing the 3 Pounder");
+});
+
+check("NO EXCESS: whatever we declare always fits the box we name it in", () => {
+  // The property the whole design exists to guarantee, checked across every cart shape rather
+  // than one example — this is the assertion that would catch a regression anywhere above.
+  const carts: [string, Parameters<typeof buildParcel>[0]][] = [
+    ["single tiny measured", [{ price: 100, quantity: 1, parcel: item(10, 8, 1, 20) }]],
+    ["letter-sized measured", [{ price: 100, quantity: 1, parcel: item(20, 14, 1, 40) }]],
+    ["quantity stack", [{ price: 100, quantity: 6, parcel: item(20, 14, 1, 40) }]],
+    ["all unmeasured", [{ price: 100, quantity: 3, parcel: undefined }]],
+    ["mixed, small measured", [
+      { price: 100, quantity: 1, parcel: item(20, 14, 1, 40) },
+      { price: 100, quantity: 2, parcel: undefined },
+    ]],
+    ["mixed, lid exactly full", [
+      { price: 100, quantity: 1, parcel: item(45, 34, 7, 1400) },
+      { price: 100, quantity: 1, parcel: undefined },
+    ]],
+    ["mixed, allowance used up", [
+      { price: 100, quantity: 1, parcel: item(30, 20, 6, 900) },
+      { price: 100, quantity: 1, parcel: undefined },
+    ]],
+    ["mixed, deep and narrow", [
+      { price: 100, quantity: 1, parcel: item(28, 19, 9, 2000) },
+      { price: 100, quantity: 1, parcel: undefined },
+    ]],
+    ["oversized measured", [{ price: 100, quantity: 1, parcel: item(120, 80, 60, 40000) }]],
+  ];
+
+  for (const [label, lines] of carts) {
+    const { shipmentItems, packagingName } = buildParcel(lines);
+    // General Cargo declares no packaging, so there is nothing to overflow.
+    if (packagingName === undefined) continue;
+
+    const box = JRS_PACKAGING.find((p) => p.name === packagingName)!;
+    const parcel = aggregate(shipmentItems);
+
+    assert.ok(
+      parcel.totalWeight <= box.maxWeight,
+      `${label}: declared ${parcel.totalWeight}g in a ${box.name} (${box.maxWeight}g cap)`,
+    );
+    const fits =
+      box.fit.kind === "2d"
+        ? fitsIn2D(parcel, box.fit.a, box.fit.b, box.fit.maxThickness)
+        : fitsIn3D(parcel, box.fit.a, box.fit.b, box.fit.c);
+    assert.ok(fits, `${label}: declared parcel does not fit the ${box.name} it was named as`);
+  }
+});
+
+check("an all-measured cart still gets the SMALLEST box that fits, never the floor", () => {
+  // 40 g and letter-sized — no unmeasured line, so nothing raises it off the Express Letter.
+  assert.equal(buildParcel([{ price: 500, quantity: 1, parcel: item(20, 14, 1, 40) }]).packagingName,
+    "Express Letter");
+  // …and the 100 g cap is what moves it up, not the floor: 3 × 40 g = 120 g.
+  assert.equal(buildParcel([{ price: 500, quantity: 3, parcel: item(20, 14, 1, 40) }]).packagingName,
+    "1 Pounder");
 });
 
 check("a fully measured cart adds no remainder entry", () => {
@@ -344,6 +495,52 @@ check("express is always false and productName is OMITTED for General Cargo", ()
     packagingName: undefined,
   });
   assert.equal("productName" in cargo, false, "absent, not empty — an empty string is a value");
+});
+
+
+console.log("\nzone independence — the Cebu cost model has to hold nationwide");
+
+check("every probed zone picks the same cheapest box, from measured readings only", () => {
+  let all: Record<string, Record<string, { weight?: { at: number; baseRate: number; excess: number }[] }>>;
+  try {
+    all = JSON.parse(readFileSync(join(process.cwd(), "data", "jrs-tariff.json"), "utf8"));
+  } catch {
+    console.log("      (no data/jrs-tariff.json)");
+    return;
+  }
+
+  const zones = Object.keys(all).filter((z) =>
+    JRS_PACKAGING.every((p) => all[z][p.name]?.weight?.length),
+  );
+  if (zones.length < 2) {
+    console.log(`      (only ${zones.length} fully-probed zone — nothing to compare)`);
+    return;
+  }
+
+  const at = (zone: string, name: string, grams: number) => {
+    const row = all[zone][name].weight!.find((r) => r.at === grams);
+    return row ? row.baseRate + row.excess : undefined;
+  };
+
+  const grams = [
+    ...new Set(zones.flatMap((z) => JRS_PACKAGING.flatMap((p) => all[z][p.name].weight!.map((r) => r.at)))),
+  ].sort((a, b) => a - b);
+
+  let compared = 0;
+  for (const g of grams) {
+    const usable = JRS_PACKAGING.filter((p) => zones.every((z) => at(z, p.name, g) !== undefined));
+    if (usable.length < 2) continue;
+    compared++;
+    const picks = zones.map(
+      (z) => usable.reduce((best, p) => (at(z, p.name, g)! < at(z, best.name, g)! ? p : best)).name,
+    );
+    assert.equal(
+      new Set(picks).size,
+      1,
+      `at ${g}g the zones disagree: ${zones.map((z, i) => `${z}→${picks[i]}`).join(", ")}`,
+    );
+  }
+  assert.ok(compared >= 4, `only ${compared} comparable weights — probe more zones`);
 });
 
 console.log(
