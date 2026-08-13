@@ -13,14 +13,16 @@ export async function SiteFooter() {
       <Container className="grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <div className="flex items-center gap-3">
-            {/* Clear space: logo sits in a Clinical White tile with room to breathe (manual §Clear Space) */}
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white p-1.5">
+            {/* The logo already carries its own brand-blue field, so the Clinical White tile is only
+                a hairline edge separating it from the ink footer — hence p-0.5, not real clear space.
+                Inner radius is one step down from the tile's so the blue corners follow the curve. */}
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white p-0.5">
               <Image
                 src="/brand/logo.png"
                 alt={`${SITE.name} logo`}
-                width={28}
-                height={28}
-                className="h-7 w-7 rounded"
+                width={36}
+                height={36}
+                className="h-full w-full rounded-md"
               />
             </span>
             <span className="text-base font-bold text-white">Newtech Dental</span>
@@ -64,7 +66,13 @@ export async function SiteFooter() {
                 {SITE.email}
               </a>
             </li>
-            <li className="text-white/70">{SITE.phone}</li>
+            {SITE.phones.map((p) => (
+              <li key={p.tel}>
+                <a href={`tel:${p.tel}`} className="text-white/70 hover:text-white">
+                  {p.label ? `${p.label}: ${p.value}` : p.value}
+                </a>
+              </li>
+            ))}
             <li className="text-white/50">{SITE.supportLine}</li>
           </ul>
           <div className="mt-5 flex gap-3">
@@ -84,9 +92,11 @@ export async function SiteFooter() {
       </Container>
 
       <div className="border-t border-white/10">
-        <Container className="flex flex-col gap-2 py-6 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {year} {SITE.legalName}. All rights reserved.</p>
-          <div className="flex gap-4">
+        {/* Three tracks so the © centres against the full container width rather than against
+            whatever is left over beside the links; column 1 stays empty. */}
+        <Container className="flex flex-col items-center gap-2 py-6 text-xs text-white/50 sm:grid sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+          <p className="sm:col-start-2 sm:text-center">© {year} {SITE.legalName}. All rights reserved.</p>
+          <div className="flex gap-4 sm:col-start-3 sm:justify-end">
             <Link href="/privacy" className="hover:text-white/80">Privacy</Link>
             <Link href="/terms" className="hover:text-white/80">Terms</Link>
           </div>

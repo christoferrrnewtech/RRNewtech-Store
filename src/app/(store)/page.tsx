@@ -94,7 +94,7 @@ export default async function HomePage({
 
       {isUnfiltered && <HomeCatalog view={activeView} />}
 
-      {isUnfiltered && <DigitalDentistryPromo />}
+      {SECTIONS.digitalDentistry && isUnfiltered && <DigitalDentistryPromo />}
 
       {/* A filtered/search view always shows its results — the flag only hides the plain catalog. */}
       {(SECTIONS.allProducts || !isUnfiltered) && (

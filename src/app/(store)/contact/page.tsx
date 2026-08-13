@@ -102,7 +102,13 @@ export default async function ContactPage({
             </div>
             <div>
               <dt className="text-muted-light">Phone</dt>
-              <dd className="font-medium text-fg">{SITE.phone}</dd>
+              {SITE.phones.map((p) => (
+                <dd key={p.tel} className="font-medium text-fg">
+                  <a href={`tel:${p.tel}`} className="hover:text-brand-700">
+                    {p.label ? `${p.label}: ${p.value}` : p.value}
+                  </a>
+                </dd>
+              ))}
             </div>
             <div>
               <dt className="text-muted-light">Support hours</dt>

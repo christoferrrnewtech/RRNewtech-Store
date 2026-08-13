@@ -10,6 +10,17 @@ export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL || "https://rrnewtech.ph"
 ).replace(/\/$/, "");
 
+/**
+ * Published contact numbers, primary first — the first entry is what structured data advertises.
+ * Declared above SITE because an `as const` object literal can't reference itself.
+ * `value` is what's shown; `tel` is the E.164 form for the link.
+ */
+export const PHONES: { label?: string; value: string; tel: string }[] = [
+  { value: "+63 917 828 7256", tel: "+639178287256" },
+  { value: "+63 917 828 7353", tel: "+639178287353" },
+  { label: "Landline", value: "(02) 7917 5657", tel: "+63279175657" },
+];
+
 export const SITE = {
   name: "R&R Newtech Dental",
   legalName: "R&R Newtech Dental Corporation",
@@ -18,13 +29,13 @@ export const SITE = {
   tagline: "Trusted dental supplies, delivered across the Philippines.",
   description:
     "R&R Newtech Dental Corporation is your online source for quality dental supplies, equipment, and consumables — competitive prices, fast nationwide delivery, and secure GCash, Maya, GrabPay, QR Ph & card payments.",
-  email: "sales@rrnewtech.ph",
-  phone: "+63 (2) 8000 0000",
+  email: "rrnewtechdentalcorp@gmail.com",
+  phones: PHONES,
   supportLine: "PH-based support — Mon–Sat, Philippine time",
   socials: {
-    facebook: "https://facebook.com/rrnewtechdental",
-    instagram: "https://instagram.com/rrnewtechdental",
-    linkedin: "https://linkedin.com/company/rrnewtechdental",
+    facebook: "https://www.facebook.com/rnrnewtechdentalcorp",
+    instagram: "https://www.instagram.com/rrnewtechdentalcorp/",
+    linkedin: "https://www.linkedin.com/company/rrnewtech/about/",
   },
 } as const;
 
@@ -55,12 +66,14 @@ export const BRAND_GROUP_MAP: Record<BrandGroup, { label: string; tag: string }>
 
 /**
  * Temporary visibility switches for the soft launch — the landing page is cut back to
- * banner → Our Brands → Digital Dentistry while the catalog is still being built out.
+ * banner → About → Our Brands while the catalog is still being built out.
  * Flip a flag to true to bring that section back; the components themselves are untouched.
  */
 export const SECTIONS = {
+  promoBar: false, // Free-shipping/payments strip above the header
   categoryCircles: false, // "Shop by category" row under the banner
   categoryNav: true, // "Categories" mega-menu in the header (desktop + mobile)
+  digitalDentistry: false, // "Featured · Digital Dentistry" promo shelf on the landing view
   allProducts: false, // "All Products" catalog on the *unfiltered* landing view
 } as const;
 
@@ -115,6 +128,6 @@ export const FAQS = [
   },
   {
     q: "How can I reach your team?",
-    a: "Email sales@rrnewtech.ph or use the Contact page. We reply Monday to Saturday, Philippine time.",
+    a: `Email ${SITE.email} or use the Contact page. We reply Monday to Saturday, Philippine time.`,
   },
 ] as const;

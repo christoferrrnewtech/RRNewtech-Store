@@ -128,7 +128,7 @@ function HeroSection({ brand }: { brand: Brand }) {
       )}
       <form action={action} className="space-y-4">
         <input type="hidden" name="slug" value={brand.slug} />
-        <Field label="Upload image" hint="PNG, JPG or WebP · up to 5 MB. Wide crops work best (3:1).">
+        <Field label="Upload image" hint="PNG, JPG or WebP · up to 5 MB. Use 1489 × 551 (or any 2.7:1 crop) — that's the band's exact shape, so nothing gets cut off.">
           <TextInput type="file" name="heroImage" accept="image/png,image/jpeg,image/webp" />
         </Field>
         <div className="flex items-center gap-4">

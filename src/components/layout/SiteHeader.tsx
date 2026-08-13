@@ -50,12 +50,14 @@ export function SiteHeader({
   return (
     <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
       {/* Promo bar */}
-      <div className="relative z-40 bg-ink text-center text-xs font-medium text-white/90">
-        <Container className="py-2">
-          Free nationwide shipping on orders over {formatPHP(FREE_SHIPPING_THRESHOLD)} · Pay with
-          GCash, Maya, GrabPay, QR Ph or card
-        </Container>
-      </div>
+      {SECTIONS.promoBar && (
+        <div className="relative z-40 bg-ink text-center text-xs font-medium text-white/90">
+          <Container className="py-2">
+            Free nationwide shipping on orders over {formatPHP(FREE_SHIPPING_THRESHOLD)} · Pay with
+            GCash, Maya, GrabPay, QR Ph or card
+          </Container>
+        </div>
+      )}
 
       <div className="border-b border-line" onMouseLeave={() => setActiveMenu(null)}>
         <div className="relative z-40 bg-surface">

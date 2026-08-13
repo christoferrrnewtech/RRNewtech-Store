@@ -62,11 +62,12 @@ export default async function BrandPage({
 
   return (
     <>
-      {/* Full-bleed brand band, flush under the sticky header. Fixed heights rather than an
-          aspect ratio: at 16:5 a wide viewport renders a ~625px slab, mostly empty for the
-          brands that have no hero artwork. Those get the brand gradient instead, so every
-          brand page shares one structure. */}
-      <section className="relative h-[200px] w-full overflow-hidden bg-brand-900 sm:h-[280px] lg:h-[340px]">
+      {/* Full-bleed brand band, flush under the sticky header. Shares the storefront hero's
+          1489/551 box (see BannerCarousel) so a brand page opens at the same height as the
+          landing page — the earlier fixed heights showed only ~half of a typical hero upload.
+          Brands with no artwork get the brand gradient at that same height, keeping one
+          structure across every brand page. */}
+      <section className="relative aspect-[1489/551] w-full overflow-hidden bg-brand-900">
         {brand.heroImage ? (
           <Image src={brand.heroImage} alt="" fill sizes="100vw" className="object-cover" priority />
         ) : (
