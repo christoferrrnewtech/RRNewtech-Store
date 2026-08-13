@@ -17,7 +17,7 @@ export const SITE = {
   url: SITE_URL,
   tagline: "Trusted dental supplies, delivered across the Philippines.",
   description:
-    "R&R Newtech Dental Corporation is your online source for quality dental supplies, equipment, and consumables — competitive prices, fast nationwide delivery, and GCash, Maya & card payments.",
+    "R&R Newtech Dental Corporation is your online source for quality dental supplies, equipment, and consumables — competitive prices, fast nationwide delivery, and secure GCash, Maya, GrabPay, QR Ph & card payments.",
   email: "sales@rrnewtech.ph",
   phone: "+63 (2) 8000 0000",
   supportLine: "PH-based support — Mon–Sat, Philippine time",
@@ -28,7 +28,10 @@ export const SITE = {
   },
 } as const;
 
-/** Free-shipping threshold shown in the promo bar and cart (display-only in Phase 1). */
+/**
+ * Free-shipping threshold, shown in the promo bar and cart AND actually charged against — see
+ * `quoteShipping()` in lib/shipping.ts, which is the single place the fee is decided.
+ */
 export const FREE_SHIPPING_THRESHOLD = 3000;
 
 /**
@@ -81,7 +84,7 @@ export const TRUST_POINTS = [
   },
   {
     title: "Pay how you want",
-    body: "GCash, Maya, cards, and bank transfer — secure checkout (coming soon).",
+    body: "GCash, Maya, GrabPay, QR Ph or card at checkout, secured by PayMongo.",
   },
   {
     title: "Bulk & clinic pricing",
@@ -96,7 +99,7 @@ export const FAQS = [
   },
   {
     q: "How do I place an order?",
-    a: "Browse the shop, add items to your cart, and review them anytime. Online checkout with GCash, Maya, and card payment is rolling out soon; in the meantime you can send your cart as an inquiry and our team will confirm stock and delivery.",
+    a: "Browse the shop, add items to your cart, then check out with your delivery details. We'll show you a summary and take you to PayMongo to pay with GCash, Maya, GrabPay, QR Ph or card. For bulk orders or items priced on request, send us an inquiry instead and our team will quote you.",
   },
   {
     q: "Do you deliver nationwide?",
@@ -107,8 +110,8 @@ export const FAQS = [
     a: "We do. Dental practices ordering in volume get better rates — contact our sales team for a quotation.",
   },
   {
-    q: "What payment methods will be accepted?",
-    a: "GCash, Maya, major cards, and bank transfer via a secure Philippine payment gateway. This is being finalized now.",
+    q: "What payment methods do you accept?",
+    a: "GCash, Maya, GrabPay, QR Ph, and major credit or debit cards — all processed securely by PayMongo, so we never see or store your card details. Bank transfer is available for bulk orders; contact our team to arrange it.",
   },
   {
     q: "How can I reach your team?",

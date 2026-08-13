@@ -43,6 +43,7 @@ import {
   updateUserBrands,
   deleteAdminUserDoc,
   nextBrandOrder,
+  getBrandBySlug,
   type Brand,
   type BrandProduct,
   type GalleryImage,
@@ -58,7 +59,19 @@ import {
   requireUser,
 } from "@/lib/auth";
 import { getBucket } from "@/lib/firebase";
-import { setOrderStatus, setOrderNote } from "@/lib/orders";
+import {
+  applyOrderPayment,
+  getOrder,
+  setOrderJrsBooking,
+  setOrderJrsShipment,
+  setOrderNote,
+  setOrderStatus,
+  type JrsShipment,
+  type Order,
+} from "@/lib/orders";
+import { expireCheckoutSession, getCheckoutSession } from "@/lib/paymongo";
+import { bookJrsShipment, getJrsRate, isJrsConfigured, RATE_ORIGIN } from "@/lib/jrs";
+import { buildParcel, toParcelItem } from "@/lib/jrs-packaging";
 import { setInquiryStatus, setInquiryNote } from "@/lib/inquiries";
 import { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import {
@@ -533,6 +546,21 @@ function parseGalleryJson(raw: string): GalleryImage[] {
   }
 }
 
+/**
+ * One posted parcel dimension, or `undefined` for "not measured".
+ *
+ * `decimals` defaults to 2 because JRS's own packaging is specified to the hundredth of a
+ * centimetre; weight passes 0, since a gram is already the smallest unit its caps use. Anything
+ * blank, zero, negative or unparseable is absent rather than 0 — the box-fitting aggregate treats a
+ * 0 cm side as missing data, and storing it would be a lie that looks like a measurement.
+ */
+function dimension(raw: string, decimals = 2): number | undefined {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const factor = 10 ** decimals;
+  return Math.round(n * factor) / factor;
+}
+
 export async function saveBrandProductsAction(_prev: ActionState, form: FormData) {
   return saveBrandSection(
     form,
@@ -545,6 +573,10 @@ export async function saveBrandProductsAction(_prev: ActionState, form: FormData
       const summaries = form.getAll("productSummary").map(String);
       const categories = form.getAll("productCategory").map(String);
       const subcategories = form.getAll("productSubcategory").map(String);
+      const lengths = form.getAll("productLength").map(String);
+      const widths = form.getAll("productWidth").map(String);
+      const heights = form.getAll("productHeight").map(String);
+      const weights = form.getAll("productWeight").map(String);
       const allCategories = await getCategories();
       const descriptions = form.getAll("productDescription").map(String);
       const highlightsRaw = form.getAll("productHighlights").map(String);
@@ -634,6 +666,13 @@ export async function saveBrandProductsAction(_prev: ActionState, form: FormData
           compareAtPrice: compareAt > price ? compareAt : undefined,
           category,
           subcategory,
+          // Optional, and `undefined` is the right absent value: Firestore runs with
+          // `ignoreUndefinedProperties`, so a blank field simply isn't written, and nothing queries
+          // these. Zero and negative are treated as blank — they're missing data, not a flat item.
+          length: dimension(lengths[i] ?? ""),
+          width: dimension(widths[i] ?? ""),
+          height: dimension(heights[i] ?? ""),
+          weight: dimension(weights[i] ?? "", 0),
           summary: (summaries[i] ?? "").trim() || undefined,
           description: description.length ? description : undefined,
           highlights: highlights.length ? highlights : undefined,
@@ -757,12 +796,115 @@ export async function setOrderStatusAction(
 
   try {
     await setOrderStatus(id, status);
+
+    // Cancelling an unpaid order kills its payment link too, so a customer can't pay it from a
+    // stale tab. Best effort — this legitimately fails when the session is already expired or has
+    // a payment in flight, and neither should block the cancellation.
+    if (status === "cancelled") {
+      const order = await getOrder(id);
+      if (order?.paymentStatus === "awaiting_payment" && order.checkoutSessionId) {
+        await expireCheckoutSession(order.checkoutSessionId).catch(() => false);
+      }
+    }
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not update the order." };
   }
 
   revalidateQueue("orders", id);
   return { ok: `Marked as ${ORDER_STATUS_LABELS[status].toLowerCase()}.` };
+}
+
+/**
+ * Ask PayMongo what actually happened to this order's payment.
+ *
+ * The escape hatch for when the webhook is down or was never registered. Zero risk — it only
+ * reads the gateway's own truth and feeds it through the same transaction the webhook uses.
+ */
+export async function recheckPaymentAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const id = text(form, "id");
+  if (!id) return { error: "That order no longer exists." };
+
+  try {
+    const order = await getOrder(id);
+    if (!order) return { error: "That order no longer exists." };
+    if (!order.checkoutSessionId) return { error: "This order has no PayMongo session to check." };
+
+    const session = await getCheckoutSession(order.checkoutSessionId);
+    if (!session) return { error: "PayMongo doesn't recognise that session." };
+
+    if (session.paymentStatus === "paid") {
+      const changed = await applyOrderPayment(id, {
+        paymentStatus: "paid",
+        paidAt: session.paidAt,
+        paymentMethod: session.paymentMethod,
+      });
+      revalidateQueue("orders", id);
+      return { ok: changed ? "Payment confirmed." : "Already marked paid." };
+    }
+
+    if (session.paymentStatus === "failed") {
+      await applyOrderPayment(id, { paymentStatus: "failed" });
+      revalidateQueue("orders", id);
+      return { ok: "PayMongo reports the payment failed." };
+    }
+
+    return { ok: "PayMongo has no completed payment for this order yet." };
+  } catch (err) {
+    console.error("[admin] recheck payment failed:", err);
+    return { error: "Could not reach PayMongo. Try again in a moment." };
+  }
+}
+
+/**
+ * Record a payment that happened off-platform — bank transfer, cash on pickup, or a gateway hiccup
+ * settled by hand.
+ *
+ * This exists because the alternative is editing Firestore directly, which leaves no trace at all.
+ * The guardrails matter more than the feature:
+ *
+ *   - `paymentMethod: "manual"` keeps gateway money and off-platform money distinguishable when
+ *     anyone reconciles the books
+ *   - an audit line naming the admin is appended to the order's note, so "who decided this?" has
+ *     an answer a year from now
+ *   - ONE WAY. There is no un-mark. A mistake gets another note, not rewritten history — and
+ *     `applyOrderPayment` refuses to move anything off `paid` regardless.
+ */
+export async function markOrderPaidAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  // Never rely on the UI hiding the button — authorize the action itself.
+  const user = await requireAdmin();
+
+  const id = text(form, "id");
+  if (!id) return { error: "That order no longer exists." };
+
+  try {
+    const order = await getOrder(id);
+    if (!order) return { error: "That order no longer exists." };
+    if (order.paymentStatus === "paid") return { ok: "Already marked paid." };
+
+    const changed = await applyOrderPayment(id, {
+      paymentStatus: "paid",
+      paidAt: Date.now(),
+      paymentMethod: "manual",
+    });
+    if (!changed) return { ok: "Already marked paid." };
+
+    const stamp = new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" });
+    const audit = `[${stamp}] Marked paid offline by ${user.email}`;
+    await setOrderNote(id, `${order.note ? `${order.note}\n` : ""}${audit}`.slice(0, MAX_NOTE));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not mark the order paid." };
+  }
+
+  revalidateQueue("orders", id);
+  return { ok: "Marked as paid offline." };
 }
 
 export async function setOrderNoteAction(
@@ -782,6 +924,151 @@ export async function setOrderNoteAction(
 
   revalidateQueue("orders", id);
   return { ok: "Note saved." };
+}
+
+/**
+ * Book the JRS shipment for an order — the "Create shipping order" button.
+ *
+ * THE WHOLE POINT is that this does not re-quote. Checkout froze the exact rate request onto the
+ * order as `jrsShipment`, and that payload is replayed verbatim: same packaging, same items, same
+ * addresses. Re-deriving it here would read today's product dimensions against today's tariff, and
+ * the customer was charged against neither — they'd get a box we never priced.
+ *
+ * The live-quote branch exists only for orders placed before `jrsShipment` existed. It quotes,
+ * STORES what it quoted, then books from it — so even a retry after a failure replays a frozen
+ * payload rather than asking for a third rate.
+ *
+ * `order.shippingFee` is never touched. Whatever JRS charges now, the customer paid what they were
+ * quoted; a courier price change is the business's to absorb, not something to bill retroactively.
+ */
+export async function createJrsShipmentAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  // Never rely on the UI hiding the button — authorize the action itself.
+  await requireAdmin();
+
+  const id = text(form, "id");
+  if (!id) return { error: "That order no longer exists." };
+
+  try {
+    const order = await getOrder(id);
+    if (!order) return { error: "That order no longer exists." };
+
+    // A non-empty waybill IS the guard. Booking twice means two riders and two charges.
+    if (order.jrsBooking?.waybillNumber) {
+      return { ok: `Already booked — waybill ${order.jrsBooking.waybillNumber}.` };
+    }
+    if (!isJrsConfigured()) return { error: "JRS is not configured on this deployment." };
+
+    let shipment = order.jrsShipment;
+    let quotedNow = false;
+
+    if (!shipment) {
+      shipment = await quoteOrderLive(order);
+      await setOrderJrsShipment(id, shipment);
+      quotedNow = true;
+    }
+
+    const booking = await bookJrsShipment({
+      shipment,
+      recipientName: `${order.customer.firstName} ${order.customer.lastName}`.trim(),
+      recipientPhone: order.customer.phone,
+      recipientEmail: order.customer.email,
+      recipientFullAddress: fullAddress(order),
+      reference: order.ref,
+    });
+
+    await setOrderJrsBooking(id, {
+      bookedAt: Date.now(),
+      waybillNumber: booking.waybillNumber,
+      error: "",
+      rawResponse: booking.rawResponse,
+    });
+
+    revalidateQueue("orders", id);
+    const quoted = quotedNow ? " (quoted fresh — this order predates stored shipments)" : "";
+    return {
+      ok: booking.waybillNumber
+        ? `Shipment booked — waybill ${booking.waybillNumber}.${quoted}`
+        : `Shipment booked, but JRS returned no waybill number.${quoted}`,
+    };
+  } catch (err) {
+    console.error("[admin] JRS booking failed:", err);
+    // Recorded on the order so the failure survives the page refresh that hides this message.
+    await setOrderJrsBooking(id, {
+      bookedAt: 0,
+      waybillNumber: "",
+      error: err instanceof Error ? err.message : String(err),
+      rawResponse: "",
+    }).catch(() => {});
+    revalidateQueue("orders", id);
+    return { error: "JRS refused the booking. The reason is on the order — try again in a moment." };
+  }
+}
+
+/** Street address for the rider, as opposed to the "City, Province" the rate was quoted against. */
+function fullAddress(order: Order): string {
+  return [
+    order.shipping.address,
+    order.shipping.apartment,
+    order.shipping.barangay,
+    order.shipping.city,
+    order.shipping.region,
+    order.shipping.postal,
+  ]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * Quote an order that never stored a rate — legacy orders only.
+ *
+ * Dimensions aren't on the order document (they were transient at checkout), so they're re-read
+ * from the brand's CURRENT products, exactly the way `reprice()` resolves a cart line. A product
+ * that has since been deleted or renamed simply comes back unmeasured, which the fallback parcel
+ * absorbs rather than failing on.
+ */
+async function quoteOrderLive(order: Order): Promise<JrsShipment> {
+  const brandSlugs = new Set(
+    order.lines
+      .filter((l) => l.source === "brand")
+      .map((l) => /^\/brands\/([^/]+)\//.exec(l.href)?.[1] ?? "")
+      .filter(Boolean),
+  );
+  const brands = new Map(
+    (await Promise.all([...brandSlugs].map((slug) => getBrandBySlug(slug))))
+      .filter((b) => b !== undefined)
+      .map((b) => [b.slug, b]),
+  );
+
+  const { shipmentItems, packagingName } = buildParcel(
+    order.lines.map((line) => {
+      const brand = brands.get(/^\/brands\/([^/]+)\//.exec(line.href)?.[1] ?? "");
+      const product = brand?.products.find((p) => p.id === line.id);
+      return { price: line.price, quantity: line.quantity, parcel: toParcelItem(product) };
+    }),
+  );
+
+  const recipient = [order.shipping.city, order.shipping.region].filter(Boolean).join(", ");
+  const rate = await getJrsRate({ recipient, shipmentItems, packagingName });
+
+  return {
+    packagingName: packagingName ?? null,
+    shipmentItems,
+    shipperAddressLine1: RATE_ORIGIN,
+    recipientAddressLine1: recipient,
+    express: false,
+    insurance: true,
+    valuation: true,
+    codAmountToCollect: 0,
+    shippingCost: rate.shippingCost,
+    insuranceCost: rate.insuranceCost,
+    valuationCost: rate.valuationCost,
+    quotedAt: Date.now(),
+    rawResponse: rate.rawResponse,
+  };
 }
 
 export async function setInquiryStatusAction(

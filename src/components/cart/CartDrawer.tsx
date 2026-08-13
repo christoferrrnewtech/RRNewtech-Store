@@ -6,10 +6,12 @@ import { useEffect } from "react";
 import { useCart, MAX_QUANTITY } from "@/lib/cart";
 import { formatPHP } from "@/lib/format";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
+import { PAYMENT_METHODS_SENTENCE } from "@/lib/payment-methods";
 
 /**
- * Slide-over cart. Phase 1 has no checkout: the primary action sends the cart as an inquiry
- * (Contact page) while online payment (PayMongo) is finalized in Phase 2.
+ * Slide-over cart. The primary action goes to checkout, which collects delivery details and hands
+ * off to PayMongo for payment; sending the cart as an inquiry (Contact page) remains
+ * for bulk and contact-sales enquiries.
  */
 export function CartDrawer() {
   const { items, isOpen, closeCart, subtotal, count, updateQuantity, removeItem, clear } =
@@ -168,8 +170,8 @@ export function CartDrawer() {
                 </button>
               </div>
               <p className="mb-3 text-xs text-muted-light">
-                Shipping &amp; taxes calculated at checkout. Online payment (GCash, Maya, card) is
-                coming soon — for now, checkout sends your order to our team to confirm stock.
+                Shipping is calculated at checkout, where you can pay securely with{" "}
+                {PAYMENT_METHODS_SENTENCE}.
               </p>
               <Link
                 href="/cart"

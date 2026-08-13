@@ -3,14 +3,13 @@
 /**
  * Client-side shopping cart — React context + localStorage persistence.
  *
- * PHASE 1: the cart is entirely client-side (no server, no payment) and fully anonymous — nothing
- * here needs or collects a customer identity. It stores a denormalized snapshot of each line so the
- * cart renders without re-fetching products. PHASE 2 (checkout) reads `items` to build the order
- * and hand off to PayMongo.
+ * The cart is entirely client-side and fully anonymous — nothing here needs or collects a customer
+ * identity. It stores a denormalized snapshot of each line so the cart renders without re-fetching
+ * products; checkout posts only the ids and quantities for the server to reprice.
  *
  * PRICE DRIFT: because each line snapshots its price, a cart left for weeks can hold a figure that
- * no longer matches the catalog. Checkout MUST re-fetch and re-price every line server-side before
- * creating a payment intent — never charge `subtotal` as computed here.
+ * no longer matches the catalog. `subtotal` here is DISPLAY ONLY — `placeOrderAction` re-reads
+ * every price from Firestore and re-quotes shipping before a peso reaches PayMongo.
  *
  * The line model, its builders, and its runtime guard live in `cart-item.ts` so Server Components
  * can build lines without importing this `"use client"` module.

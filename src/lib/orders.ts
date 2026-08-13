@@ -6,19 +6,31 @@
  * That lets Firestore do the ordering, status filtering and paging instead of us loading
  * everything into memory, which matters for a set that only ever grows.
  *
- * Written from the storefront checkout action, read and worked from /admin/orders. Nothing here
- * renders on the storefront, so writes never revalidate a public path.
+ * Written from the storefront checkout action, read and worked from /admin/orders. The order
+ * document is created BEFORE the customer is sent to PayMongo, as `awaiting_payment`, so an
+ * abandoned checkout never loses what the customer typed and every payment is reconcilable
+ * against a real record. `applyOrderPayment` is the only thing that moves it to paid.
+ *
+ * The confirmation page reads an order by document id (see checkout/confirmed/page.tsx); nothing
+ * else on the storefront renders orders, so writes never revalidate a public path.
  */
 
 import "server-only";
-import { COLLECTIONS, storeCollection } from "@/lib/firebase";
+import { COLLECTIONS, getDb, storeCollection } from "@/lib/firebase";
 import { makeRef } from "@/lib/reference";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
+import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/payment-status";
+import { PAY_WINDOW_MS } from "@/lib/pay-window";
 import type { CartItemSource } from "@/lib/cart-item";
+import type { JrsShipmentItem } from "@/lib/jrs-packaging";
 
-// The status vocabulary lives in the client-safe `order-status.ts` — the admin's status dropdown
-// needs those values, and this module can't cross the client boundary.
+export type { JrsShipmentItem } from "@/lib/jrs-packaging";
+
+// The status vocabularies live in the client-safe `order-status.ts` / `payment-status.ts` — the
+// admin's dropdowns and filter chips need those values, and this module can't cross the client
+// boundary.
 export { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
+export { PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, type PaymentStatus } from "@/lib/payment-status";
 
 export type OrderLine = {
   source: CartItemSource;
@@ -53,6 +65,57 @@ export type OrderShipping = {
   country: string;
 };
 
+/**
+ * Everything sent to JRS to get this order's rate, kept so the shipment can be BOOKED later
+ * without asking for a rate again.
+ *
+ * The point is that a booking must replay the quote exactly. Re-deriving it at booking time would
+ * read today's product dimensions and today's tariff, which by then may both have moved — and the
+ * customer was already charged against the old ones. So the payload is frozen here at checkout and
+ * the admin action replays it verbatim.
+ */
+export type JrsShipment = {
+  /** Step-3 packaging name; `null` means the field was omitted and JRS rated it as General Cargo. */
+  packagingName: string | null;
+  /** The exact array sent, one entry per unit, already expanded by quantity. */
+  shipmentItems: JrsShipmentItem[];
+  /** Both exactly as sent — "City, Province" form, not the full street address. */
+  shipperAddressLine1: string;
+  recipientAddressLine1: string;
+  express: boolean;
+  insurance: boolean;
+  valuation: boolean;
+  codAmountToCollect: number;
+  /**
+   * What JRS QUOTED — what the business pays the courier.
+   *
+   * NOT the same as `Order.shippingFee`, which is what the BUYER was charged and is 0 whenever the
+   * free-shipping threshold applied. Booking uses this; the customer is never re-billed from it.
+   */
+  shippingCost: number;
+  insuranceCost: number;
+  valuationCost: number;
+  /** Epoch ms the rate was taken. */
+  quotedAt: number;
+  /**
+   * The JRS body, JSON-stringified and capped. A STRING rather than a nested object because
+   * Firestore forbids nested arrays, and a courier response is exactly the kind of document that
+   * grows one someday.
+   */
+  rawResponse: string;
+};
+
+/** The outcome of the admin's "Create shipping order" — the waybill, or why there isn't one. */
+export type JrsBooking = {
+  /** Epoch ms of the successful booking; 0 while unbooked. */
+  bookedAt: number;
+  /** JRS's tracking number. Non-empty means booked — it is the double-booking guard. */
+  waybillNumber: string;
+  /** Last failure, capped. "" once a booking succeeds. */
+  error: string;
+  rawResponse: string;
+};
+
 export type Order = {
   /** Firestore document id — the real key. */
   id: string;
@@ -69,13 +132,93 @@ export type Order = {
   itemCount: number;
   /** Internal note from staff — never shown to the customer. */
   note: string;
+
+  // ── Payment ────────────────────────────────────────────────────────────────
+  // Independent of `status` above: that is fulfillment, this is where the money is.
+
+  /** Where the money is. Only `applyOrderPayment` may change it. */
+  paymentStatus: PaymentStatus;
+  /**
+   * What delivery cost the CUSTOMER on this order — a SNAPSHOT taken at the moment of ordering,
+   * never recomputed. Tariffs change; an old order must keep what it charged. 0 whenever the
+   * free-shipping threshold applied, even though JRS still charged us — see `jrsShipment`.
+   */
+  shippingFee: number;
+  /** subtotal + shippingFee. The figure actually charged, and what PayMongo's line items sum to. */
+  total: number;
+  /** PayMongo checkout session id ("cs_…"); "" for orders recorded without the gateway. */
+  checkoutSessionId: string;
+  /** The hosted payment page. Staff can re-send it to a customer while the order is unpaid. */
+  checkoutUrl: string;
+  /**
+   * Epoch ms after which the session is treated as dead and the customer must place a new order
+   * (which reprices against the catalog). Stamped at creation, never extended.
+   *
+   * Stored on the ORDER rather than only in the resume cookie because that cookie is
+   * client-controlled and disposable — a customer who cleared cookies would otherwise own a
+   * payment link that never expires. It is also what the admin reads to warn staff that a link has
+   * lapsed, and what a future sweep job would query.
+   *
+   * 0 on any order written before the payment window existed — read as "no window", never expires.
+   */
+  checkoutExpiresAt: number;
+  /** Epoch ms of confirmed payment; 0 while unpaid. */
+  paidAt: number;
+  /** "gcash" | "card" | "manual" | "". `manual` means staff recorded an off-platform payment. */
+  paymentMethod: string;
+  /** Last gateway error, capped. The only way staff can diagnose an order stuck unpaid. */
+  paymentError: string;
+
+  // ── Shipping ───────────────────────────────────────────────────────────────
+
+  /**
+   * The frozen JRS rate request and its result. `null` on any order placed before this existed, and
+   * on any order whose cart could not be rated — the admin's booking flow quotes live in that case.
+   */
+  jrsShipment: JrsShipment | null;
+  /** The booking, once staff have made one. `null` until then. */
+  jrsBooking: JrsBooking | null;
 };
 
-/** Everything the checkout action supplies; the rest is generated here. */
-export type NewOrder = Omit<Order, "id" | "ref" | "createdAt" | "status" | "note">;
+/**
+ * Everything the checkout action supplies; the rest is generated here.
+ *
+ * Checkout knows the money (it repriced the cart and quoted shipping) but not the payment state —
+ * that only exists once a session has been created and the gateway has reported back.
+ */
+export type NewOrder = Omit<
+  Order,
+  | "id"
+  | "ref"
+  | "createdAt"
+  | "status"
+  | "note"
+  | "paymentStatus"
+  | "checkoutSessionId"
+  | "checkoutUrl"
+  // The payment window is store policy, not something the caller gets to choose.
+  | "checkoutExpiresAt"
+  | "paidAt"
+  | "paymentMethod"
+  | "paymentError"
+  // Booking happens in the admin, long after checkout — there is nothing to supply here.
+  | "jrsBooking"
+>;
 
 function toOrderStatus(value: unknown): OrderStatus {
   return ORDER_STATUSES.includes(value as OrderStatus) ? (value as OrderStatus) : "new";
+}
+
+/**
+ * An order written before payments existed has no `paymentStatus`. It defaults to
+ * `awaiting_payment`, which is the honest reading of "no online payment was collected" — but note
+ * that also hides it from the admin's paid-by-default view. `scripts/backfill-order-payments.ts`
+ * stamps legacy documents as manually paid; run it once before deploying this.
+ */
+function toPaymentStatus(value: unknown): PaymentStatus {
+  return PAYMENT_STATUSES.includes(value as PaymentStatus)
+    ? (value as PaymentStatus)
+    : "awaiting_payment";
 }
 
 function num(value: unknown): number {
@@ -99,6 +242,57 @@ function toOrderLine(value: unknown): OrderLine {
     quantity: num(v.quantity),
     price: num(v.price),
     lineTotal: num(v.lineTotal),
+  };
+}
+
+function toJrsShipmentItem(value: unknown): JrsShipmentItem {
+  const v = (value ?? {}) as Record<string, unknown>;
+  return {
+    declaredValue: num(v.declaredValue),
+    length: num(v.length),
+    width: num(v.width),
+    height: num(v.height),
+    weight: num(v.weight),
+  };
+}
+
+/**
+ * The stored rate snapshot, or `null`.
+ *
+ * `null` for any order predating this field, and for any order whose cart couldn't be rated. The
+ * admin booking flow reads that as "quote live first", so a missing snapshot degrades rather than
+ * breaks. The booleans are coerced from what was stored rather than assumed, because they are part
+ * of what was quoted — reading `express` as false when the document says otherwise would book a
+ * different service than the customer paid for.
+ */
+function toJrsShipment(value: unknown): JrsShipment | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  return {
+    packagingName: typeof v.packagingName === "string" && v.packagingName ? v.packagingName : null,
+    shipmentItems: Array.isArray(v.shipmentItems) ? v.shipmentItems.map(toJrsShipmentItem) : [],
+    shipperAddressLine1: str(v.shipperAddressLine1),
+    recipientAddressLine1: str(v.recipientAddressLine1),
+    express: v.express === true,
+    insurance: v.insurance === true,
+    valuation: v.valuation === true,
+    codAmountToCollect: num(v.codAmountToCollect),
+    shippingCost: num(v.shippingCost),
+    insuranceCost: num(v.insuranceCost),
+    valuationCost: num(v.valuationCost),
+    quotedAt: num(v.quotedAt),
+    rawResponse: str(v.rawResponse),
+  };
+}
+
+function toJrsBooking(value: unknown): JrsBooking | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  return {
+    bookedAt: num(v.bookedAt),
+    waybillNumber: str(v.waybillNumber),
+    error: str(v.error),
+    rawResponse: str(v.rawResponse),
   };
 }
 
@@ -132,20 +326,61 @@ function toOrder(id: string, value: Record<string, unknown>): Order {
     subtotal: num(value.subtotal),
     itemCount: num(value.itemCount),
     note: str(value.note),
+    paymentStatus: toPaymentStatus(value.paymentStatus),
+    shippingFee: num(value.shippingFee),
+    // A legacy order has no `total`; its subtotal was the whole figure.
+    total: num(value.total) || num(value.subtotal),
+    checkoutSessionId: str(value.checkoutSessionId),
+    checkoutUrl: str(value.checkoutUrl),
+    // 0 for an order predating the payment window — `isPayWindowOpen` reads that as "never
+    // expires", so no backfill is needed and a deploy can't retroactively kill old orders.
+    checkoutExpiresAt: num(value.checkoutExpiresAt),
+    paidAt: num(value.paidAt),
+    paymentMethod: str(value.paymentMethod),
+    paymentError: str(value.paymentError),
+    jrsShipment: toJrsShipment(value.jrsShipment),
+    jrsBooking: toJrsBooking(value.jrsBooking),
   };
 }
 
-/** Create an order. Returns the generated reference so checkout can show it to the customer. */
-export async function createOrder(input: NewOrder): Promise<{ id: string; ref: string }> {
+/**
+ * Create an order. Returns the id and generated reference — the id is what links the order to a
+ * PayMongo session, the ref is what the customer quotes back to us.
+ *
+ * The payment fields are written as explicit ""/0 rather than left undefined: `getDb()` runs with
+ * `ignoreUndefinedProperties: true`, which would silently omit them, and a MISSING field never
+ * matches a Firestore equality filter — so the admin's `paymentStatus == "awaiting_payment"` query
+ * would skip exactly the orders it exists to find.
+ */
+export async function createOrder(
+  input: NewOrder,
+): Promise<{ id: string; ref: string; checkoutExpiresAt: number }> {
   const ref = makeRef("RR");
+  // One clock read for both timestamps, so they are exactly PAY_WINDOW_MS apart. Returning the
+  // deadline rather than letting the caller recompute it keeps that guarantee — a second
+  // `Date.now()` in the action would drift by however long the write took.
+  const now = Date.now();
+  const checkoutExpiresAt = now + PAY_WINDOW_MS;
+
   const doc = await storeCollection(COLLECTIONS.orders).add({
     ...input,
     ref,
-    createdAt: Date.now(),
+    createdAt: now,
     status: "new" satisfies OrderStatus,
     note: "",
+    paymentStatus: "awaiting_payment" satisfies PaymentStatus,
+    checkoutSessionId: "",
+    checkoutUrl: "",
+    checkoutExpiresAt,
+    paidAt: 0,
+    paymentMethod: "",
+    paymentError: "",
+    // Explicit null, not undefined: `ignoreUndefinedProperties` would drop the field, and the admin
+    // needs to tell "never quoted" from "not written yet".
+    jrsShipment: input.jrsShipment ?? null,
+    jrsBooking: null,
   });
-  return { id: doc.id, ref };
+  return { id: doc.id, ref, checkoutExpiresAt };
 }
 
 export async function getOrder(id: string): Promise<Order | undefined> {
@@ -154,32 +389,77 @@ export async function getOrder(id: string): Promise<Order | undefined> {
   return toOrder(snap.id, snap.data() ?? {});
 }
 
+/** Find the order a PayMongo webhook is talking about. Single-field index — auto-created. */
+export async function getOrderByCheckoutSessionId(
+  checkoutSessionId: string,
+): Promise<Order | undefined> {
+  if (!checkoutSessionId) return undefined;
+  const snap = await storeCollection(COLLECTIONS.orders)
+    .where("checkoutSessionId", "==", checkoutSessionId)
+    .limit(1)
+    .get();
+  const doc = snap.docs[0];
+  return doc ? toOrder(doc.id, doc.data() ?? {}) : undefined;
+}
+
 /**
  * Newest first, capped. `before` is the `createdAt` of the last row already shown — the cursor the
  * admin's "Show older" link carries, so paging doesn't need offsets.
  *
- * NOTE: filtering by status while ordering by createdAt needs a composite index
- * (status ASC, createdAt DESC). Firestore returns an error containing a one-click creation link
- * the first time a filtered query runs; the unfiltered list works without it.
+ * NOTE: filtering while ordering by createdAt needs a composite index. Firestore returns an error
+ * containing a one-click creation link the first time each filtered query runs; the unfiltered
+ * list works without any:
+ *
+ *   status                  → status ASC, createdAt DESC
+ *   paymentStatus           → paymentStatus ASC, createdAt DESC
+ *   both                    → status ASC, paymentStatus ASC, createdAt DESC
+ *   countNewOrders()        → status ASC, paymentStatus ASC
+ *
+ * Nothing queries `checkoutExpiresAt` today. A scheduled sweep that expires abandoned checkouts
+ * would want paymentStatus ASC, checkoutExpiresAt ASC — noted here so it isn't a surprise.
+ *
+ * Both filters are equality-only on purpose. Expressing "anything but awaiting_payment" with `!=`
+ * would force Firestore to order by the inequality field first, destroying the `createdAt DESC`
+ * ordering this whole queue and its cursor pager depend on.
  */
 export async function listOrders(options: {
   status?: OrderStatus;
+  paymentStatus?: PaymentStatus;
   limit?: number;
   before?: number;
 } = {}): Promise<Order[]> {
-  const { status, limit = 50, before } = options;
+  const { status, paymentStatus, limit = 50, before } = options;
 
   let query = storeCollection(COLLECTIONS.orders).orderBy("createdAt", "desc");
   if (status) query = query.where("status", "==", status);
+  if (paymentStatus) query = query.where("paymentStatus", "==", paymentStatus);
   if (before) query = query.startAfter(before);
 
   const snap = await query.limit(limit).get();
   return snap.docs.map((d) => toOrder(d.id, d.data() ?? {}));
 }
 
-/** How many orders still need attention — drives the sidebar badge. */
+/**
+ * How many orders still need attention — drives the sidebar badge.
+ *
+ * Narrowed to PAID orders deliberately. An abandoned checkout still writes a `status: "new"`
+ * document, so counting status alone would inflate the badge with carts nobody ever paid for.
+ */
 export async function countNewOrders(): Promise<number> {
-  const snap = await storeCollection(COLLECTIONS.orders).where("status", "==", "new").count().get();
+  const snap = await storeCollection(COLLECTIONS.orders)
+    .where("status", "==", "new")
+    .where("paymentStatus", "==", "paid" satisfies PaymentStatus)
+    .count()
+    .get();
+  return snap.data().count;
+}
+
+/** Drives the count shown on the admin's "Awaiting payment" filter chip. */
+export async function countOrdersByPayment(paymentStatus: PaymentStatus): Promise<number> {
+  const snap = await storeCollection(COLLECTIONS.orders)
+    .where("paymentStatus", "==", paymentStatus)
+    .count()
+    .get();
   return snap.data().count;
 }
 
@@ -189,4 +469,96 @@ export async function setOrderStatus(id: string, status: OrderStatus): Promise<v
 
 export async function setOrderNote(id: string, note: string): Promise<void> {
   await storeCollection(COLLECTIONS.orders).doc(id).update({ note });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Records the session a customer was sent to pay at, right after it is created. */
+export async function setOrderCheckoutSession(
+  id: string,
+  checkoutSessionId: string,
+  checkoutUrl: string,
+): Promise<void> {
+  await storeCollection(COLLECTIONS.orders).doc(id).update({ checkoutSessionId, checkoutUrl });
+}
+
+/** Why the gateway refused to start a payment. Capped — it's an external string. */
+export async function setOrderPaymentError(id: string, message: string): Promise<void> {
+  await storeCollection(COLLECTIONS.orders).doc(id).update({ paymentError: message.slice(0, 300) });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shipping
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Attach a rate snapshot to an order that was placed without one.
+ *
+ * Only the admin's booking flow calls this, and only for orders predating this feature: it quotes
+ * live, stores what it quoted, then books from it — so a re-booking attempt still replays a frozen
+ * payload rather than asking for a third rate.
+ */
+export async function setOrderJrsShipment(id: string, shipment: JrsShipment): Promise<void> {
+  await storeCollection(COLLECTIONS.orders).doc(id).update({ jrsShipment: shipment });
+}
+
+/**
+ * Record what booking returned — a waybill, or the reason there isn't one.
+ *
+ * Not transactional, unlike `applyOrderPayment`. A double-book is guarded in the admin action by
+ * checking for an existing waybill, and the worst case here is a duplicate waybill that staff can
+ * see and cancel; there's no money moving, so the cost of a transaction isn't earned.
+ */
+export async function setOrderJrsBooking(id: string, booking: JrsBooking): Promise<void> {
+  await storeCollection(COLLECTIONS.orders)
+    .doc(id)
+    .update({ jrsBooking: { ...booking, error: booking.error.slice(0, 300) } });
+}
+
+/**
+ * Move an order's payment state. THE correctness guarantee of the whole payment path.
+ *
+ * Transactional and MONOTONIC:
+ *
+ *   awaiting_payment → paid      ✔  the happy path
+ *   failed           → paid      ✔  the customer retried on the same session
+ *   awaiting_payment → failed    ✔  declined card
+ *   paid             → paid      ✖  no-op, returns false — IDEMPOTENCY
+ *   paid             → failed    ✖  ignored: a later failed attempt must never un-pay an order
+ *   paid             → expired   ✖  ignored, same reason
+ *
+ * Because `paid` is terminal against everything, webhook redelivery, out-of-order events, and the
+ * webhook racing the reconcile-on-read path are all automatically safe — no coordination needed
+ * between them, they just both call this.
+ *
+ * Returns true only when something actually changed, so callers know whether to revalidate.
+ *
+ * This and nothing else may write `paymentStatus`. The admin's manual "mark as paid" goes through
+ * here too, precisely so it obeys the same rules.
+ */
+export async function applyOrderPayment(
+  id: string,
+  next: { paymentStatus: "paid" | "failed" | "expired"; paidAt?: number; paymentMethod?: string },
+): Promise<boolean> {
+  const ref = storeCollection(COLLECTIONS.orders).doc(id);
+
+  return getDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return false;
+
+    const current = toPaymentStatus((snap.data() ?? {}).paymentStatus);
+    if (current === "paid") return false; // terminal — nothing may follow it
+    if (current === next.paymentStatus) return false;
+
+    tx.update(ref, {
+      paymentStatus: next.paymentStatus,
+      paidAt: next.paymentStatus === "paid" ? next.paidAt || Date.now() : 0,
+      paymentMethod: next.paymentMethod ?? "",
+      // A successful payment clears whatever went wrong on the previous attempt.
+      ...(next.paymentStatus === "paid" ? { paymentError: "" } : {}),
+    });
+    return true;
+  });
 }

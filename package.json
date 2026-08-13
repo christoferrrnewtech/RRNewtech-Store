@@ -7,7 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "tsx scripts/seed-firestore.ts"
+    "seed": "tsx scripts/seed-firestore.ts",
+    "backfill:payments": "tsx scripts/backfill-order-payments.ts",
+    "webhook:test": "tsx scripts/paymongo-webhook.ts",
+    "test:jrs": "tsx scripts/jrs-check.ts",
+    "jrs:rate": "tsx scripts/jrs-rate.ts",
+    "jrs:limits": "tsx scripts/jrs-limits.ts",
+    "jrs:limits:letter": "tsx scripts/jrs-limits.ts --only letter",
+    "jrs:limits:1lb": "tsx scripts/jrs-limits.ts --only 1lb",
+    "jrs:limits:3lb": "tsx scripts/jrs-limits.ts --only 3lb",
+    "jrs:limits:5lb": "tsx scripts/jrs-limits.ts --only 5lb",
+    "jrs:limits:bulilit": "tsx scripts/jrs-limits.ts --only bulilit",
+    "sync:locations": "tsx scripts/sync-locations.ts"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",

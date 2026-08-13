@@ -7,6 +7,8 @@ import { LinkButton } from "@/components/ui/Button";
 import { useCart, MAX_QUANTITY } from "@/lib/cart";
 import { formatPHP } from "@/lib/format";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
+import { PAYMENT_METHODS_SENTENCE } from "@/lib/payment-methods";
+import { PendingPaymentNoticeFromCookie } from "@/components/checkout/PendingPaymentNotice";
 
 export default function CartPage() {
   const { items, subtotal, updateQuantity, removeItem, clear } = useCart();
@@ -17,6 +19,11 @@ export default function CartPage() {
       <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-fg">
         Your cart
       </h1>
+
+      {/* Above the empty/non-empty split so it shows either way — someone who cleared their cart
+          still needs a route back to a payment they already owe. Reads the cookie client-side
+          after mount, so this page stays statically prerendered. */}
+      <PendingPaymentNoticeFromCookie className="mt-6" />
 
       {items.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-line bg-surface p-10 text-center">
@@ -129,9 +136,9 @@ export default function CartPage() {
               Checkout
             </LinkButton>
             <p className="mt-3 text-xs leading-relaxed text-muted-light">
-              Online payment (GCash, Maya, card) via a secure Philippine gateway is coming soon.
-              For now, checkout collects your shipping details and our team will confirm stock,
-              shipping, and payment.
+              Checkout collects your delivery details, then takes you to PayMongo to pay securely
+              with {PAYMENT_METHODS_SENTENCE}. Prices and stock are re-checked before anything is
+              charged.
             </p>
           </aside>
         </div>

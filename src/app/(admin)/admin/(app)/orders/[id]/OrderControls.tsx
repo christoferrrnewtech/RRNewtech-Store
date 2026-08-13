@@ -2,30 +2,46 @@
 
 import { useActionState } from "react";
 import { SubmitButton, FormMessage } from "@/components/admin/Form";
-import { setOrderStatusAction, setOrderNoteAction } from "@/app/(admin)/admin/actions";
+import {
+  markOrderPaidAction,
+  recheckPaymentAction,
+  setOrderStatusAction,
+  setOrderNoteAction,
+} from "@/app/(admin)/admin/actions";
 import { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
+import type { PaymentStatus } from "@/lib/payment-status";
 import type { ActionState } from "@/lib/form-data";
 
 /**
- * The two things staff actually do to an order: move it along, and write down what happened.
+ * The things staff actually do to an order: move it along, write down what happened, and — when
+ * the gateway hasn't confirmed — sort the payment out.
  *
- * Two separate forms rather than one save button — advancing the status is the frequent action and
- * shouldn't require also re-submitting a note that hasn't changed.
+ * Separate forms rather than one save button: advancing the status is the frequent action and
+ * shouldn't require re-submitting a note that hasn't changed.
  */
 export function OrderControls({
   id,
   status,
   note,
+  paymentStatus,
+  hasSession,
 }: {
   id: string;
   status: OrderStatus;
   note: string;
+  paymentStatus: PaymentStatus;
+  hasSession: boolean;
 }) {
   const [statusState, statusAction] = useActionState<ActionState, FormData>(
     setOrderStatusAction,
     {},
   );
   const [noteState, noteAction] = useActionState<ActionState, FormData>(setOrderNoteAction, {});
+  const [recheckState, recheckAction] = useActionState<ActionState, FormData>(
+    recheckPaymentAction,
+    {},
+  );
+  const [paidState, paidAction] = useActionState<ActionState, FormData>(markOrderPaidAction, {});
 
   return (
     <div className="grid gap-6 sm:grid-cols-2">
@@ -69,6 +85,45 @@ export function OrderControls({
           <FormMessage state={noteState} />
         </form>
       </section>
+
+      {/* Only shown while there is something to resolve — a paid order needs neither control. */}
+      {paymentStatus !== "paid" && (
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:col-span-2">
+          <h2 className="font-semibold text-fg">Payment</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Re-check asks PayMongo what happened — use it if the webhook is down. Marking paid is
+            for money that arrived off-platform, and can&apos;t be undone.
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-start gap-3">
+            {hasSession && (
+              <form action={recheckAction}>
+                <input type="hidden" name="id" value={id} />
+                <SubmitButton>Re-check payment</SubmitButton>
+              </form>
+            )}
+
+            <form
+              action={paidAction}
+              onSubmit={(e) => {
+                if (
+                  !confirm(
+                    "Mark this order as paid offline? This is recorded against your account and cannot be undone.",
+                  )
+                ) {
+                  e.preventDefault();
+                }
+              }}
+            >
+              <input type="hidden" name="id" value={id} />
+              <SubmitButton>Mark as paid offline</SubmitButton>
+            </form>
+          </div>
+
+          <FormMessage state={recheckState} />
+          <FormMessage state={paidState} />
+        </section>
+      )}
     </div>
   );
 }
