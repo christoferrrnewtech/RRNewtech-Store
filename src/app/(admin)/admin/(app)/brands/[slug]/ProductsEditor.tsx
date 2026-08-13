@@ -35,6 +35,7 @@ export function ProductsEditor({
           initial={brand.products}
           categories={categories}
           dirty={dirty}
+          onDirty={() => setDirty(true)}
         />
         <FormMessage state={state} />
       </form>
@@ -51,19 +52,64 @@ type Row = BrandProduct & { key: string };
  * Rows collapse to a one-line summary. They use <details> rather than conditional rendering
  * because the action rebuilds `brand.products` from the whole form by index — an unmounted row
  * would silently delete that product. Closed-<details> descendants stay in the DOM and still post.
+ *
+ * Row order IS the storefront display order: `form.getAll()` returns values in DOM order, so the
+ * action saves the products in exactly the sequence shown here. That means reordering this array is
+ * the whole reordering feature — no order field, no separate action. It saves with the rest of the
+ * form rather than immediately, so a reorder can't clobber unsaved edits via the re-key above.
  */
 function ProductRows({
   initial,
   categories,
   dirty,
+  onDirty,
 }: {
   initial: BrandProduct[];
   categories: StoreCategory[];
   dirty: boolean;
+  /** Reordering is React state, so it never fires the form's onInput — tell the parent by hand. */
+  onDirty: () => void;
 }) {
   const [rows, setRows] = useState<Row[]>(
     initial.map((p) => ({ ...p, key: p.id || crypto.randomUUID() })),
   );
+
+  function commit(next: Row[]) {
+    setRows(next);
+    onDirty();
+  }
+
+  /** One step up or down — swap with the neighbour. */
+  function move(key: string, dir: -1 | 1) {
+    const i = rows.findIndex((r) => r.key === key);
+    const j = i + dir;
+    if (i === -1 || j < 0 || j >= rows.length) return;
+    const next = [...rows];
+    [next[i], next[j]] = [next[j], next[i]];
+    commit(next);
+  }
+
+  /** Promote to position 1 — the usual request ("show this one first") on a long brand. */
+  function moveToTop(key: string) {
+    const i = rows.findIndex((r) => r.key === key);
+    if (i <= 0) return;
+    const next = [...rows];
+    const [moved] = next.splice(i, 1);
+    next.unshift(moved);
+    commit(next);
+  }
+
+  /** Drop `dragKey` onto `targetKey` — lift it out and re-insert at the target's index. */
+  function reorder(dragKey: string, targetKey: string) {
+    if (dragKey === targetKey) return;
+    const from = rows.findIndex((r) => r.key === dragKey);
+    const to = rows.findIndex((r) => r.key === targetKey);
+    if (from === -1 || to === -1) return;
+    const next = [...rows];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    commit(next);
+  }
 
   // Changing the category clears the subcategory (subcategories belong to one category).
   function setCategory(key: string, category: string | undefined) {
@@ -117,10 +163,12 @@ function ProductRows({
 
   return (
     <div className="space-y-3">
-      {rows.map((row) => (
+      {rows.map((row, index) => (
         <ProductRow
           key={row.key}
           row={row}
+          index={index}
+          total={rows.length}
           categories={categories}
           setCategory={setCategory}
           setSubcategory={setSubcategory}
@@ -128,6 +176,9 @@ function ProductRows({
           toggleContactSales={toggleContactSales}
           remove={remove}
           removeGalleryImage={removeGalleryImage}
+          move={move}
+          moveToTop={moveToTop}
+          reorder={reorder}
         />
       ))}
 
@@ -157,9 +208,45 @@ function ProductRows({
 const selectClass =
   "mt-1 block w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 disabled:opacity-60";
 
+/**
+ * A reorder control in a row's <summary>.
+ *
+ * Both defaults it fights are easy to miss: `type="button"` stops it submitting the surrounding
+ * form, and preventDefault stops the click from expanding the <details> it sits inside.
+ */
+function ReorderButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={(e) => {
+        e.preventDefault();
+        onClick();
+      }}
+      className="shrink-0 px-1 text-sm leading-none text-muted hover:text-brand-700 disabled:opacity-30"
+    >
+      {children}
+    </button>
+  );
+}
+
 /** One product: a collapsed summary line that expands to the full editor. */
 function ProductRow({
   row,
+  index,
+  total,
   categories,
   setCategory,
   setSubcategory,
@@ -167,8 +254,13 @@ function ProductRow({
   toggleContactSales,
   remove,
   removeGalleryImage,
+  move,
+  moveToTop,
+  reorder,
 }: {
   row: Row;
+  index: number;
+  total: number;
   categories: StoreCategory[];
   setCategory: (key: string, category: string | undefined) => void;
   setSubcategory: (key: string, subcategory: string | undefined) => void;
@@ -176,6 +268,9 @@ function ProductRow({
   toggleContactSales: (key: string) => void;
   remove: (key: string) => void;
   removeGalleryImage: (key: string, src: string) => void;
+  move: (key: string, dir: -1 | 1) => void;
+  moveToTop: (key: string) => void;
+  reorder: (dragKey: string, targetKey: string) => void;
 }) {
   // Display-only mirrors for the collapsed summary. The DOM stays the source of truth for what
   // gets posted — these never feed the form, they just keep the one-liner from going stale.
@@ -183,6 +278,11 @@ function ProductRow({
   const [price, setPrice] = useState(row.price);
   // A blank name means a just-added row, so start it open. Saved products always have a name.
   const [open, setOpen] = useState(!row.name);
+  // Only draggable while the grip is held. BrandRail can mark its whole row draggable because its
+  // rows are plain text; a product row is full of inputs, and an always-draggable ancestor turns
+  // drag-selecting text inside them into a row drag.
+  const [dragEnabled, setDragEnabled] = useState(false);
+  const [over, setOver] = useState(false);
 
   const subs = categories.find((c) => c.slug === row.category)?.subcategories ?? [];
   const catValue = categories.some((c) => c.slug === row.category) ? (row.category as string) : "";
@@ -192,9 +292,77 @@ function ProductRow({
     <details
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
-      className="group rounded-xl border border-line bg-bg"
+      draggable={dragEnabled}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("text/plain", row.key);
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragEnd={() => setDragEnabled(false)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        reorder(e.dataTransfer.getData("text/plain"), row.key);
+      }}
+      className={`group rounded-xl border bg-bg ${
+        over ? "border-brand-500 ring-2 ring-brand-500/30" : "border-line"
+      }`}
     >
-      <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+        {/* Reorder cluster. Row order is the storefront order, so this is how a product gets
+            promoted. Every control preventDefaults: a click anywhere in a <summary> toggles it. */}
+        <span
+          onMouseDown={() => setDragEnabled(true)}
+          onMouseUp={() => setDragEnabled(false)}
+          onClick={(e) => e.preventDefault()}
+          title="Drag to reorder"
+          aria-hidden="true"
+          className="shrink-0 cursor-grab text-muted-light active:cursor-grabbing"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="9" cy="6" r="1.6" />
+            <circle cx="15" cy="6" r="1.6" />
+            <circle cx="9" cy="12" r="1.6" />
+            <circle cx="15" cy="12" r="1.6" />
+            <circle cx="9" cy="18" r="1.6" />
+            <circle cx="15" cy="18" r="1.6" />
+          </svg>
+        </span>
+
+        {/* An SVG, not a "⤒" glyph: ↑/↓ are proven in this font (BrandRail uses them), the
+            arrow-to-bar character is not and would risk rendering as tofu. */}
+        <ReorderButton
+          label="Move to first"
+          disabled={index === 0}
+          onClick={() => moveToTop(row.key)}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M5 4h14M12 20V8m0 0-5 5m5-5 5 5"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </ReorderButton>
+        <span className="flex shrink-0 flex-col leading-none">
+          <ReorderButton label="Move up" disabled={index === 0} onClick={() => move(row.key, -1)}>
+            ↑
+          </ReorderButton>
+          <ReorderButton
+            label="Move down"
+            disabled={index === total - 1}
+            onClick={() => move(row.key, 1)}
+          >
+            ↓
+          </ReorderButton>
+        </span>
+
         <span className="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-line bg-white">
           {row.image ? (
             <Image src={row.image} alt="" fill sizes="40px" className="object-contain p-1" />
