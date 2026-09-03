@@ -98,6 +98,12 @@ export const COLLECTIONS = {
   orders: "storeOrders",
   inquiries: "storeInquiries",
   /**
+   * One document per registered customer, keyed by the Firebase Auth uid. Deliberately NOT the
+   * `R&RLandingPage/users` keyed map — that document holds the handful of staff accounts, while
+   * customers grow without bound and would eventually hit the 1 MiB document cap.
+   */
+  customers: "storeCustomers",
+  /**
    * One document per PayMongo webhook event, keyed by the gateway's own event id. Written with
    * `.create()` so a redelivery fails ALREADY_EXISTS and short-circuits — see the webhook route.
    * Grows without bound; prune with a Firestore TTL policy on `expireAt` if it ever matters.

@@ -2,6 +2,7 @@ import { CartProvider } from "@/lib/cart";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { CartDrawer } from "@/components/cart/CartDrawer";
+import { SignInPrompt } from "@/components/cart/SignInPrompt";
 import { PendingPaymentBanner } from "@/components/checkout/PendingPaymentBanner";
 import { getBrands, getCategoriesWithProducts } from "@/lib/content";
 
@@ -56,6 +57,7 @@ export default async function StoreLayout({
           <SiteFooter />
         </div>
         <CartDrawer />
+        <SignInPrompt />
       </CartProvider>
     </>
   );

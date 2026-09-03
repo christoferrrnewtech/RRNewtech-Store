@@ -4,21 +4,19 @@
  * Source: https://psgc.gitlab.io/api — a mirror of the Philippine Standard Geographic Code, the
  * PSA's official list of every region, province, city/municipality and barangay in the country.
  *
- * WHY NOT JRS: they don't publish a serviceable-area list. So this dataset answers "is this a real
- * Philippine address?", NOT "will JRS deliver there?" — `getrate` remains the only authority on the
- * second question, and an address that JRS refuses still blocks checkout. What the dropdowns buy is
- * the elimination of typos and free-text spelling variants, which is most of what went wrong.
+ * WHAT IT IS FOR: the dataset answers "is this a real Philippine address?", NOT "will a courier
+ * deliver there?". What the dropdowns buy is the elimination of typos and free-text spelling
+ * variants, which is most of what went wrong.
  *
  * THE NAMES ARE NORMALISED, and that is the whole reason this is a script rather than a download.
- * PSGC and JRS disagree about what places are called:
+ * PSGC's formal names are not what anyone writes on a waybill:
  *
- *   PSGC                       JRS (confirmed from a live rate response)
+ *   PSGC                       everyday form
  *   "City of Makati"           "Makati City"
  *   NCR, no province at all    province "Metro Manila"
  *
- * We know JRS's spelling because a rate we sent as "Makati City, Metro Manila" came back with
- * `"OriginMunicipal": "Makati City", "OriginProvince": "Metro Manila"`. Getting this wrong doesn't
- * fail loudly — it produces addresses that look fine and can't be rated.
+ * Getting this wrong doesn't fail loudly — it produces addresses that look fine to staff and to
+ * the courier and quietly don't match anything.
  *
  * Run it when the PSGC publishes an update (roughly yearly). Output is ~1 MB, committed, and read
  * by `src/lib/locations.ts`.
@@ -38,9 +36,9 @@ const NCR = "130000000";
  * Cities that belong to no province in the PSGC and aren't in NCR either.
  *
  * Both are historical administrative oddities — independent chartered cities that sit inside a
- * province without being part of it. JRS almost certainly files them under the province that
- * surrounds them, so that's what we send. If a rate for one of these ever fails, this table is the
- * first place to look.
+ * province without being part of it. Couriers file them under the province that surrounds them,
+ * so that's what we record. If delivery to one of these ever fails, this table is the first place
+ * to look.
  *
  * Each value MUST be a province the PSGC already knows — the check at the end of this script
  * enforces it. Writing "Maguindanao del Norte" here (the post-2022 split, which this PSGC snapshot
@@ -75,7 +73,7 @@ async function get<T>(path: string): Promise<T> {
 }
 
 /**
- * PSGC's formal name → the everyday name JRS uses.
+ * PSGC's formal name → the everyday name.
  *
  * "City of Makati" → "Makati City". Names already in that form ("Quezon City", "Pasay City") and
  * plain municipalities ("Adams") pass through untouched.

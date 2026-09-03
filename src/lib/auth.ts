@@ -15,11 +15,11 @@
  * working; in production the secret is required and login throws without it.
  */
 
-import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAdminAuth } from "@/lib/firebase";
 import { getUserByUid, type UserRole } from "@/lib/content";
+import { readSession, signSession } from "@/lib/session-cookie";
 
 const SESSION_COOKIE = "rrnt_session";
 const SESSION_MAX_AGE = 60 * 60 * 8; // 8 hours
@@ -48,44 +48,24 @@ export type SessionUser = {
 // Session cookie — signed payload, verified on every read.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function sign(payload: string): string {
-  return crypto.createHmac("sha256", sessionSecret()).update(payload).digest("base64url");
-}
-
 function serialize(user: SessionUser): string {
-  const payload = Buffer.from(
-    JSON.stringify({ ...user, exp: Date.now() + SESSION_MAX_AGE * 1000 }),
-  ).toString("base64url");
-  return `${payload}.${sign(payload)}`;
+  return signSession({ ...user }, sessionSecret(), SESSION_MAX_AGE);
 }
 
+/**
+ * Read a staff session back. Signed with the RAW base secret, while the storefront's customer
+ * session uses a derived key — so neither cookie's token can be replayed as the other's.
+ */
 function deserialize(token: string | undefined): SessionUser | null {
-  if (!token) return null;
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
-
-  // Constant-time compare so a bad signature can't be discovered byte by byte.
-  const expected = sign(payload);
-  if (
-    expected.length !== signature.length ||
-    !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
-  ) {
-    return null;
-  }
-
-  try {
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    if (typeof data.exp !== "number" || data.exp < Date.now()) return null;
-    return {
-      uid: data.uid,
-      email: data.email,
-      name: data.name,
-      role: data.role,
-      brandSlugs: Array.isArray(data.brandSlugs) ? data.brandSlugs : [],
-    };
-  } catch {
-    return null;
-  }
+  const data = readSession(token, sessionSecret());
+  if (!data) return null;
+  return {
+    uid: String(data.uid ?? ""),
+    email: String(data.email ?? ""),
+    name: String(data.name ?? ""),
+    role: data.role === "admin" ? "admin" : "marketing",
+    brandSlugs: Array.isArray(data.brandSlugs) ? (data.brandSlugs as string[]) : [],
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

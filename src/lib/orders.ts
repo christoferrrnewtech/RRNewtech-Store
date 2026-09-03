@@ -22,9 +22,6 @@ import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/payment-status";
 import { PAY_WINDOW_MS } from "@/lib/pay-window";
 import type { CartItemSource } from "@/lib/cart-item";
-import type { JrsShipmentItem } from "@/lib/jrs-packaging";
-
-export type { JrsShipmentItem } from "@/lib/jrs-packaging";
 
 // The status vocabularies live in the client-safe `order-status.ts` / `payment-status.ts` — the
 // admin's dropdowns and filter chips need those values, and this module can't cross the client
@@ -65,57 +62,6 @@ export type OrderShipping = {
   country: string;
 };
 
-/**
- * Everything sent to JRS to get this order's rate, kept so the shipment can be BOOKED later
- * without asking for a rate again.
- *
- * The point is that a booking must replay the quote exactly. Re-deriving it at booking time would
- * read today's product dimensions and today's tariff, which by then may both have moved — and the
- * customer was already charged against the old ones. So the payload is frozen here at checkout and
- * the admin action replays it verbatim.
- */
-export type JrsShipment = {
-  /** Step-3 packaging name; `null` means the field was omitted and JRS rated it as General Cargo. */
-  packagingName: string | null;
-  /** The exact array sent, one entry per unit, already expanded by quantity. */
-  shipmentItems: JrsShipmentItem[];
-  /** Both exactly as sent — "City, Province" form, not the full street address. */
-  shipperAddressLine1: string;
-  recipientAddressLine1: string;
-  express: boolean;
-  insurance: boolean;
-  valuation: boolean;
-  codAmountToCollect: number;
-  /**
-   * What JRS QUOTED — what the business pays the courier.
-   *
-   * NOT the same as `Order.shippingFee`, which is what the BUYER was charged and is 0 whenever the
-   * free-shipping threshold applied. Booking uses this; the customer is never re-billed from it.
-   */
-  shippingCost: number;
-  insuranceCost: number;
-  valuationCost: number;
-  /** Epoch ms the rate was taken. */
-  quotedAt: number;
-  /**
-   * The JRS body, JSON-stringified and capped. A STRING rather than a nested object because
-   * Firestore forbids nested arrays, and a courier response is exactly the kind of document that
-   * grows one someday.
-   */
-  rawResponse: string;
-};
-
-/** The outcome of the admin's "Create shipping order" — the waybill, or why there isn't one. */
-export type JrsBooking = {
-  /** Epoch ms of the successful booking; 0 while unbooked. */
-  bookedAt: number;
-  /** JRS's tracking number. Non-empty means booked — it is the double-booking guard. */
-  waybillNumber: string;
-  /** Last failure, capped. "" once a booking succeeds. */
-  error: string;
-  rawResponse: string;
-};
-
 export type Order = {
   /** Firestore document id — the real key. */
   id: string;
@@ -140,8 +86,8 @@ export type Order = {
   paymentStatus: PaymentStatus;
   /**
    * What delivery cost the CUSTOMER on this order — a SNAPSHOT taken at the moment of ordering,
-   * never recomputed. Tariffs change; an old order must keep what it charged. 0 whenever the
-   * free-shipping threshold applied, even though JRS still charged us — see `jrsShipment`.
+   * never recomputed. Rates change; an old order must keep what it charged. 0 whenever the
+   * free-shipping threshold applied.
    */
   shippingFee: number;
   /** subtotal + shippingFee. The figure actually charged, and what PayMongo's line items sum to. */
@@ -168,16 +114,6 @@ export type Order = {
   paymentMethod: string;
   /** Last gateway error, capped. The only way staff can diagnose an order stuck unpaid. */
   paymentError: string;
-
-  // ── Shipping ───────────────────────────────────────────────────────────────
-
-  /**
-   * The frozen JRS rate request and its result. `null` on any order placed before this existed, and
-   * on any order whose cart could not be rated — the admin's booking flow quotes live in that case.
-   */
-  jrsShipment: JrsShipment | null;
-  /** The booking, once staff have made one. `null` until then. */
-  jrsBooking: JrsBooking | null;
 };
 
 /**
@@ -201,8 +137,6 @@ export type NewOrder = Omit<
   | "paidAt"
   | "paymentMethod"
   | "paymentError"
-  // Booking happens in the admin, long after checkout — there is nothing to supply here.
-  | "jrsBooking"
 >;
 
 function toOrderStatus(value: unknown): OrderStatus {
@@ -242,57 +176,6 @@ function toOrderLine(value: unknown): OrderLine {
     quantity: num(v.quantity),
     price: num(v.price),
     lineTotal: num(v.lineTotal),
-  };
-}
-
-function toJrsShipmentItem(value: unknown): JrsShipmentItem {
-  const v = (value ?? {}) as Record<string, unknown>;
-  return {
-    declaredValue: num(v.declaredValue),
-    length: num(v.length),
-    width: num(v.width),
-    height: num(v.height),
-    weight: num(v.weight),
-  };
-}
-
-/**
- * The stored rate snapshot, or `null`.
- *
- * `null` for any order predating this field, and for any order whose cart couldn't be rated. The
- * admin booking flow reads that as "quote live first", so a missing snapshot degrades rather than
- * breaks. The booleans are coerced from what was stored rather than assumed, because they are part
- * of what was quoted — reading `express` as false when the document says otherwise would book a
- * different service than the customer paid for.
- */
-function toJrsShipment(value: unknown): JrsShipment | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const v = value as Record<string, unknown>;
-  return {
-    packagingName: typeof v.packagingName === "string" && v.packagingName ? v.packagingName : null,
-    shipmentItems: Array.isArray(v.shipmentItems) ? v.shipmentItems.map(toJrsShipmentItem) : [],
-    shipperAddressLine1: str(v.shipperAddressLine1),
-    recipientAddressLine1: str(v.recipientAddressLine1),
-    express: v.express === true,
-    insurance: v.insurance === true,
-    valuation: v.valuation === true,
-    codAmountToCollect: num(v.codAmountToCollect),
-    shippingCost: num(v.shippingCost),
-    insuranceCost: num(v.insuranceCost),
-    valuationCost: num(v.valuationCost),
-    quotedAt: num(v.quotedAt),
-    rawResponse: str(v.rawResponse),
-  };
-}
-
-function toJrsBooking(value: unknown): JrsBooking | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const v = value as Record<string, unknown>;
-  return {
-    bookedAt: num(v.bookedAt),
-    waybillNumber: str(v.waybillNumber),
-    error: str(v.error),
-    rawResponse: str(v.rawResponse),
   };
 }
 
@@ -338,8 +221,6 @@ function toOrder(id: string, value: Record<string, unknown>): Order {
     paidAt: num(value.paidAt),
     paymentMethod: str(value.paymentMethod),
     paymentError: str(value.paymentError),
-    jrsShipment: toJrsShipment(value.jrsShipment),
-    jrsBooking: toJrsBooking(value.jrsBooking),
   };
 }
 
@@ -375,10 +256,6 @@ export async function createOrder(
     paidAt: 0,
     paymentMethod: "",
     paymentError: "",
-    // Explicit null, not undefined: `ignoreUndefinedProperties` would drop the field, and the admin
-    // needs to tell "never quoted" from "not written yet".
-    jrsShipment: input.jrsShipment ?? null,
-    jrsBooking: null,
   });
   return { id: doc.id, ref, checkoutExpiresAt };
 }
@@ -487,34 +364,6 @@ export async function setOrderCheckoutSession(
 /** Why the gateway refused to start a payment. Capped — it's an external string. */
 export async function setOrderPaymentError(id: string, message: string): Promise<void> {
   await storeCollection(COLLECTIONS.orders).doc(id).update({ paymentError: message.slice(0, 300) });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Shipping
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Attach a rate snapshot to an order that was placed without one.
- *
- * Only the admin's booking flow calls this, and only for orders predating this feature: it quotes
- * live, stores what it quoted, then books from it — so a re-booking attempt still replays a frozen
- * payload rather than asking for a third rate.
- */
-export async function setOrderJrsShipment(id: string, shipment: JrsShipment): Promise<void> {
-  await storeCollection(COLLECTIONS.orders).doc(id).update({ jrsShipment: shipment });
-}
-
-/**
- * Record what booking returned — a waybill, or the reason there isn't one.
- *
- * Not transactional, unlike `applyOrderPayment`. A double-book is guarded in the admin action by
- * checking for an existing waybill, and the worst case here is a duplicate waybill that staff can
- * see and cancel; there's no money moving, so the cost of a transaction isn't earned.
- */
-export async function setOrderJrsBooking(id: string, booking: JrsBooking): Promise<void> {
-  await storeCollection(COLLECTIONS.orders)
-    .doc(id)
-    .update({ jrsBooking: { ...booking, error: booking.error.slice(0, 300) } });
 }
 
 /**

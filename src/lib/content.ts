@@ -42,20 +42,6 @@ export type BrandProduct = {
   category?: string;
   /** Optional subcategory slug within {@link category}. */
   subcategory?: string;
-  /**
-   * Parcel dimensions for courier rating — see `jrs-packaging.ts`. All four are OPTIONAL: products
-   * saved before this existed have none, and a product missing ANY of them is invisible to the
-   * box-fitting aggregate (the cart then falls back to declaring a 1 Pounder). The admin product
-   * list shows an amber dot rather than green until all four are filled in.
-   */
-  /** Centimetres. */
-  length?: number;
-  /** Centimetres. */
-  width?: number;
-  /** Centimetres. */
-  height?: number;
-  /** GRAMS, not kilograms — JRS's weight caps are in grams. */
-  weight?: number;
   summary?: string;
   /** Full description paragraphs for the detail page. */
   description?: string[];

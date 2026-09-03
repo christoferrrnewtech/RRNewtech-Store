@@ -1,43 +1,36 @@
 /**
- * Who pays for delivery — CLIENT-SAFE.
+ * Shipping cost — CLIENT-SAFE.
  *
- * What delivery COSTS is no longer decided here: it comes from JRS Express, quoted against the
- * buyer's city/province and the box the cart actually forms (see `jrs.ts` and `jrs-packaging.ts`).
- * This module is only the store's pricing policy on top of that figure, which is a single rule —
- * we absorb the courier's charge once the order is big enough.
+ * Everything the store knows about what shipping costs lives in this one file, because it is a
+ * PLACEHOLDER. The real figure depends on destination and weight and will come from a courier
+ * API; until that exists we charge a flat rate below the free-shipping threshold. Keeping it
+ * behind `quoteShipping()` means swapping in a real quote later touches this module and nothing
+ * else — the signature can grow to take the address and lines without any call site changing shape.
  *
- * Client-safe on purpose: the checkout summary panel and the server action must apply the SAME
- * policy to the SAME quote. A customer shown "Free" and charged ₱240 is a support ticket.
+ * Client-safe on purpose: the checkout summary panel and the server action must compute the SAME
+ * number from the SAME code. A customer shown ₱150 and charged ₱200 is a support ticket.
  *
- * SECURITY: neither the fee nor the quote is ever posted from the browser. `placeOrderAction`
- * re-quotes JRS server-side from the REPRICED subtotal and the address on the submitted form; the
- * figure the panel displayed is advisory. A hidden `shippingFee` input would be a free discount for
- * anyone who opens devtools.
+ * SECURITY: the fee is never posted from the browser. `placeOrderAction` derives it from the
+ * REPRICED subtotal, after prices are re-read from Firestore. A hidden `shippingFee` input would
+ * be a free discount for anyone who opens devtools.
  */
 
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 
+/** Flat nationwide rate charged below FREE_SHIPPING_THRESHOLD. Placeholder — see the header. */
+export const FLAT_SHIPPING_FEE = 150;
+
 /** Name and blurb for the shipping line item, used verbatim on PayMongo's hosted page. */
 export const SHIPPING_LINE_NAME = "Shipping";
-export const SHIPPING_LINE_DESCRIPTION = "Nationwide delivery via JRS Express";
+export const SHIPPING_LINE_DESCRIPTION = "Standard nationwide delivery";
 
 /**
- * What to CHARGE the customer, given what JRS quoted.
+ * What to charge for delivery on an order of this size.
  *
- * The store eats the courier's fee at and above the free-shipping threshold. The quote itself is
- * still taken and still stored on the order (`jrsShipment.shippingCost`) — the business needs to
- * know what it paid, and the shipment still has to be booked at that rate.
- *
- * A non-finite quote THROWS rather than defaulting. There is no longer a safe flat number to fall
- * back to, and silently charging 0 for a real delivery is the expensive failure; refusing the
- * checkout is the cheap one.
+ * A non-finite subtotal falls to the charged branch rather than the free one — if the number is
+ * junk, err towards billing and letting a human notice, never towards giving delivery away.
  */
-export function chargeForShipping(jrsCost: number, subtotal: number): number {
-  if (!Number.isFinite(jrsCost) || jrsCost < 0) {
-    throw new Error(`Refusing to charge a non-finite shipping cost: ${jrsCost}`);
-  }
-  if (!Number.isFinite(subtotal)) {
-    throw new Error(`Refusing to price shipping against a non-finite subtotal: ${subtotal}`);
-  }
-  return subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : jrsCost;
+export function quoteShipping(subtotal: number): number {
+  if (!Number.isFinite(subtotal)) return FLAT_SHIPPING_FEE;
+  return subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_FEE;
 }

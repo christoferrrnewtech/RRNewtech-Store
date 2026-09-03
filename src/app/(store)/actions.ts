@@ -8,7 +8,7 @@
  * through, so everything crossing this boundary is treated as hostile:
  *
  *   - prices are re-read from the catalog, never taken from the request (see reprice below)
- *   - the shipping fee is QUOTED server-side from that repriced subtotal, never posted
+ *   - the shipping fee is DERIVED server-side from that repriced subtotal, never posted
  *   - the amount charged is asserted to equal the sum of the line items before the gateway is called
  *   - the product an inquiry names is resolved server-side, so the query string can't invent one
  *   - every free-text field is length-capped, so a document can't be bloated from outside
@@ -33,7 +33,6 @@ import {
   getOrder,
   setOrderCheckoutSession,
   setOrderPaymentError,
-  type JrsShipment,
   type OrderLine,
 } from "@/lib/orders";
 import { createInquiry, type InquiryProduct } from "@/lib/inquiries";
@@ -49,13 +48,11 @@ import {
   type PayMongoLineItem,
 } from "@/lib/paymongo";
 import {
-  chargeForShipping,
+  quoteShipping,
   SHIPPING_LINE_DESCRIPTION,
   SHIPPING_LINE_NAME,
 } from "@/lib/shipping";
-import { getJrsRate, JrsError, RATE_ORIGIN } from "@/lib/jrs";
 import { getBarangays, getCities, isKnownLocation } from "@/lib/locations";
-import { buildParcel, toParcelItem, type ParcelItem } from "@/lib/jrs-packaging";
 import { PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 import {
   isOrderId,
@@ -128,11 +125,8 @@ function brandSlugFromHref(href: unknown): string {
  * The description is TRANSIENT — it goes to the gateway and is thrown away. It isn't part of what
  * was charged, it can be re-read from the catalog at any time, and persisting it would mean
  * widening OrderLine, toOrderLine() and every stored document for a string no admin screen renders.
- *
- * `parcel` is transient for the same reason: it goes to JRS and what comes back is what we keep.
- * `undefined` means this product has no dimensions recorded — see `buildParcel`.
  */
-type PricedLine = { line: OrderLine; description: string; parcel: ParcelItem | undefined };
+type PricedLine = { line: OrderLine; description: string };
 
 /**
  * The one-line blurb for a product, for the gateway only.
@@ -201,9 +195,6 @@ async function reprice(posted: PostedLine[]): Promise<PricedLine[]> {
           lineTotal: product.price * quantity,
         },
         description: lineDescription(product.summary, product.description, product.name),
-        // The seeded catalog carries no dimensions and has no admin UI to add them, so every
-        // catalog line is unmeasured and folds into the fallback parcel in `buildParcel`.
-        parcel: undefined,
       });
       continue;
     }
@@ -227,9 +218,6 @@ async function reprice(posted: PostedLine[]): Promise<PricedLine[]> {
           lineTotal: product.price * quantity,
         },
         description: lineDescription(product.summary, product.description, product.name),
-        // Dimensions are optional on a brand product, and `toParcelItem` demands all four. It also
-        // copies ONLY those four — spreading the product would ship its gallery to the courier.
-        parcel: toParcelItem(product),
       });
     }
   }
@@ -237,61 +225,12 @@ async function reprice(posted: PostedLine[]): Promise<PricedLine[]> {
   return lines;
 }
 
-/** "City, Province" — what JRS rates a destination by. */
-function recipientLine(shipping: { city: string; region: string }): string {
-  return [shipping.city, shipping.region].filter(Boolean).join(", ");
-}
-
-/**
- * Quote this cart to this address, and return the snapshot to freeze on the order.
- *
- * Retries ONCE on a transient failure — a timeout or a 5xx, never a 4xx, which means the request or
- * the key is wrong and will fail identically a second later. Checkout blocks when a rate can't be
- * had, so one retry is the difference between a blip and a customer who can't buy anything; two
- * would just make them wait 30 seconds to be told the same thing.
- */
-async function quoteJrs(
-  priced: PricedLine[],
-  shipping: { city: string; region: string },
-): Promise<JrsShipment> {
-  const { shipmentItems, packagingName } = buildParcel(
-    priced.map(({ line, parcel }) => ({ price: line.price, quantity: line.quantity, parcel })),
-  );
-  const recipient = recipientLine(shipping);
-  const request = { recipient, shipmentItems, packagingName };
-
-  let rate;
-  try {
-    rate = await getJrsRate(request);
-  } catch (err) {
-    if (!(err instanceof JrsError) || !err.transient) throw err;
-    console.warn("[shipping] JRS rate failed, retrying once:", err.message);
-    rate = await getJrsRate(request);
-  }
-
-  return {
-    packagingName: packagingName ?? null,
-    shipmentItems,
-    shipperAddressLine1: RATE_ORIGIN,
-    recipientAddressLine1: recipient,
-    express: false,
-    insurance: true,
-    valuation: true,
-    codAmountToCollect: 0,
-    shippingCost: rate.shippingCost,
-    insuranceCost: rate.insuranceCost,
-    valuationCost: rate.valuationCost,
-    quotedAt: Date.now(),
-    rawResponse: rate.rawResponse,
-  };
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Address dropdowns
 //
 // Served from the committed PSGC snapshot in `data/ph-locations.json` — see `src/lib/locations.ts`.
-// Picking from a list rather than typing free text is what stops the spelling variants JRS has to
-// string-match against; it is not a promise that JRS delivers there, which only `getrate` can make.
+// Picking from a list rather than typing free text is what stops typos and spelling variants in
+// the address a courier eventually has to read off the waybill.
 //
 // Server Actions rather than props: the barangay set is 42,046 entries and has no business in a
 // browser bundle. Only the selected city's few dozen ever cross the wire.
@@ -317,58 +256,6 @@ export async function listBarangaysAction(
 
 /** Provinces are rendered on the server into the checkout page, so there's no action for them. */
 export type SelectOption = { value: string; label: string };
-
-/**
- * What the checkout panel shows in its Shipping row.
- *
- * Only two outcomes on purpose. There is no "we'll work it out later" state: delivery is priced
- * before the customer pays or the order doesn't happen, so anything that isn't a quote is an error
- * the customer is asked to retry.
- */
-export type ShippingQuote =
-  | { status: "quoted"; shippingFee: number; jrsCost: number; packagingName: string | null }
-  | { status: "error" };
-
-/**
- * Price delivery for the checkout summary, before anything is submitted.
- *
- * Called directly from the client as the customer fills in their city and province — the checkout
- * form is uncontrolled and there is no address to quote against until they type one. The figure is
- * ADVISORY: `placeOrderAction` re-quotes from the repriced cart and the submitted address, and that
- * is what's charged. This exists so the total isn't a surprise, not to decide it.
- *
- * SECURITY: unauthenticated, like everything else in this file, and it spends a paid courier call
- * per invocation. `reprice()` caps the work at MAX_LINES and the client debounces, but there is no
- * rate limiting here any more than there is on `placeOrderAction` — see the note at the top.
- */
-export async function quoteShippingAction(input: {
-  lines: string;
-  city: string;
-  region: string;
-}): Promise<ShippingQuote> {
-  const city = String(input.city ?? "").slice(0, MAX_ADDRESS_FIELD).trim();
-  const region = String(input.region ?? "").slice(0, MAX_ADDRESS_FIELD).trim();
-  if (!city || !region) return { status: "error" };
-
-  try {
-    const priced = await reprice(parsePostedLines(String(input.lines ?? "")));
-    if (priced.length === 0) return { status: "error" };
-
-    const subtotal = priced.reduce((sum, p) => sum + p.line.lineTotal, 0);
-    const shipment = await quoteJrs(priced, { city, region });
-
-    return {
-      status: "quoted",
-      shippingFee: chargeForShipping(shipment.shippingCost, subtotal),
-      jrsCost: shipment.shippingCost,
-      packagingName: shipment.packagingName,
-    };
-  } catch (err) {
-    // Never surfaced to the customer verbatim — JRS's wording is for our logs only.
-    console.error("[shipping] could not quote:", err);
-    return { status: "error" };
-  }
-}
 
 /**
  * Absolute origin for the URLs PayMongo sends the customer back to.
@@ -482,18 +369,9 @@ export async function placeOrderAction(
     const lines = priced.map((p) => p.line);
     const subtotal = lines.reduce((sum, l) => sum + l.lineTotal, 0);
 
-    // Quoted server-side from the REPRICED cart and the address on THIS form. The browser never
-    // posts a shipping fee, and whatever the summary panel displayed is not consulted.
-    //
-    // UNCONDITIONAL, and deliberately BEFORE createOrder. Delivery is priced before the customer
-    // reaches the gateway or the order doesn't happen: there is no path here that records an order
-    // with shipping "to be arranged", because the next thing that happens is a payment for a total
-    // that would then be wrong. A courier we can't reach throws, and leaves no half-formed order.
-    //
-    // `jrsShipment` is frozen onto the document so the shipment can be booked later without asking
-    // for a second rate — see orders.ts.
-    const jrsShipment = await quoteJrs(priced, shipping);
-    const shippingFee = chargeForShipping(jrsShipment.shippingCost, subtotal);
+    // Derived server-side from the REPRICED cart. The browser never posts a shipping fee, and
+    // whatever the summary panel displayed is not consulted.
+    const shippingFee = quoteShipping(subtotal);
     const total = subtotal + shippingFee;
 
     // The order is written BEFORE the customer goes anywhere near the gateway, so an abandoned
@@ -506,7 +384,6 @@ export async function placeOrderAction(
       itemCount: lines.reduce((sum, l) => sum + l.quantity, 0),
       shippingFee,
       total,
-      jrsShipment,
     });
     orderId = created.id;
 
@@ -542,17 +419,6 @@ export async function placeOrderAction(
     // session, a previous order's session may still be live and payable, and dropping its pointer
     // would strand a payment the customer could still complete.
     console.error("[checkout] could not start payment:", err);
-
-    // A courier failure is its own thing and happens BEFORE any order is written, so `orderId` is
-    // still empty and there is nothing to annotate. Blocking is the deliberate choice: shipping
-    // this order at an unknown cost, or free, is worse than asking the customer to try again.
-    if (err instanceof JrsError) {
-      return {
-        error:
-          "We couldn't calculate shipping for your delivery address. Please check your city and " +
-          "province and try again in a moment.",
-      };
-    }
 
     if (orderId) await setOrderPaymentError(orderId, String(err)).catch(() => {});
     return {

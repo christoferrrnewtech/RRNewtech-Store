@@ -7,6 +7,9 @@ import { useCart, type CartItem } from "@/lib/cart";
 /**
  * Adds a product to the cart. Accepts a ready-made cart line (minus quantity) so both the
  * product card (qty 1) and the product page (chosen qty) can reuse it.
+ *
+ * A signed-out click doesn't add anything — `addItem` raises the sign-in prompt and returns false —
+ * so the "Added ✓" confirmation is shown only when it's true.
  */
 export function AddToCartButton({
   item,
@@ -39,7 +42,7 @@ export function AddToCartButton({
       size={size}
       className={fullWidth ? "w-full" : undefined}
       onClick={() => {
-        addItem(item, quantity);
+        if (!addItem(item, quantity)) return;
         setAdded(true);
         window.setTimeout(() => setAdded(false), 1400);
       }}

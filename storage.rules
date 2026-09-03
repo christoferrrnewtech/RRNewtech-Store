@@ -13,6 +13,14 @@ service firebase.storage {
         ];
     }
 
+    // PRC ID card photos. PII, and deliberately unreachable from any client: the sign-up action
+    // writes them with the Admin SDK (which bypasses these rules), and anything that displays one
+    // mints a short-lived signed URL server-side. Denying explicitly rather than relying on the
+    // default so the intent survives someone later adding a broad `match /{allPaths=**}` rule.
+    match /prc-ids/{allPaths=**} {
+      allow read, write: if false;
+    }
+
     match /public/{allPaths=**} {
       allow read: if true;
       // Uploads/replacements must be images under 10 MB. Delete has no incoming

@@ -5,14 +5,12 @@
  * `npm run sync:locations` into `data/ph-locations.json`. Nothing calls a network at runtime;
  * lookups are off an in-memory copy and are sub-millisecond.
  *
- * WHAT THIS DOES AND DOESN'T GUARANTEE. JRS publishes no serviceable-area list, so this answers
- * "is this a real Philippine address?" and NOT "will JRS deliver there?". `getrate` is the only
- * authority on the second question, and an address it refuses still blocks checkout. What the
- * dropdowns buy is the end of typos and spelling variants — which was most of what went wrong with
- * free-text city names, since JRS has to string-match them to a zone.
+ * WHAT THIS DOES AND DOESN'T GUARANTEE. This answers "is this a real Philippine address?" and NOT
+ * "will a courier deliver there?". What the dropdowns buy is the end of typos and spelling
+ * variants, which was most of what went wrong with free-text city names.
  *
- * The names are normalised to JRS's spelling at generation time ("City of Makati" → "Makati City",
- * NCR → a "Metro Manila" province); see the sync script for why and how that was established.
+ * The names are normalised to their everyday form at generation time ("City of Makati" → "Makati
+ * City", NCR → a "Metro Manila" province); see the sync script for why.
  *
  * The barangay set is deliberately NEVER sent to the browser whole — the Server Actions in
  * `(store)/actions.ts` hand back only the selected city's, which is a few dozen.
@@ -87,17 +85,15 @@ export function getBarangays(province: string, city: string): string[] {
 /**
  * Is this a real province/city pair?
  *
- * NOT a serviceability check — we have no list of where JRS delivers, so this only rules out
- * addresses that don't exist. `getrate` is what decides whether a real place can be shipped to, and
- * it runs a moment later; this exists to catch a malformed pair with a message the customer can act
- * on, rather than letting it surface as an opaque courier failure.
+ * NOT a serviceability check — we have no list of where a courier delivers, so this only rules
+ * out addresses that don't exist. It exists to catch a malformed pair with a message the customer
+ * can act on, rather than letting it surface later as an opaque delivery failure.
  *
  * The dropdowns only offer real pairs, but a Server Action is a public HTTP endpoint and the form
  * posts plain strings — so `placeOrderAction` re-checks rather than trusting the browser used the
  * UI it was given.
  *
- * FAILS OPEN when there is no snapshot: a missing data file must not take every order down, and it
- * doesn't need to, because `getrate` still stands behind it.
+ * FAILS OPEN when there is no snapshot: a missing data file must not take every order down.
  */
 export function isKnownLocation(province: string, city: string): boolean {
   const { provinces } = data();

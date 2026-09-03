@@ -43,7 +43,6 @@ import {
   updateUserBrands,
   deleteAdminUserDoc,
   nextBrandOrder,
-  getBrandBySlug,
   type Brand,
   type BrandProduct,
   type GalleryImage,
@@ -62,16 +61,10 @@ import { getBucket } from "@/lib/firebase";
 import {
   applyOrderPayment,
   getOrder,
-  setOrderJrsBooking,
-  setOrderJrsShipment,
   setOrderNote,
   setOrderStatus,
-  type JrsShipment,
-  type Order,
 } from "@/lib/orders";
 import { expireCheckoutSession, getCheckoutSession } from "@/lib/paymongo";
-import { bookJrsShipment, getJrsRate, isJrsConfigured, RATE_ORIGIN } from "@/lib/jrs";
-import { buildParcel, toParcelItem } from "@/lib/jrs-packaging";
 import { setInquiryStatus, setInquiryNote } from "@/lib/inquiries";
 import { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import {
@@ -546,21 +539,6 @@ function parseGalleryJson(raw: string): GalleryImage[] {
   }
 }
 
-/**
- * One posted parcel dimension, or `undefined` for "not measured".
- *
- * `decimals` defaults to 2 because JRS's own packaging is specified to the hundredth of a
- * centimetre; weight passes 0, since a gram is already the smallest unit its caps use. Anything
- * blank, zero, negative or unparseable is absent rather than 0 — the box-fitting aggregate treats a
- * 0 cm side as missing data, and storing it would be a lie that looks like a measurement.
- */
-function dimension(raw: string, decimals = 2): number | undefined {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return undefined;
-  const factor = 10 ** decimals;
-  return Math.round(n * factor) / factor;
-}
-
 export async function saveBrandProductsAction(_prev: ActionState, form: FormData) {
   return saveBrandSection(
     form,
@@ -573,10 +551,6 @@ export async function saveBrandProductsAction(_prev: ActionState, form: FormData
       const summaries = form.getAll("productSummary").map(String);
       const categories = form.getAll("productCategory").map(String);
       const subcategories = form.getAll("productSubcategory").map(String);
-      const lengths = form.getAll("productLength").map(String);
-      const widths = form.getAll("productWidth").map(String);
-      const heights = form.getAll("productHeight").map(String);
-      const weights = form.getAll("productWeight").map(String);
       const allCategories = await getCategories();
       const descriptions = form.getAll("productDescription").map(String);
       const highlightsRaw = form.getAll("productHighlights").map(String);
@@ -666,13 +640,6 @@ export async function saveBrandProductsAction(_prev: ActionState, form: FormData
           compareAtPrice: compareAt > price ? compareAt : undefined,
           category,
           subcategory,
-          // Optional, and `undefined` is the right absent value: Firestore runs with
-          // `ignoreUndefinedProperties`, so a blank field simply isn't written, and nothing queries
-          // these. Zero and negative are treated as blank — they're missing data, not a flat item.
-          length: dimension(lengths[i] ?? ""),
-          width: dimension(widths[i] ?? ""),
-          height: dimension(heights[i] ?? ""),
-          weight: dimension(weights[i] ?? "", 0),
           summary: (summaries[i] ?? "").trim() || undefined,
           description: description.length ? description : undefined,
           highlights: highlights.length ? highlights : undefined,
@@ -924,151 +891,6 @@ export async function setOrderNoteAction(
 
   revalidateQueue("orders", id);
   return { ok: "Note saved." };
-}
-
-/**
- * Book the JRS shipment for an order — the "Create shipping order" button.
- *
- * THE WHOLE POINT is that this does not re-quote. Checkout froze the exact rate request onto the
- * order as `jrsShipment`, and that payload is replayed verbatim: same packaging, same items, same
- * addresses. Re-deriving it here would read today's product dimensions against today's tariff, and
- * the customer was charged against neither — they'd get a box we never priced.
- *
- * The live-quote branch exists only for orders placed before `jrsShipment` existed. It quotes,
- * STORES what it quoted, then books from it — so even a retry after a failure replays a frozen
- * payload rather than asking for a third rate.
- *
- * `order.shippingFee` is never touched. Whatever JRS charges now, the customer paid what they were
- * quoted; a courier price change is the business's to absorb, not something to bill retroactively.
- */
-export async function createJrsShipmentAction(
-  _prev: ActionState,
-  form: FormData,
-): Promise<ActionState> {
-  // Never rely on the UI hiding the button — authorize the action itself.
-  await requireAdmin();
-
-  const id = text(form, "id");
-  if (!id) return { error: "That order no longer exists." };
-
-  try {
-    const order = await getOrder(id);
-    if (!order) return { error: "That order no longer exists." };
-
-    // A non-empty waybill IS the guard. Booking twice means two riders and two charges.
-    if (order.jrsBooking?.waybillNumber) {
-      return { ok: `Already booked — waybill ${order.jrsBooking.waybillNumber}.` };
-    }
-    if (!isJrsConfigured()) return { error: "JRS is not configured on this deployment." };
-
-    let shipment = order.jrsShipment;
-    let quotedNow = false;
-
-    if (!shipment) {
-      shipment = await quoteOrderLive(order);
-      await setOrderJrsShipment(id, shipment);
-      quotedNow = true;
-    }
-
-    const booking = await bookJrsShipment({
-      shipment,
-      recipientName: `${order.customer.firstName} ${order.customer.lastName}`.trim(),
-      recipientPhone: order.customer.phone,
-      recipientEmail: order.customer.email,
-      recipientFullAddress: fullAddress(order),
-      reference: order.ref,
-    });
-
-    await setOrderJrsBooking(id, {
-      bookedAt: Date.now(),
-      waybillNumber: booking.waybillNumber,
-      error: "",
-      rawResponse: booking.rawResponse,
-    });
-
-    revalidateQueue("orders", id);
-    const quoted = quotedNow ? " (quoted fresh — this order predates stored shipments)" : "";
-    return {
-      ok: booking.waybillNumber
-        ? `Shipment booked — waybill ${booking.waybillNumber}.${quoted}`
-        : `Shipment booked, but JRS returned no waybill number.${quoted}`,
-    };
-  } catch (err) {
-    console.error("[admin] JRS booking failed:", err);
-    // Recorded on the order so the failure survives the page refresh that hides this message.
-    await setOrderJrsBooking(id, {
-      bookedAt: 0,
-      waybillNumber: "",
-      error: err instanceof Error ? err.message : String(err),
-      rawResponse: "",
-    }).catch(() => {});
-    revalidateQueue("orders", id);
-    return { error: "JRS refused the booking. The reason is on the order — try again in a moment." };
-  }
-}
-
-/** Street address for the rider, as opposed to the "City, Province" the rate was quoted against. */
-function fullAddress(order: Order): string {
-  return [
-    order.shipping.address,
-    order.shipping.apartment,
-    order.shipping.barangay,
-    order.shipping.city,
-    order.shipping.region,
-    order.shipping.postal,
-  ]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(", ");
-}
-
-/**
- * Quote an order that never stored a rate — legacy orders only.
- *
- * Dimensions aren't on the order document (they were transient at checkout), so they're re-read
- * from the brand's CURRENT products, exactly the way `reprice()` resolves a cart line. A product
- * that has since been deleted or renamed simply comes back unmeasured, which the fallback parcel
- * absorbs rather than failing on.
- */
-async function quoteOrderLive(order: Order): Promise<JrsShipment> {
-  const brandSlugs = new Set(
-    order.lines
-      .filter((l) => l.source === "brand")
-      .map((l) => /^\/brands\/([^/]+)\//.exec(l.href)?.[1] ?? "")
-      .filter(Boolean),
-  );
-  const brands = new Map(
-    (await Promise.all([...brandSlugs].map((slug) => getBrandBySlug(slug))))
-      .filter((b) => b !== undefined)
-      .map((b) => [b.slug, b]),
-  );
-
-  const { shipmentItems, packagingName } = buildParcel(
-    order.lines.map((line) => {
-      const brand = brands.get(/^\/brands\/([^/]+)\//.exec(line.href)?.[1] ?? "");
-      const product = brand?.products.find((p) => p.id === line.id);
-      return { price: line.price, quantity: line.quantity, parcel: toParcelItem(product) };
-    }),
-  );
-
-  const recipient = [order.shipping.city, order.shipping.region].filter(Boolean).join(", ");
-  const rate = await getJrsRate({ recipient, shipmentItems, packagingName });
-
-  return {
-    packagingName: packagingName ?? null,
-    shipmentItems,
-    shipperAddressLine1: RATE_ORIGIN,
-    recipientAddressLine1: recipient,
-    express: false,
-    insurance: true,
-    valuation: true,
-    codAmountToCollect: 0,
-    shippingCost: rate.shippingCost,
-    insuranceCost: rate.insuranceCost,
-    valuationCost: rate.valuationCost,
-    quotedAt: Date.now(),
-    rawResponse: rate.rawResponse,
-  };
 }
 
 export async function setInquiryStatusAction(

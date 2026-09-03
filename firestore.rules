@@ -3,6 +3,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Customer profiles carry PRC licence numbers, phone numbers and email addresses. The whole
+    // app reaches them through the Admin SDK, which bypasses these rules, so no client ever needs
+    // access — and the open catch-all below would otherwise expose the lot to anyone holding the
+    // project's public web API key. Denied explicitly, and BEFORE the catch-all.
+    match /storeCustomers/{uid} {
+      allow read, write: if false;
+    }
+
     // This rule allows anyone with your Firestore database reference to view, edit,
     // and delete all data in your Firestore database. It is useful for getting
     // started, but it is configured to expire after 30 days because it

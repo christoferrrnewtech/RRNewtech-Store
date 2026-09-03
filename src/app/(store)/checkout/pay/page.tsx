@@ -275,10 +275,8 @@ function Ready({ order }: { order: Order }) {
         </div>
         <div className="flex items-baseline justify-between gap-3">
           <dt className="text-muted">Shipping</dt>
-          {/* Always a real figure by the time anyone reaches this page: `placeOrderAction` quotes
-              JRS before the order is written, so an order that exists has a rated delivery. A zero
-              fee here means the free-shipping threshold applied, nothing else — the "no rate" case
-              can only be an order placed before shipping was rated at all. */}
+          {/* A zero fee here means the free-shipping threshold applied — `placeOrderAction` sets
+              the fee before the order is written, so an order that exists has one. */}
           <dd className="text-right font-medium text-fg">
             {order.shippingFee > 0 ? formatPHP(order.shippingFee) : "Free"}
           </dd>

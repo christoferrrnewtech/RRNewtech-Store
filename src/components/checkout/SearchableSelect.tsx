@@ -19,7 +19,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
  *   - the active option is a real element id, so a screen reader announces it as it moves
  *   - blur reverts to the last valid selection: a half-typed "Ceb" must never post as an address
  *
- * The VALUE IS A NAME, not a code, because the name is what goes to JRS and onto the waybill.
+ * The VALUE IS A NAME, not a code, because the name is what gets written onto the waybill.
  * A hidden input carries it, so the surrounding form still posts plain FormData and the server
  * action reads it exactly as it read the old free-text field.
  */
