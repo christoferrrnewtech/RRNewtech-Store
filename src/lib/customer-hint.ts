@@ -17,9 +17,12 @@
  * server action re-reads the signed session. Never gate anything that matters on this value; if
  * you find yourself wanting to, read the session server-side in that route instead.
  *
- * It can also go stale — a 30-day session cookie and this one expire together, but clearing site
- * data or an account deleted server-side leaves it briefly wrong in one direction or the other.
- * That costs a spurious prompt or a spurious pass, and nothing else.
+ * IT DRIFTS, AND THAT IS HANDLED ELSEWHERE. A cookie written only at login is wrong for a session
+ * created before this existed, for staff (whose login writes no hint), and for anyone who cleared
+ * cookies selectively — and it cannot repair itself, because the code that writes it only runs on
+ * login. `GET /api/session` is the authoritative answer, and it re-asserts or clears this cookie on
+ * every call. So treat this function as a synchronous FAST PATH that is eventually corrected, not
+ * as the truth: it exists so an Add-to-cart click doesn't have to await a network round trip.
  */
 
 export const CUSTOMER_HINT_COOKIE = "rrnt_signed_in";

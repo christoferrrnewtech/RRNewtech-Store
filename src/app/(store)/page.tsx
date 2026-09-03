@@ -5,8 +5,7 @@ import { ShopBanner } from "@/components/shop/ShopBanner";
 import { CategoryCircles } from "@/components/shop/CategoryCircles";
 import { DigitalDentistryPromo } from "@/components/home/DigitalDentistryPromo";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
-import { AboutIntro } from "@/components/home/AboutIntro";
-import { HomeCatalog, type HomeView } from "@/components/home/HomeCatalog";
+import { HomeCatalog } from "@/components/home/HomeCatalog";
 import {
   CATEGORY_MAP,
   brandSlug,
@@ -42,13 +41,11 @@ export default async function HomePage({
     sort?: string;
     q?: string;
     brand?: string;
-    view?: string;
+    min?: string;
+    max?: string;
   }>;
 }) {
-  const { category, sort, q, brand, view } = await searchParams;
-
-  // Homepage catalog view: grouped brand shelves (default) vs the flat "all products" grid.
-  const activeView: HomeView = view === "all" ? "all" : "by-brand";
+  const { category, sort, q, brand, min, max } = await searchParams;
 
   const activeCategory =
     category && VALID_CATEGORIES.has(category) ? (category as CategorySlug) : "all";
@@ -64,8 +61,10 @@ export default async function HomePage({
   if (query) list = searchProducts(list, query);
   const products = sortProducts(list, activeSort);
 
-  // Merchandising sections only belong on the plain landing view, not on a filtered result set.
-  const isUnfiltered = activeCategory === "all" && !query && !activeBrand;
+  // Only a keyword search swaps the homepage over to this legacy result list. `?category=`/`?brand=`
+  // now filter the brand catalog in place — HomeCatalog owns them and validates them itself against
+  // the admin taxonomy, which is a different vocabulary from CATEGORY_MAP above.
+  const isUnfiltered = !query;
 
   const heading = query
     ? `Results for “${query}”`
@@ -86,19 +85,25 @@ export default async function HomePage({
     <>
       <ShopBanner />
 
-      {isUnfiltered && <AboutIntro />}
-
       {SECTIONS.categoryCircles && <CategoryCircles activeCategory={activeCategory} />}
 
       {isUnfiltered && <BrandShowcase />}
 
-      {isUnfiltered && <HomeCatalog view={activeView} />}
+      {isUnfiltered && (
+        <HomeCatalog
+          category={category}
+          brand={brand}
+          min={min}
+          max={max}
+          sort={sort}
+        />
+      )}
 
       {SECTIONS.digitalDentistry && isUnfiltered && <DigitalDentistryPromo />}
 
       {/* A filtered/search view always shows its results — the flag only hides the plain catalog. */}
       {(SECTIONS.allProducts || !isUnfiltered) && (
-        <section id="catalog" className="scroll-mt-24">
+        <section id="catalog" className="scroll-mt-24 lg:scroll-mt-36">
           <Container className="py-12">
             <header className="mb-6">
               <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">

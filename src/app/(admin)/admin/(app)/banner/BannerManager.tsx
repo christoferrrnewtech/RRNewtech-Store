@@ -216,7 +216,7 @@ function EditPanel({ banner, index }: { banner: Banner; index: number }) {
       <form action={action} className="mt-5 space-y-4">
         <input type="hidden" name="id" value={banner.id} />
         <Field label="Replace image" hint="PNG, JPG or WebP · up to 5 MB. Leave empty to keep the current image.">
-          <TextInput type="file" name="image" accept="image/png,image/jpeg,image/webp" />
+          <TextInput type="file" name="image" accept="image/*" />
         </Field>
         <Field label="Alt text" hint="Describes the image for screen readers and search.">
           <TextInput name="alt" defaultValue={banner.alt} required />
@@ -254,7 +254,7 @@ function AddPanel() {
 
       <form action={action} className="mt-5 space-y-4">
         <Field label="Image" hint="PNG, JPG or WebP · up to 5 MB.">
-          <TextInput type="file" name="image" accept="image/png,image/jpeg,image/webp" required />
+          <TextInput type="file" name="image" accept="image/*" required />
         </Field>
         <Field label="Alt text" hint="Describes the image for screen readers and search.">
           <TextInput name="alt" required />

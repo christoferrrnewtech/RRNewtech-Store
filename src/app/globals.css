@@ -83,7 +83,9 @@ textarea {
 }
 
 /* Brand logo marquee (home "Shop by Brand"). Track holds the logo set duplicated once, so a
-   -50% shift lands exactly on the copy for a seamless loop. Pauses on hover. */
+   -50% shift lands exactly on the copy for a seamless loop. Pauses on hover.
+   The duration is tuned to the tile width in BrandLogoCarousel — the shift is a fixed -50%, so
+   narrower tiles cover less ground in the same time and the marquee reads as slower. */
 @keyframes marquee {
   from {
     transform: translateX(0);
@@ -93,7 +95,7 @@ textarea {
   }
 }
 .marquee-track {
-  animation: marquee 45s linear infinite;
+  animation: marquee 31s linear infinite;
 }
 .marquee:hover .marquee-track {
   animation-play-state: paused;

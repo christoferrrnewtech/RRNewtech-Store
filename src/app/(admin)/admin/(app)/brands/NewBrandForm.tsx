@@ -40,7 +40,7 @@ export function NewBrandForm() {
         </Field>
 
         <Field label="Logo" hint="PNG, JPG or WebP · up to 5 MB. You can add this later.">
-          <TextInput type="file" name="logo" accept="image/png,image/jpeg,image/webp" />
+          <TextInput type="file" name="logo" accept="image/*" />
         </Field>
 
         <SubmitButton>Create brand</SubmitButton>

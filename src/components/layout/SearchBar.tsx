@@ -43,7 +43,7 @@ export function SearchBar({
         viewBox="0 0 24 24"
         fill="none"
         aria-hidden="true"
-        className="pointer-events-none absolute left-3.5 text-muted-light"
+        className="pointer-events-none absolute left-4 text-muted-light"
       >
         <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
         <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -55,7 +55,7 @@ export function SearchBar({
         onChange={(e) => setTerm(e.target.value)}
         placeholder="Search dental products…"
         aria-label="Search products"
-        className="h-10 w-full rounded-full border border-line bg-surface pl-10 pr-4 text-sm text-fg placeholder:text-muted-light focus:border-brand-500 focus:outline-none"
+        className="h-11 w-full rounded-full border border-line-strong bg-surface pl-11 pr-4 text-sm text-fg placeholder:text-muted-light focus:border-brand-500 focus:outline-none lg:h-12"
       />
     </form>
   );

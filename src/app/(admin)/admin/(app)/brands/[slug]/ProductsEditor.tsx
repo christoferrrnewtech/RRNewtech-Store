@@ -425,7 +425,7 @@ function ProductRow({
             <input
               type="file"
               name="productImageFile"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/*"
               className="mt-2 block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs file:font-medium file:text-fg"
             />
           </div>
@@ -591,7 +591,7 @@ function ProductRow({
               <input
                 type="file"
                 name={`productGalleryFiles_${row.id}`}
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/*"
                 multiple
                 className="mt-2 block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs file:font-medium file:text-fg"
               />

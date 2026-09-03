@@ -77,13 +77,33 @@ export const SECTIONS = {
   allProducts: false, // "All Products" catalog on the *unfiltered* landing view
 } as const;
 
+/** Icon shapes available to the header nav strip — see components/layout/NavIcons.tsx. */
+export type NavIconKey =
+  | "category"
+  | "about"
+  | "brand"
+  | "events"
+  | "contact";
+
 /**
- * Primary top-nav links (plain links). "Categories" and "Brand" are mega-menu triggers handled
- * in SiteHeader, not listed here. The logo already links home, so there's no separate "Shop" link.
+ * The icon+label strip under the main header bar, in display order. Drives both the desktop row
+ * and the mobile drawer, so items are added here and nowhere else.
+ *
+ * An item either navigates (`href`) or opens one of the two mega-menus (`menu`) — never both.
+ * The logo already links home, so "Shop All" points at the flat all-products view instead.
  */
-export const NAV_LINKS = [
-  { href: "/about", label: "About" },
-] as const;
+export const NAV_ITEMS: {
+  href?: string;
+  menu?: "category" | "brand";
+  label: string;
+  icon: NavIconKey;
+}[] = [
+  { menu: "category", label: "Category", icon: "category" },
+  { href: "/about", label: "About Us", icon: "about" },
+  { menu: "brand", label: "Brand", icon: "brand" },
+  { href: "/education-training", label: "Education & Training", icon: "events" },
+  { href: "/contact", label: "Contact", icon: "contact" },
+];
 
 /** Trust badges shown on the home page and footer. */
 export const TRUST_POINTS = [

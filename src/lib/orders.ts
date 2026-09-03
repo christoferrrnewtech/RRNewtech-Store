@@ -22,12 +22,14 @@ import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/payment-status";
 import { PAY_WINDOW_MS } from "@/lib/pay-window";
 import type { CartItemSource } from "@/lib/cart-item";
+import type { OrderShipping } from "@/lib/order-shipping";
 
 // The status vocabularies live in the client-safe `order-status.ts` / `payment-status.ts` — the
 // admin's dropdowns and filter chips need those values, and this module can't cross the client
 // boundary.
 export { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 export { PAYMENT_STATUSES, PAYMENT_STATUS_LABELS, type PaymentStatus } from "@/lib/payment-status";
+export type { OrderShipping } from "@/lib/order-shipping";
 
 export type OrderLine = {
   source: CartItemSource;
@@ -50,16 +52,6 @@ export type OrderCustomer = {
   lastName: string;
   email: string;
   phone: string;
-};
-
-export type OrderShipping = {
-  address: string;
-  apartment: string;
-  barangay: string;
-  city: string;
-  region: string;
-  postal: string;
-  country: string;
 };
 
 export type Order = {
@@ -313,6 +305,33 @@ export async function listOrders(options: {
   if (before) query = query.startAfter(before);
 
   const snap = await query.limit(limit).get();
+  return snap.docs.map((d) => toOrder(d.id, d.data() ?? {}));
+}
+
+/**
+ * A signed-in customer's own orders, newest first.
+ *
+ * Matched on `customer.email`, not a uid: orders are written by an anonymous checkout that has no
+ * account attached, so email is the only link that exists — and it has the useful property of
+ * covering orders placed BEFORE the customer ever registered.
+ *
+ * That is only sound because the address is PROVEN. A customer cannot sign in until Firebase has
+ * confirmed the mailbox (see loginCustomerAction), so "same email" really does mean "same person".
+ * If email verification is ever relaxed, this becomes an account-takeover path and must move to a
+ * uid stamped on the order at checkout.
+ *
+ * Needs the composite index storeOrders(customer.email ASC, createdAt DESC) — see
+ * firestore.indexes.json. Firestore fails the query rather than scanning without it.
+ */
+export async function listOrdersForCustomer(email: string, limit = 20): Promise<Order[]> {
+  const needle = email.trim().toLowerCase();
+  if (!needle) return [];
+
+  const snap = await storeCollection(COLLECTIONS.orders)
+    .where("customer.email", "==", needle)
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .get();
   return snap.docs.map((d) => toOrder(d.id, d.data() ?? {}));
 }
 

@@ -325,7 +325,11 @@ export async function placeOrderAction(
   const customer = {
     firstName: cappedText(form, "firstName", MAX_NAME),
     lastName: cappedText(form, "lastName", MAX_NAME),
-    email: cappedText(form, "email", MAX_EMAIL),
+    // Lower-cased before storage. Mail delivery is case-insensitive in practice, and this is the
+    // key /account matches a customer's own orders on — Firestore `==` is case-sensitive, so
+    // "Test@gmail.com" stored against "test@gmail.com" queried would hide a real order from the
+    // person who placed it. Registration lower-cases too, so both sides agree.
+    email: cappedText(form, "email", MAX_EMAIL).toLowerCase(),
     phone: cappedText(form, "phone", MAX_PHONE),
   };
   const shipping = {
@@ -608,7 +612,8 @@ export async function sendInquiryAction(
   if (isBot(form)) return { ok: "Thanks — we'll get back to you shortly." };
 
   const name = cappedText(form, "name", MAX_NAME);
-  const email = cappedText(form, "email", MAX_EMAIL);
+  // Lower-cased for the same reason as an order's — see placeOrderAction.
+  const email = cappedText(form, "email", MAX_EMAIL).toLowerCase();
   const phone = cappedText(form, "phone", MAX_PHONE);
   const message = cappedText(form, "message", MAX_MESSAGE);
 
