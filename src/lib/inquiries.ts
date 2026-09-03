@@ -114,6 +114,24 @@ export async function listInquiries(options: {
   return snap.docs.map((d) => toInquiry(d.id, d.data() ?? {}));
 }
 
+/**
+ * A signed-in customer's own inquiries, newest first. Same email-matching reasoning — and the same
+ * caveat — as `listOrdersForCustomer`.
+ *
+ * Needs the composite index storeInquiries(email ASC, createdAt DESC).
+ */
+export async function listInquiriesForCustomer(email: string, limit = 20): Promise<Inquiry[]> {
+  const needle = email.trim().toLowerCase();
+  if (!needle) return [];
+
+  const snap = await storeCollection(COLLECTIONS.inquiries)
+    .where("email", "==", needle)
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .get();
+  return snap.docs.map((d) => toInquiry(d.id, d.data() ?? {}));
+}
+
 export async function countNewInquiries(): Promise<number> {
   const snap = await storeCollection(COLLECTIONS.inquiries)
     .where("status", "==", "new")

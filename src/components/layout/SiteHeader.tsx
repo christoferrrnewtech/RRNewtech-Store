@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { CartButton } from "@/components/cart/CartButton";
+import { AccountLink } from "@/components/layout/AccountLink";
 import { SearchBar } from "@/components/layout/SearchBar";
 import { NAV_ICONS } from "@/components/layout/NavIcons";
 import { CategoryMenu, type MenuCategory } from "@/components/layout/CategoryMenu";
@@ -93,23 +94,8 @@ export function SiteHeader({
 
             {/* Right actions */}
             <div className="ml-auto flex items-center gap-2 lg:ml-0">
-              <Link
-                href="/account"
-                className="hidden h-11 items-center gap-2 rounded-full border border-line px-4 text-fg hover:border-brand-600 hover:text-brand-700 lg:flex"
-              >
-                <UserIcon />
-                <span className="flex flex-col leading-tight">
-                  <span className="text-[11px] text-muted">Account</span>
-                  <span className="text-sm font-bold">Login</span>
-                </span>
-              </Link>
-              <Link
-                href="/account"
-                aria-label="Account"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-fg hover:bg-elevated lg:hidden"
-              >
-                <UserIcon />
-              </Link>
+              <AccountLink variant="pill" />
+              <AccountLink variant="icon" />
 
               <CartButton variant="pill" />
 
@@ -223,14 +209,7 @@ export function SiteHeader({
                 );
               })}
 
-              <Link
-                href="/account"
-                onClick={closeAll}
-                className="mt-1 flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-fg hover:bg-elevated"
-              >
-                <UserIcon />
-                Login or Register
-              </Link>
+              <AccountLink variant="row" onNavigate={closeAll} />
             </Container>
           </nav>
         )}
@@ -321,16 +300,3 @@ function MobileAccordion({
   );
 }
 
-function UserIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.7" />
-      <path
-        d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
