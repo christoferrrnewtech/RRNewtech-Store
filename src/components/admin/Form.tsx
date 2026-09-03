@@ -76,6 +76,10 @@ export function TextArea(props: React.ComponentProps<"textarea">) {
   return <textarea {...props} className={`${inputClass} ${props.className ?? ""}`} />;
 }
 
+export function Select(props: React.ComponentProps<"select">) {
+  return <select {...props} className={`${inputClass} ${props.className ?? ""}`} />;
+}
+
 /**
  * A list of text rows the editor can grow or shrink. All rows post under the same field `name`,
  * so the server action reads them with `formData.getAll(name)`.

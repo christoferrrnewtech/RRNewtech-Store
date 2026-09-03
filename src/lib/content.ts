@@ -18,6 +18,9 @@ import crypto from "node:crypto";
 import { cache } from "react";
 import { FieldValue } from "firebase-admin/firestore";
 import { getDb, storeDoc, DOCS } from "@/lib/firebase";
+// Type-only, so no module side-effect crosses the server-only boundary in either direction. The
+// shape lives with the components that render it; this file just reads and writes it.
+import type { Session } from "@/components/education/Sessions";
 import { type Product, CATEGORIES, brandSlug, brandProductSlugify } from "@/lib/products";
 import { SITE, type BrandGroup } from "@/lib/constants";
 
@@ -99,7 +102,7 @@ export type Brand = {
 export type Banner = { id: string; image: string; alt: string; href: string; order: number };
 
 /**
- * Editable copy + image for the homepage "About" band (AboutIntro). A singleton, so it's stored as
+ * Editable copy + image for the About page's "About" band (AboutIntro). A singleton, so it's stored as
  * plain fields in `R&RLandingPage/about` (not a keyed map like banners/brands).
  */
 export type AboutContent = {
@@ -189,6 +192,43 @@ function toBanner(id: string, v: Record<string, unknown>): Banner {
   };
 }
 
+function toSession(id: string, v: Record<string, unknown>): Session {
+  const num = (val: unknown) => (typeof val === "number" && Number.isFinite(val) ? val : undefined);
+  const str = (val: unknown) => (typeof val === "string" && val.trim() ? val.trim() : undefined);
+  return {
+    id,
+    title: String(v.title ?? ""),
+    summary: String(v.summary ?? ""),
+    highlights: Array.isArray(v.highlights)
+      ? v.highlights.map(String).map((h) => h.trim()).filter(Boolean)
+      : undefined,
+    date: String(v.date ?? ""),
+    time: str(v.time),
+    venue: str(v.venue),
+    format: v.format === "online" ? "online" : "in-person",
+    speaker: str(v.speaker),
+    partnerBrand: str(v.partnerBrand),
+    fee: str(v.fee),
+    seatsLeft: num(v.seatsLeft),
+    capacity: num(v.capacity),
+    registerHref: str(v.registerHref),
+    image: str(v.image),
+    order: num(v.order),
+  };
+}
+
+/**
+ * Campaign display order: whatever the admin dragged, then date as a tiebreaker.
+ *
+ * `MAX_SAFE_INTEGER` rather than `Infinity` is load-bearing — `Infinity - Infinity` is `NaN`, which
+ * makes the comparator incoherent and scrambles the list. This way two campaigns that predate
+ * ordering subtract to 0 and fall through to the date, so an unordered set keeps the chronological
+ * order it has always had until someone actually reorders it.
+ */
+const orderRank = (s: Session) => s.order ?? Number.MAX_SAFE_INTEGER;
+const bySessionOrder = (a: Session, b: Session) =>
+  orderRank(a) - orderRank(b) || a.date.localeCompare(b.date);
+
 function toBrand(slug: string, v: Record<string, unknown>): Brand {
   const raw = Array.isArray(v.products) ? (v.products as BrandProduct[]) : [];
   // Slugs are always derived from the current product name (deduped within the brand), so a URL can
@@ -240,6 +280,32 @@ export async function getBanners(): Promise<Banner[]> {
   return Object.entries(map)
     .map(([id, v]) => toBanner(id, v))
     .sort((a, b) => a.order - b.order);
+}
+
+/**
+ * Today in Manila as a date-only string ("2026-09-03").
+ *
+ * `en-CA` because it formats as YYYY-MM-DD, which sorts and compares correctly as a plain string.
+ * The timezone matters: comparing against `new Date()` in UTC would drop a session up to 8 hours
+ * early for a Philippine audience.
+ */
+function todayInManila(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
+}
+
+/**
+ * Training campaigns for the storefront: soonest first, with anything before today removed.
+ *
+ * The date filter is the point of this function — an "upcoming sessions" page that still lists a
+ * seminar which already ran is worse than an empty one.
+ */
+export async function getSessions(): Promise<Session[]> {
+  const today = todayInManila();
+  const map = await readMap(DOCS.sessions);
+  return Object.entries(map)
+    .map(([id, v]) => toSession(id, v))
+    .filter((s) => s.date >= today)
+    .sort(bySessionOrder);
 }
 
 /**
@@ -548,6 +614,65 @@ export async function reorderBanners(ids: string[]): Promise<void> {
     updates[`${id}.order`] = order;
   });
   if (Object.keys(updates).length) await storeDoc(DOCS.banner).update(updates);
+}
+
+/** Every campaign including past ones — the admin list, where old entries stay editable. */
+export async function getAllSessionsForAdmin(): Promise<Session[]> {
+  const map = await readMap(DOCS.sessions);
+  return Object.entries(map)
+    .map(([id, v]) => toSession(id, v))
+    .sort(bySessionOrder);
+}
+
+/**
+ * What the admin form writes.
+ *
+ * Optional text fields are written as `""` and numbers as `null` rather than being omitted, so
+ * *clearing* a field in the editor actually clears it — a merge write that skips the key would
+ * leave the old value in place. `toSession` maps both back to `undefined` on read.
+ */
+export type SessionInput = {
+  title: string;
+  summary: string;
+  highlights: string[];
+  date: string;
+  time: string;
+  venue: string;
+  format: Session["format"];
+  speaker: string;
+  partnerBrand: string;
+  fee: string;
+  seatsLeft: number | null;
+  capacity: number | null;
+  registerHref: string;
+  /** Only present when a new file was uploaded; absent leaves the existing photo untouched. */
+  image?: string;
+};
+
+export async function addSession(data: SessionInput): Promise<string> {
+  const id = crypto.randomUUID();
+  // Lands at the end of the list; the admin drags it up from there.
+  const order = (await getAllSessionsForAdmin()).length;
+  await storeDoc(DOCS.sessions).set({ [id]: { ...data, order } }, { merge: true });
+  return id;
+}
+
+/** Write campaign order from a full id sequence. Ids not listed keep their old order. */
+export async function reorderSessions(ids: string[]): Promise<void> {
+  const updates: Record<string, number> = {};
+  ids.forEach((id, order) => {
+    updates[`${id}.order`] = order;
+  });
+  if (Object.keys(updates).length) await storeDoc(DOCS.sessions).update(updates);
+}
+
+export async function updateSession(id: string, patch: SessionInput): Promise<void> {
+  // Nested merge updates only the supplied fields, leaving the rest of the campaign intact.
+  await storeDoc(DOCS.sessions).set({ [id]: patch }, { merge: true });
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  await storeDoc(DOCS.sessions).update({ [id]: FieldValue.delete() });
 }
 
 export async function createBrand(brand: Brand): Promise<void> {

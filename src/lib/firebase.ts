@@ -31,6 +31,7 @@ export const DOCS = {
   categories: "categories",
   users: "users",
   about: "about",
+  sessions: "sessions",
 } as const;
 
 function requireEnv(name: string): string {

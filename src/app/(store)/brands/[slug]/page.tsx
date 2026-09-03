@@ -182,7 +182,7 @@ export default async function BrandPage({
 
         {/* 6 · Products */}
         {products.length > 0 && (
-          <section id="brand-products" className="mt-16 scroll-mt-24">
+          <section id="brand-products" className="mt-16 scroll-mt-24 lg:scroll-mt-36">
             <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
               {brand.name} products
             </h2>

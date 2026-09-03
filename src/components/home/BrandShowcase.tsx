@@ -27,8 +27,8 @@ export async function BrandShowcase() {
   if (brands.length === 0) return null;
   return (
     <section aria-labelledby="brands-heading" className="bg-bg">
-      <Container className="py-14">
-        <div className="mb-8 flex items-end justify-between gap-4">
+      <Container className="py-10">
+        <div className="mb-6 flex items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
               Our Brands
@@ -39,9 +39,8 @@ export async function BrandShowcase() {
             >
               Shop by Brand
             </h2>
-            <p className="mt-2 max-w-2xl text-muted">
-              The names our clinics ask for — scanning, printing, whitening and lasers, plus the
-              consumables that keep the chair running.
+            <p className="mt-1.5 max-w-xl text-sm text-muted">
+              Trusted names, from clinic equipment to everyday consumables.
             </p>
           </div>
           <Link

@@ -23,6 +23,7 @@ const ICONS = {
   inquiries: "M21 12a8 8 0 0 1-8 8H4l2.5-3A8 8 0 1 1 21 12Z",
   banner: "M4 5h16v14H4V5Zm0 10 4-4 3 3 4-5 5 6",
   about: "M5 6h11M5 12h14M5 18h9",
+  events: "M4 6h16v14H4V6Zm0 5h16M8 3v4M16 3v4",
   categories: "M4 5h6v6H4V5Zm10 0h6v6h-6V5ZM4 15h6v4H4v-4Zm10-1h6v6h-6v-6Z",
   brands: "M3 7l9-4 9 4-9 4-9-4Zm0 5l9 4 9-4M3 17l9 4 9-4",
   users: "M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm11 9v-1a4 4 0 0 0-3-3.9M16 4.1a4 4 0 0 1 0 7.8",

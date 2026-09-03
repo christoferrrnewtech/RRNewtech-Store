@@ -129,7 +129,7 @@ function HeroSection({ brand }: { brand: Brand }) {
       <form action={action} className="space-y-4">
         <input type="hidden" name="slug" value={brand.slug} />
         <Field label="Upload image" hint="PNG, JPG or WebP · up to 5 MB. Use 1489 × 551 (or any 2.7:1 crop) — that's the band's exact shape, so nothing gets cut off.">
-          <TextInput type="file" name="heroImage" accept="image/png,image/jpeg,image/webp" />
+          <TextInput type="file" name="heroImage" accept="image/*" />
         </Field>
         <div className="flex items-center gap-4">
           <SubmitButton />
@@ -155,7 +155,7 @@ function LogoSection({ brand }: { brand: Brand }) {
       <form action={action} className="space-y-4">
         <input type="hidden" name="slug" value={brand.slug} />
         <Field label="Replace logo" hint="PNG, JPG or WebP · up to 5 MB.">
-          <TextInput type="file" name="logo" accept="image/png,image/jpeg,image/webp" required />
+          <TextInput type="file" name="logo" accept="image/*" required />
         </Field>
         <SubmitButton>Upload logo</SubmitButton>
         <FormMessage state={state} />
@@ -263,7 +263,7 @@ function GallerySection({ brand }: { brand: Brand }) {
           <TextInput
             type="file"
             name="newImages"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/*"
             multiple
           />
         </Field>

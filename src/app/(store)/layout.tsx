@@ -47,8 +47,10 @@ export default async function StoreLayout({
       <CartProvider>
         <div className="flex min-h-screen flex-col">
           {/* Above the header, not inside it: SiteHeader is `sticky top-0` and other components
-              position against its height (CheckoutClient's summary panel is `lg:sticky lg:top-24`),
-              so a strip that appears and disappears mid-session must not change that height. */}
+              position against its height — 64px on mobile, 128px at `lg` where the icon nav strip
+              shows (CheckoutClient's summary panel is `lg:sticky lg:top-36`, anchors are
+              `scroll-mt-24 lg:scroll-mt-36`) — so a strip that appears and disappears mid-session
+              must not change that height. */}
           <PendingPaymentBanner />
           <SiteHeader brands={brands} categories={categories} />
           <main id="main" className="flex flex-1 flex-col">

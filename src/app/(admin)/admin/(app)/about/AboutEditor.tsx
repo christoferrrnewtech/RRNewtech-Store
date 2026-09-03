@@ -50,7 +50,7 @@ export function AboutEditor({ content }: { content: AboutContent }) {
           </div>
 
           <Field label="Replace image" hint="PNG, JPG or WebP · up to 5 MB. Leave empty to keep the current image.">
-            <TextInput type="file" name="image" accept="image/png,image/jpeg,image/webp" />
+            <TextInput type="file" name="image" accept="image/*" />
           </Field>
 
           <label className="flex items-center gap-2 text-sm text-fg">

@@ -22,14 +22,14 @@ export function BrandLogoCarousel({ brands }: { brands: BrandLogo[] }) {
       {/* Edge fades so logos slide in/out softly rather than clipping at the container edge. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-bg to-transparent sm:w-20"
+        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-bg to-transparent sm:w-16"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-bg to-transparent sm:w-20"
+        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-bg to-transparent sm:w-16"
       />
 
-      <ul className="marquee-track flex w-max items-center gap-8">
+      <ul className="marquee-track flex w-max items-center gap-6">
         {loop.map((b, i) => {
           const isClone = i >= brands.length;
           return (
@@ -39,14 +39,14 @@ export function BrandLogoCarousel({ brands }: { brands: BrandLogo[] }) {
                 aria-label={b.name}
                 aria-hidden={isClone}
                 tabIndex={isClone ? -1 : 0}
-                className="relative flex h-28 w-48 items-center justify-center transition-transform duration-200 hover:-translate-y-1 sm:h-36 sm:w-64"
+                className="relative flex h-20 w-36 items-center justify-center transition-transform duration-200 hover:-translate-y-1 sm:h-24 sm:w-44"
               >
                 <Image
                   src={b.logo}
                   alt={b.name}
                   fill
-                  sizes="256px"
-                  className="object-contain p-3"
+                  sizes="176px"
+                  className="object-contain p-2"
                 />
               </Link>
             </li>

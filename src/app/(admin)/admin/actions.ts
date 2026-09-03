@@ -23,6 +23,11 @@ import {
   reorderBanners,
   saveAboutContent,
   type AboutContent,
+  addSession,
+  updateSession,
+  deleteSession,
+  reorderSessions,
+  type SessionInput,
   getCategories,
   createCategory,
   renameCategory,
@@ -82,12 +87,19 @@ import { text, textList, type ActionState } from "@/lib/form-data";
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 /** Internal notes on an order or inquiry. Long enough for context, short enough to bound the doc. */
 const MAX_NOTE = 2000;
-// SVG is deliberately excluded — it can carry script and would be served from our own origin.
-const ALLOWED_TYPES: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-};
+/**
+ * Refused even though sharp can decode it: SVG is markup, not a raster image — it can carry script,
+ * and it's the riskiest thing to hand a decoder. Rasterising a logo to a fixed size would look bad
+ * anyway, so there's nothing to gain by allowing it.
+ */
+const REJECTED_FORMATS = new Set(["svg"]);
+
+/**
+ * Minimum shorter edge for an upload. Every surface that displays these renders them hundreds of
+ * pixels wide, and `withoutEnlargement` means a tiny source stays tiny — a 46×46 file was once
+ * accepted silently and then stretched across a 460px card.
+ */
+const MIN_IMAGE_EDGE = 200;
 
 /** Refresh every surface that renders brand or banner content. */
 function revalidateStorefront(slug?: string) {
@@ -104,19 +116,46 @@ function revalidateStorefront(slug?: string) {
  * Upload an image to Firebase Storage and return a public download URL.
  * Returns "" when no file was supplied (an unchanged image field).
  *
- * The upload is downscaled to a max 1600px edge and re-encoded to WebP (quality 80), so banners and
- * logos land at tens of KB instead of multi-MB. Uses Firebase's download-token URL rather than
- * `makePublic()`: it works with uniform bucket-level access and doesn't expose the whole bucket.
+ * Whatever goes in comes out as WebP: downscaled to a max 1600px edge and re-encoded at quality 80,
+ * so banners and logos land at tens of KB instead of multi-MB. Uses Firebase's download-token URL
+ * rather than `makePublic()`: it works with uniform bucket-level access and doesn't expose the
+ * whole bucket.
+ *
+ * Validation is decode-first rather than a MIME allowlist — whatever sharp can actually read is
+ * accepted. An allowlist rejected valid files the browser had labelled with a blank or wrong type,
+ * and told the user nothing useful when it did.
  */
 async function storeUpload(file: FormDataEntryValue | null, prefix: string): Promise<string> {
   if (!(file instanceof File) || file.size === 0) return "";
-
-  if (!ALLOWED_TYPES[file.type]) throw new Error("Only PNG, JPG and WebP images are allowed.");
   if (file.size > MAX_UPLOAD_BYTES) throw new Error("Image must be 5 MB or smaller.");
+
+  const image = sharp(Buffer.from(await file.arrayBuffer()));
+  let meta;
+  try {
+    meta = await image.metadata();
+  } catch {
+    throw new Error(
+      "That file isn't an image we can read. Try JPG, PNG, WebP, AVIF, TIFF or GIF.",
+    );
+  }
+
+  if (meta.format && REJECTED_FORMATS.has(meta.format)) {
+    throw new Error("SVG files aren't supported. Please upload a JPG, PNG or WebP instead.");
+  }
+
+  // Name the actual size: a guard that only says "too small" leaves the uploader guessing at why an
+  // image they thought was fine came out blurry.
+  const shortEdge = Math.min(meta.width ?? 0, meta.height ?? 0);
+  if (shortEdge < MIN_IMAGE_EDGE) {
+    throw new Error(
+      `That image is only ${meta.width ?? 0}×${meta.height ?? 0}. ` +
+        `Please upload one at least ${MIN_IMAGE_EDGE}px on its shorter side.`,
+    );
+  }
 
   // Resize (never upscale) and re-encode to WebP so Storage stays small. `rotate()` bakes in EXIF
   // orientation so phone photos aren't saved sideways.
-  const compressed = await sharp(Buffer.from(await file.arrayBuffer()))
+  const compressed = await image
     .rotate()
     .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
     .webp({ quality: 80 })
@@ -223,7 +262,101 @@ export async function reorderBannersAction(ids: string[]): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// About section (admin only) — the homepage "About" band
+// Training campaigns (admin only) — the seminars listed on /education-training
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Highlight rows, one bullet per line.
+ *
+ * A block pasted into a single textarea is split on its line breaks rather than stored as one
+ * run-on bullet — HTML collapses newlines, so an unsplit paste renders as a single paragraph with
+ * the author's markers stranded mid-line. Any leading ✔/•/- is dropped too, because the card draws
+ * its own dot.
+ */
+function highlightList(form: FormData): string[] {
+  return form
+    .getAll("highlight")
+    .filter((v): v is string => typeof v === "string")
+    .flatMap((v) => v.split(/\r?\n/))
+    .map((s) => s.replace(/^[\s✔✓•·\-–—*]+/, "").trim())
+    .filter(Boolean);
+}
+
+/** Optional whole-number field. Blank or unparseable reads as null, which clears the stored value. */
+function optionalInt(form: FormData, key: string): number | null {
+  const raw = text(form, key);
+  if (!raw) return null;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Add or update one campaign — a single action for both, keyed on whether an `id` came through.
+ * Every optional field is written on every save (as "" or null when blank) so clearing one in the
+ * editor actually clears it; a merge write that skipped blank keys would keep the old value.
+ */
+export async function saveSessionAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const title = text(form, "title");
+  if (!title) return { error: "Title is required." };
+  const date = text(form, "date");
+  // Without a date the campaign can't be placed on the calendar, sorted, or expired.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Pick a date for the campaign." };
+
+  try {
+    const uploaded = await storeUpload(form.get("image"), "sessions");
+    const data: SessionInput = {
+      title,
+      summary: text(form, "summary"),
+      highlights: highlightList(form),
+      date,
+      time: text(form, "time"),
+      venue: text(form, "venue"),
+      format: text(form, "format") === "online" ? "online" : "in-person",
+      speaker: text(form, "speaker"),
+      partnerBrand: text(form, "partnerBrand"),
+      fee: text(form, "fee"),
+      seatsLeft: optionalInt(form, "seatsLeft"),
+      capacity: optionalInt(form, "capacity"),
+      registerHref: text(form, "registerHref"),
+    };
+    // A new upload wins; otherwise an explicit "remove" clears it, and a plain save keeps it.
+    if (uploaded) data.image = uploaded;
+    else if (form.get("removeImage") === "1") data.image = "";
+
+    const id = text(form, "id");
+    if (id) await updateSession(id, data);
+    else await addSession(data);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not save the campaign." };
+  }
+
+  revalidateStorefront();
+  return { ok: "Campaign saved." };
+}
+
+export async function deleteSessionAction(form: FormData): Promise<void> {
+  await requireAdmin();
+  await deleteSession(text(form, "id"));
+  revalidateStorefront();
+}
+
+/**
+ * Set campaign order from a full id sequence. Plain-arg action so the client can call it
+ * imperatively — drag-drop and the arrow buttons both submit the whole desired order.
+ */
+export async function reorderSessionsAction(ids: string[]): Promise<void> {
+  await requireAdmin();
+  await reorderSessions(ids);
+  revalidateStorefront();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// About section (admin only) — the "About" band on /about
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function saveAboutAction(

@@ -4,16 +4,19 @@ import { SITE } from "@/lib/constants";
 import { getAboutContent } from "@/lib/content";
 
 /**
- * "About" intro band on the landing page, right under the banner: brand story on the left, a large
- * image on the right. Content is editable in the admin (/admin/about) and read from Firestore via
- * `getAboutContent`, which falls back to `ABOUT_DEFAULTS` until it's edited.
+ * "About" intro band on the About page: brand story on the left, a large image on the right.
+ * Content is editable in the admin (/admin/about) and read from Firestore via `getAboutContent`,
+ * which falls back to `ABOUT_DEFAULTS` until it's edited.
+ *
+ * `showCta` exists because the admin's default CTA points at /about — a self-link on the page the
+ * band now lives on, so that page passes false.
  *
  * A plain <img> is used on purpose so both the local SVG placeholder and an uploaded remote WebP
  * render without touching the global next/image config.
  */
 const PLACEHOLDER_IMAGE = "/brand/about.svg";
 
-export async function AboutIntro() {
+export async function AboutIntro({ showCta = true }: { showCta?: boolean } = {}) {
   const about = await getAboutContent();
   const image = about.image || PLACEHOLDER_IMAGE;
 
@@ -38,7 +41,7 @@ export async function AboutIntro() {
               <p key={i}>{para}</p>
             ))}
           </div>
-          {about.ctaLabel && about.ctaHref && (
+          {showCta && about.ctaLabel && about.ctaHref && (
             <Link
               href={about.ctaHref}
               className="mt-7 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-800"

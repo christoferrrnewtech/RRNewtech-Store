@@ -206,7 +206,7 @@ export function CheckoutClient({
     <div className="-mb-20 lg:flex lg:flex-1 lg:items-stretch">
       {/* Order summary — bold brand panel, bleeds to the right edge; stacks on top on mobile */}
       <aside className="bg-gradient-to-br from-brand-700 to-brand-900 text-white lg:order-2 lg:w-[26rem] lg:shrink-0">
-        <div className="mx-auto w-full max-w-md px-4 py-8 sm:px-6 lg:mx-0 lg:px-10 lg:py-8 lg:sticky lg:top-24">
+        <div className="mx-auto w-full max-w-md px-4 py-8 sm:px-6 lg:mx-0 lg:px-10 lg:py-8 lg:sticky lg:top-36">
           <h2 className="font-[family-name:var(--font-display)] text-lg font-bold">
             Order summary
           </h2>
