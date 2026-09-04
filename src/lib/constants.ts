@@ -21,6 +21,25 @@ export const PHONES: { label?: string; value: string; tel: string }[] = [
   { label: "Landline", value: "(02) 7917 5657", tel: "+63279175657" },
 ];
 
+/**
+ * Registered business address. Split into parts so the JSON-LD can emit a real `PostalAddress`
+ * (which is what earns a Google knowledge-panel entry) rather than one opaque string.
+ *
+ * `addressRegion` is deliberately absent: Makati sits in Metro Manila, but that wasn't part of the
+ * address as given, and inventing a field for structured data is how wrong information ends up in
+ * search results.
+ */
+export const ADDRESS = {
+  street: "Unit 1207 Cityland Herrera Tower, Rufino St., cor. Valero St., Salcedo Village",
+  locality: "Makati",
+  country: "Philippines",
+  /** ISO 3166-1 alpha-2, for schema.org. */
+  countryCode: "PH",
+} as const;
+
+/** One-line form for display. */
+export const ADDRESS_LINE = `${ADDRESS.street}, ${ADDRESS.locality}, ${ADDRESS.country}`;
+
 export const SITE = {
   name: "R&R Newtech Dental",
   legalName: "R&R Newtech Dental Corporation",
@@ -31,6 +50,8 @@ export const SITE = {
     "R&R Newtech Dental Corporation is your online source for quality dental supplies, equipment, and consumables — competitive prices, fast nationwide delivery, and secure GCash, Maya, GrabPay, QR Ph & card payments.",
   email: "rrnewtechdentalcorp@gmail.com",
   phones: PHONES,
+  address: ADDRESS,
+  addressLine: ADDRESS_LINE,
   supportLine: "PH-based support — Mon–Sat, Philippine time",
   socials: {
     facebook: "https://www.facebook.com/rnrnewtechdentalcorp",
