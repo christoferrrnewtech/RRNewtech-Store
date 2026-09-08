@@ -10,14 +10,10 @@ import { formatPhone } from "@/lib/customer-fields";
 import { listOrdersForCustomer } from "@/lib/orders";
 import { listInquiriesForCustomer } from "@/lib/inquiries";
 import { deriveAddresses } from "@/lib/addresses";
-import {
-  AddressList,
-  Empty,
-  InquiryList,
-  OrderList,
-  Section,
-  Unavailable,
-} from "./AccountSections";
+import { listCustomerAddresses } from "@/lib/customer-addresses";
+import { getProvinces } from "@/lib/locations";
+import { AddressBook } from "./AddressBook";
+import { InquiryList, OrderList, Section, Unavailable } from "./AccountSections";
 
 export const metadata: Metadata = {
   title: "Profile",
@@ -46,15 +42,42 @@ export default async function AccountPage() {
   // Both panels are independent, so they're fetched together rather than in series — and settled
   // rather than awaited, so one failing query degrades its own panel instead of 500-ing the page.
   // The realistic failure is an un-deployed composite index; see firestore.indexes.json.
-  const [ordersResult, inquiriesResult] = await Promise.allSettled([
-    listOrdersForCustomer(customer.email, HISTORY_LIMIT),
-    listInquiriesForCustomer(customer.email, HISTORY_LIMIT),
+  // Both are matched on uid as well as email, so an order placed — or a question asked — from a
+  // different address still lands here. See listOrdersForCustomer / listInquiriesForCustomer.
+  const [ordersResult, inquiriesResult, addressesResult] = await Promise.allSettled([
+    listOrdersForCustomer({ uid: customer.uid, email: customer.email }, HISTORY_LIMIT),
+    listInquiriesForCustomer({ uid: customer.uid, email: customer.email }, HISTORY_LIMIT),
+    listCustomerAddresses(customer.uid),
   ]);
+
+  // Logged, not swallowed: the panel's "couldn't load" wording is all the customer needs, but
+  // without this the cause (almost always an un-deployed composite index, which Firestore reports
+  // as FAILED_PRECONDITION with a ready-made create-index URL) never reaches anyone who can fix it.
+  if (ordersResult.status === "rejected") {
+    console.error("[account] could not load orders:", ordersResult.reason);
+  }
+  if (inquiriesResult.status === "rejected") {
+    console.error("[account] could not load inquiries:", inquiriesResult.reason);
+  }
+  if (addressesResult.status === "rejected") {
+    console.error("[account] could not load addresses:", addressesResult.reason);
+  }
 
   const orders = ordersResult.status === "fulfilled" ? ordersResult.value : null;
   const inquiries = inquiriesResult.status === "fulfilled" ? inquiriesResult.value : null;
-  // Derived from order history — there is no address book. See addresses.ts.
-  const addresses = orders ? deriveAddresses(orders) : null;
+  const addresses = addressesResult.status === "fulfilled" ? addressesResult.value : null;
+
+  /**
+   * Addresses that appear in past orders but aren't in the book yet.
+   *
+   * Only ever non-zero for someone who ordered before the book existed — checkout has remembered
+   * the address on every order since. Counted here so the import button appears only when it has
+   * something to do; the action itself re-derives from the orders rather than trusting this.
+   */
+  const importable =
+    orders && addresses
+      ? deriveAddresses(orders).filter((d) => !addresses.some((a) => a.key === d.key)).length
+      : 0;
 
   const prc = {
     pending: { label: "Awaiting verification", className: "bg-brand-50 text-brand-700" },
@@ -117,10 +140,20 @@ export default async function AccountPage() {
 
       <Section title="Addresses" count={addresses?.length}>
         {addresses ? (
-          <AddressList addresses={addresses} />
+          <AddressBook
+            addresses={addresses}
+            // Rendered in rather than fetched, exactly as checkout does it: 82 names is nothing to
+            // send, and it means the first dropdown works on first paint.
+            provinces={getProvinces()}
+            defaults={{
+              firstName: customer.firstName,
+              lastName: customer.lastName,
+              phone: customer.phone,
+            }}
+            importable={importable}
+          />
         ) : (
-          // Addresses come out of the orders query, so they're missing for the same reason.
-          <Empty>Addresses you deliver to will appear here after your first order.</Empty>
+          <Unavailable what="addresses" />
         )}
       </Section>
     </AccountShell>

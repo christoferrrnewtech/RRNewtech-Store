@@ -21,6 +21,7 @@ import { makeRef } from "@/lib/reference";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/payment-status";
 import { PAY_WINDOW_MS } from "@/lib/pay-window";
+import { clearCustomerCart } from "@/lib/customer-cart";
 import type { CartItemSource } from "@/lib/cart-item";
 import type { OrderShipping } from "@/lib/order-shipping";
 
@@ -52,6 +53,15 @@ export type OrderCustomer = {
   lastName: string;
   email: string;
   phone: string;
+  /**
+   * Firebase Auth uid of the customer who placed this, when they were signed in.
+   *
+   * Absent for guest checkout, which stays fully supported — nothing here gates on an account.
+   * It exists because email alone is a fragile link back to one: a customer who orders to a
+   * clinic under the clinic's address and inbox would otherwise never see the order on /account.
+   * Same reasoning, and the same two-key lookup, as an inquiry's `userId`.
+   */
+  userId?: string;
 };
 
 export type Order = {
@@ -187,6 +197,8 @@ function toOrder(id: string, value: Record<string, unknown>): Order {
       lastName: str(customer.lastName),
       email: str(customer.email),
       phone: str(customer.phone),
+      // Omitted rather than "" so its absence stays meaningful — a guest order has no uid.
+      ...(str(customer.userId) ? { userId: str(customer.userId) } : {}),
     },
     shipping: {
       address: str(shipping.address),
@@ -311,28 +323,68 @@ export async function listOrders(options: {
 /**
  * A signed-in customer's own orders, newest first.
  *
- * Matched on `customer.email`, not a uid: orders are written by an anonymous checkout that has no
- * account attached, so email is the only link that exists — and it has the useful property of
- * covering orders placed BEFORE the customer ever registered.
+ * Matched on TWO keys, unioned — the same shape, and the same reasoning, as
+ * `listInquiriesForCustomer`:
  *
- * That is only sound because the address is PROVEN. A customer cannot sign in until Firebase has
- * confirmed the mailbox (see loginCustomerAction), so "same email" really does mean "same person".
- * If email verification is ever relaxed, this becomes an account-takeover path and must move to a
- * uid stamped on the order at checkout.
+ *   - `customer.userId` catches anything ordered while signed in, whatever address was typed into
+ *     checkout. Only orders placed after that field shipped carry one.
+ *   - `customer.email` catches the rest: every earlier order, plus anything ordered as a guest —
+ *     including orders placed BEFORE the customer ever registered.
  *
- * Needs the composite index storeOrders(customer.email ASC, createdAt DESC) — see
- * firestore.indexes.json. Firestore fails the query rather than scanning without it.
+ * The email leg is only sound because the address is PROVEN. A customer cannot sign in until
+ * Firebase has confirmed the mailbox (see loginCustomerAction), so "same email" really does mean
+ * "same person". If email verification is ever relaxed, that leg becomes an account-takeover path
+ * and must be dropped in favour of the uid alone.
+ *
+ * Needs the composite indexes storeOrders(customer.email ASC, createdAt DESC) and
+ * storeOrders(customer.userId ASC, createdAt DESC) — see firestore.indexes.json. Firestore fails
+ * such a query outright rather than scanning without one.
  */
-export async function listOrdersForCustomer(email: string, limit = 20): Promise<Order[]> {
-  const needle = email.trim().toLowerCase();
-  if (!needle) return [];
+export async function listOrdersForCustomer(
+  customer: { uid?: string; email: string },
+  limit = 20,
+): Promise<Order[]> {
+  const needle = customer.email.trim().toLowerCase();
+  const uid = (customer.uid ?? "").trim();
+  if (!needle && !uid) return [];
 
-  const snap = await storeCollection(COLLECTIONS.orders)
-    .where("customer.email", "==", needle)
-    .orderBy("createdAt", "desc")
-    .limit(limit)
-    .get();
-  return snap.docs.map((d) => toOrder(d.id, d.data() ?? {}));
+  // Only the keys we actually have. A leg that was never run must not count as a success below.
+  const legs: { field: "customer.userId" | "customer.email"; value: string }[] = [];
+  if (uid) legs.push({ field: "customer.userId", value: uid });
+  if (needle) legs.push({ field: "customer.email", value: needle });
+
+  const settled = await Promise.allSettled(
+    legs.map(async ({ field, value }) => {
+      const snap = await storeCollection(COLLECTIONS.orders)
+        .where(field, "==", value)
+        .orderBy("createdAt", "desc")
+        .limit(limit)
+        .get();
+      return snap.docs.map((d) => toOrder(d.id, d.data() ?? {}));
+    }),
+  );
+
+  // Settled, not awaited: the legs fail independently, and the realistic failure is one of the
+  // indexes above missing or still BUILDING (Firestore raises FAILED_PRECONDITION for both, with a
+  // create-index URL in the message). Losing one leg to that must not hide what the other found.
+  for (const [i, result] of settled.entries()) {
+    if (result.status === "rejected") {
+      console.error(`[orders] the ${legs[i].field} query failed:`, result.reason);
+    }
+  }
+
+  const ok = settled.filter((r) => r.status === "fulfilled");
+  // Every leg we ran failed. Throw rather than return [], so the caller can render its "couldn't
+  // load" state instead of an empty list that would read as "you have never ordered".
+  if (ok.length === 0) throw (settled[0] as PromiseRejectedResult).reason;
+
+  // An order placed while signed in with the account's own address matches both queries.
+  const merged = new Map<string, Order>();
+  for (const result of ok) {
+    for (const order of result.value) merged.set(order.id, order);
+  }
+
+  return [...merged.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
 }
 
 /**
@@ -405,6 +457,19 @@ export async function setOrderPaymentError(id: string, message: string): Promise
  *
  * This and nothing else may write `paymentStatus`. The admin's manual "mark as paid" goes through
  * here too, precisely so it obeys the same rules.
+ *
+ * IT ALSO RETIRES THE CART, and that placement is the point. "The customer paid" is the only event
+ * that should empty a cart, and it is an event the SERVER learns about — from the webhook, from
+ * the reconcile-on-read, or from staff recording a bank transfer — often when the customer has no
+ * page open at all. A cart cleared by a React effect on the confirmation page (as it was, and
+ * still is for the local copy) only works when the customer actually lands there, on the device
+ * they paid from: close the tab at PayMongo, pay on your phone and shop on your laptop, or have
+ * staff mark it paid the next morning, and the cart was never emptied. Hanging it off this
+ * transaction means it happens once, for every path, whether anyone is watching or not.
+ *
+ * Deliberately only on `paid`. A `failed` or `expired` order MUST keep the cart — the customer is
+ * about to try again, and an empty cart at that moment is lost revenue. That is the same rule
+ * `ClearCart` documents client-side.
  */
 export async function applyOrderPayment(
   id: string,
@@ -412,13 +477,21 @@ export async function applyOrderPayment(
 ): Promise<boolean> {
   const ref = storeCollection(COLLECTIONS.orders).doc(id);
 
-  return getDb().runTransaction(async (tx) => {
+  // Captured inside the transaction, used after it commits. A transaction body can be retried, so
+  // this holds whatever the winning attempt read — which is the attempt that returned true.
+  let customerUid = "";
+
+  const changed = await getDb().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) return false;
 
-    const current = toPaymentStatus((snap.data() ?? {}).paymentStatus);
+    const data = snap.data() ?? {};
+    const current = toPaymentStatus(data.paymentStatus);
     if (current === "paid") return false; // terminal — nothing may follow it
     if (current === next.paymentStatus) return false;
+
+    // "" for a guest checkout, which has no account and therefore no stored cart.
+    customerUid = String((data.customer as { userId?: unknown } | undefined)?.userId ?? "");
 
     tx.update(ref, {
       paymentStatus: next.paymentStatus,
@@ -429,4 +502,17 @@ export async function applyOrderPayment(
     });
     return true;
   });
+
+  // Outside the transaction and NON-FATAL, in that order and for the same reason
+  // `rememberOrderAddress` is: the money has moved and the order says so. A failure to tidy up the
+  // cart must never propagate into the webhook (where it would earn a 500 and a redelivery) or
+  // into the confirmation page (where it would tell a customer who has just paid that something
+  // went wrong). The stale cart is a visible annoyance; the alternatives are worse.
+  if (changed && next.paymentStatus === "paid" && customerUid) {
+    await clearCustomerCart(customerUid).catch((err) =>
+      console.error("[orders] could not clear the cart for order", id, err),
+    );
+  }
+
+  return changed;
 }

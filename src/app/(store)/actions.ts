@@ -36,6 +36,8 @@ import {
   type OrderLine,
 } from "@/lib/orders";
 import { createInquiry, type InquiryProduct } from "@/lib/inquiries";
+import { getSessionCustomer } from "@/lib/customer-auth";
+import { rememberOrderAddress } from "@/lib/customer-addresses";
 import { getAllProducts } from "@/lib/catalog";
 import { getBrandBySlug } from "@/lib/content";
 import { brandProductHref, brandProductSlugify, productImageUrl } from "@/lib/products";
@@ -322,6 +324,10 @@ export async function placeOrderAction(
 ): Promise<ActionState> {
   if (isBot(form)) return { ok: "Order received." };
 
+  // Read from the session cookie, never from the form. Guest checkout is unchanged — this is null
+  // for anyone signed out, and nothing below gates on it.
+  const customerSession = await getSessionCustomer();
+
   const customer = {
     firstName: cappedText(form, "firstName", MAX_NAME),
     lastName: cappedText(form, "lastName", MAX_NAME),
@@ -331,6 +337,9 @@ export async function placeOrderAction(
     // person who placed it. Registration lower-cases too, so both sides agree.
     email: cappedText(form, "email", MAX_EMAIL).toLowerCase(),
     phone: cappedText(form, "phone", MAX_PHONE),
+    // What links this order to an account. See OrderCustomer.userId, and the two-key lookup in
+    // `listOrdersForCustomer` that reads it back.
+    userId: customerSession?.uid,
   };
   const shipping = {
     address: cappedText(form, "address", MAX_ADDRESS_FIELD),
@@ -390,6 +399,19 @@ export async function placeOrderAction(
       total,
     });
     orderId = created.id;
+
+    // Fill the customer's address book from what they just typed, so the next checkout can offer
+    // it back. Caught, never thrown: the order is already written and about to be paid for, and
+    // failing it because a convenience write failed would be indefensible. Guests skip this — they
+    // have no book to write to.
+    if (customerSession) {
+      await rememberOrderAddress(customerSession.uid, {
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        phone: customer.phone,
+        shipping,
+      }).catch((err) => console.error("[checkout] could not save the address:", err));
+    }
 
     if (!isPayMongoConfigured()) {
       // The pre-PayMongo behaviour, which .env.example promises still works with empty keys:
@@ -623,7 +645,12 @@ export async function sendInquiryAction(
 
   try {
     const product = await resolveProduct(text(form, "brand"), text(form, "product"));
-    await createInquiry({ name, email, phone, message, product });
+    // Stamped from the session cookie, never from the form — the client cannot claim a uid, and a
+    // guest simply has none. This is what lets /account find the inquiry back even when the
+    // visitor typed an address other than the one they registered with; see
+    // `listInquiriesForCustomer`. A signed-out visitor still gets the guest path, unchanged.
+    const session = await getSessionCustomer();
+    await createInquiry({ name, email, phone, message, product, userId: session?.uid });
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "Could not send your message. Please try again.",

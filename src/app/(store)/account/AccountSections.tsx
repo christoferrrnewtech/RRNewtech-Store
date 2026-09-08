@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { formatPHP } from "@/lib/format";
-import { addressLines, type SavedAddress } from "@/lib/addresses";
 import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-status";
 import { PAYMENT_STATUS_LABELS, type PaymentStatus } from "@/lib/payment-status";
 import { INQUIRY_STATUS_LABELS } from "@/lib/inquiry-status";
@@ -8,7 +7,10 @@ import type { Order } from "@/lib/orders";
 import type { Inquiry } from "@/lib/inquiries";
 
 /**
- * The read-only panels on /account: orders, inquiries, addresses.
+ * The read-only panels on /account: orders and inquiries.
+ *
+ * Addresses are NOT here — they are editable now, so they live in the client component
+ * `AddressBook.tsx` beside this file.
  *
  * Server components — they only render data the page already fetched, and pulling the server-only
  * `orders`/`inquiries` types is fine here because nothing in this file crosses to the client.
@@ -235,40 +237,5 @@ export function InquiryList({ inquiries }: { inquiries: Inquiry[] }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Addresses
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function AddressList({ addresses }: { addresses: SavedAddress[] }) {
-  if (addresses.length === 0) {
-    return <Empty>Addresses you deliver to will appear here after your first order.</Empty>;
-  }
-
-  return (
-    <>
-      <ul className="grid gap-3 sm:grid-cols-2">
-        {addresses.map((address) => (
-          <li key={address.key} className="rounded-2xl border border-line bg-surface p-4 sm:p-5">
-            <address className="text-sm not-italic leading-relaxed text-fg">
-              {addressLines(address.shipping).map((line) => (
-                <span key={line} className="block">
-                  {line}
-                </span>
-              ))}
-            </address>
-            <p className="mt-2 text-xs text-muted">
-              Last used {formatDate(address.lastUsedAt)}
-              {address.timesUsed > 1 && ` · ${address.timesUsed} orders`}
-            </p>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-3 text-xs leading-relaxed text-muted-light">
-        These are the addresses from your past orders. You can enter a different one at checkout.
-      </p>
-    </>
   );
 }

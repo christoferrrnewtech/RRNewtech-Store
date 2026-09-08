@@ -18,16 +18,29 @@ import { useCart } from "@/lib/cart";
  *
  * The ref guards against React's development double-invoke and against a re-render clearing a cart
  * the customer has since started rebuilding in another tab.
+ *
+ * WAITING FOR `hydrated` IS NOT OPTIONAL. Effects run child-first, and this component sits far
+ * below the `CartProvider` in the tree — so on a full page load it fires BEFORE the provider has
+ * loaded the cart. Clearing an empty placeholder achieves nothing, and the hydration that follows
+ * a moment later puts every line straight back. That was the bug: the cart cleared correctly on
+ * the manual path (a client-side navigation, where the provider was already mounted) and never on
+ * the PayMongo path, where returning from the gateway is a full page load. `hydrated` is the
+ * provider's own answer to "have I loaded yet", and this must not act before it says yes.
+ *
+ * This is now the SECOND of two clears, and the lesser one. An order reaching `paid` empties the
+ * customer's stored cart server-side (see `applyOrderPayment`), which is what makes the cart clear
+ * on their other devices and on this one even if they never load this page. This clears the local
+ * copy immediately so the header count drops the instant they see "Payment received".
  */
 export function ClearCart({ when = true }: { when?: boolean }) {
-  const { clear } = useCart();
+  const { clear, hydrated } = useCart();
   const done = useRef(false);
 
   useEffect(() => {
-    if (done.current || !when) return;
+    if (done.current || !when || !hydrated) return;
     done.current = true;
     clear();
-  }, [clear, when]);
+  }, [clear, when, hydrated]);
 
   return null;
 }

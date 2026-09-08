@@ -4,6 +4,8 @@ import { isPayMongoConfigured } from "@/lib/paymongo";
 import { getOrder } from "@/lib/orders";
 import { isPayWindowOpen, PAY_COOKIE, parsePendingPayment } from "@/lib/pay-window";
 import { getProvinces } from "@/lib/locations";
+import { getCurrentCustomer } from "@/lib/customer-auth";
+import { listCustomerAddresses } from "@/lib/customer-addresses";
 import { CheckoutClient, type PendingCheckout } from "./CheckoutClient";
 
 export const metadata: Metadata = {
@@ -27,11 +29,34 @@ export default async function CheckoutPage({
 }) {
   const { payment } = await searchParams;
 
+  // Signed in? Then checkout knows who this is and where they usually ship. A guest gets exactly
+  // the form they got before — `null` and an empty book, and nothing below branches on more than
+  // that. The reads are settled rather than awaited so a Firestore hiccup degrades the convenience
+  // instead of taking down checkout itself.
+  const customer = await getCurrentCustomer().catch(() => null);
+  const savedAddresses = customer
+    ? await listCustomerAddresses(customer.uid).catch((err) => {
+        console.error("[checkout] could not load saved addresses:", err);
+        return [];
+      })
+    : [];
+
   return (
     <CheckoutClient
       paymentsEnabled={isPayMongoConfigured()}
       cancelled={payment === "cancelled"}
       pending={await pendingCheckout()}
+      customer={
+        customer
+          ? {
+              firstName: customer.firstName,
+              lastName: customer.lastName,
+              email: customer.email,
+              phone: customer.phone,
+            }
+          : null
+      }
+      savedAddresses={savedAddresses}
       // Rendered in, not fetched: 82 names is nothing to send, and it means the first dropdown is
       // usable on first paint rather than after a round-trip. Cities and barangays still come from
       // Server Actions — 42,000 barangays have no business in a page payload.

@@ -1,14 +1,14 @@
 /**
  * Delivery addresses a customer has used — CLIENT-SAFE.
  *
- * There is no address book: nothing in the app stores a customer's addresses as editable records.
- * What exists is the `shipping` snapshot on every order, so "my addresses" is DERIVED from order
- * history rather than read from a table.
+ * The address book itself now lives in `customer-addresses.ts` (a `storeCustomers/{uid}/addresses`
+ * subcollection, written by checkout and editable from /account). What remains here is the part
+ * that has nothing to do with storage:
  *
- * That is a real limitation, not an oversight to be quietly papered over — a customer can't add an
- * address here before their first order, or edit one after. Turning this into a true address book
- * means a `storeCustomers/{uid}/addresses` subcollection and checkout writing to it; this module is
- * the read side that a change like that would replace.
+ *   - `addressLines` / `shippingKey`, the display and identity rules, used by both sides
+ *   - `deriveAddresses`, which reconstructs the distinct addresses a customer has ORDERED to from
+ *     their order history — the only source for anyone who ordered before the book existed, and
+ *     what /account offers to import from.
  *
  * No `server-only` import: the formatting is used by components on both sides.
  */
@@ -35,8 +35,14 @@ export function addressLines(s: OrderShipping): string[] {
   ].filter(Boolean);
 }
 
-/** Case- and whitespace-insensitive identity, so "Unit 5" and "unit 5 " are one address. */
-function addressKey(s: OrderShipping): string {
+/**
+ * Case- and whitespace-insensitive identity, so "Unit 5" and "unit 5 " are one address.
+ *
+ * Exported because the address book stores it: it is what stops a customer who checks out to the
+ * same clinic every month from accumulating twelve copies of it. Built from `addressLines`, so two
+ * addresses are the same exactly when they would PRINT the same on a waybill.
+ */
+export function shippingKey(s: OrderShipping): string {
   return addressLines(s).join(" | ").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
@@ -52,7 +58,7 @@ export function deriveAddresses(
   const byKey = new Map<string, SavedAddress>();
 
   for (const order of orders) {
-    const key = addressKey(order.shipping);
+    const key = shippingKey(order.shipping);
     // An order with no address at all (an inquiry-style record, or a malformed document) has
     // nothing to show — skip rather than rendering an empty card.
     if (!key) continue;
