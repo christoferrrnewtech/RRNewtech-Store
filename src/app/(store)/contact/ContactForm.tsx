@@ -14,11 +14,18 @@ import type { ActionState } from "@/lib/form-data";
  * When the visitor arrived from a product priced on request ("Contact a sales agent"), the page
  * passes that product down and the hidden slug fields travel with the message — the action
  * re-resolves them server-side, so the stored record can't be faked from the query string.
+ *
+ * A signed-in customer gets their details prefilled. Convenience, but also the thing that keeps
+ * the inquiry findable on /account by email rather than only by uid — the reason they're
+ * *editable* is that a clinic may genuinely want a reply somewhere else, which is exactly why the
+ * stored `userId` can't be derived from whatever ends up in this box.
  */
 export function ContactForm({
   product,
+  customer,
 }: {
   product?: { brandSlug: string; productSlug: string; name: string; href: string };
+  customer?: { name: string; email: string; phone: string };
 }) {
   const [state, action] = useActionState<ActionState, FormData>(sendInquiryAction, {});
 
@@ -60,16 +67,34 @@ export function ContactForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
           Name
-          <input required name="name" className={field} placeholder="Juan dela Cruz" />
+          <input
+            required
+            name="name"
+            defaultValue={customer?.name ?? ""}
+            className={field}
+            placeholder="Juan dela Cruz"
+          />
         </label>
         <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
           Phone
-          <input name="phone" className={field} placeholder="09xx xxx xxxx" />
+          <input
+            name="phone"
+            defaultValue={customer?.phone ?? ""}
+            className={field}
+            placeholder="09xx xxx xxxx"
+          />
         </label>
       </div>
       <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
         Email
-        <input required type="email" name="email" className={field} placeholder="you@email.com" />
+        <input
+          required
+          type="email"
+          name="email"
+          defaultValue={customer?.email ?? ""}
+          className={field}
+          placeholder="you@email.com"
+        />
       </label>
       <label className="flex flex-col gap-1.5 text-sm font-medium text-fg">
         Message

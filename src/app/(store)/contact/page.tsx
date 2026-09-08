@@ -6,6 +6,9 @@ import { ContactForm } from "./ContactForm";
 import { SITE } from "@/lib/constants";
 import { getBrandBySlug } from "@/lib/content";
 import { brandProductHref, brandProductSlugify } from "@/lib/products";
+import { getCurrentCustomer } from "@/lib/customer-auth";
+import { customerName } from "@/lib/customers";
+import { formatPhone } from "@/lib/customer-fields";
 
 export const metadata: Metadata = {
   title: "Contact Us",
@@ -46,7 +49,12 @@ export default async function ContactPage({
   searchParams: Promise<{ product?: string; brand?: string }>;
 }) {
   const { product: productSlug, brand: brandSlug } = await searchParams;
-  const product = await productFromParams(brandSlug, productSlug);
+  // The session read costs this page nothing in prerendering — `searchParams` already makes it
+  // dynamic. A guest simply gets an empty form, as before.
+  const [product, customer] = await Promise.all([
+    productFromParams(brandSlug, productSlug),
+    getCurrentCustomer().catch(() => null),
+  ]);
 
   return (
     <Container className="py-12">
@@ -84,7 +92,21 @@ export default async function ContactPage({
 
           <div className="mt-8">
             <Suspense fallback={<p className="text-muted">Loading form…</p>}>
-              <ContactForm product={product} />
+              <ContactForm
+                product={product}
+                customer={
+                  customer
+                    ? {
+                        name: customerName(customer),
+                        email: customer.email,
+                        // Displayed the way /account shows it (0917-123-4567) rather than the
+                        // canonical 11 digits it is stored as. An inquiry's phone is free text,
+                        // so either shape stores fine — this is the one the customer recognises.
+                        phone: formatPhone(customer.phone),
+                      }
+                    : undefined
+                }
+              />
             </Suspense>
           </div>
         </div>

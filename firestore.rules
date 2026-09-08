@@ -7,7 +7,15 @@ service cloud.firestore {
     // app reaches them through the Admin SDK, which bypasses these rules, so no client ever needs
     // access — and the open catch-all below would otherwise expose the lot to anyone holding the
     // project's public web API key. Denied explicitly, and BEFORE the catch-all.
-    match /storeCustomers/{uid} {
+    //
+    // The `{document=**}` is load-bearing, not decoration. `match /storeCustomers/{uid}` alone
+    // matches ONLY the profile document — subcollections under it are not covered by their parent's
+    // rules and would fall straight through to the catch-all below. That left the address book
+    // (`storeCustomers/{uid}/addresses/{id}`) and now the saved cart
+    // (`storeCustomers/{uid}/cart/current`) world-readable and world-WRITABLE to anyone with the
+    // web API key, which is published in the client bundle by design. Anything added under a
+    // customer inherits this deny only because of the recursive wildcard — keep it.
+    match /storeCustomers/{uid}/{document=**} {
       allow read, write: if false;
     }
 

@@ -94,12 +94,12 @@ export function BrandProductCard({
 
         <div className="mt-4 flex-1" />
         {product.contactSales ? (
-          <LinkButton
-            href={contactSalesHref(brandSlug, product)}
-            size="sm"
-            className="w-full whitespace-nowrap"
-          >
-            Contact a sales agent
+          <LinkButton href={contactSalesHref(brandSlug, product)} size="sm" className="w-full">
+            {/* Two-column mobile cards leave roughly 103px of text room; the full label needs ~150px
+                and used to spill outside the card because `whitespace-nowrap` stopped it wrapping.
+                Only one span is in the accessibility tree at a time — `hidden` is display:none. */}
+            <span className="sm:hidden">Contact sales</span>
+            <span className="hidden sm:inline">Contact a sales agent</span>
           </LinkButton>
         ) : (
           <AddToCartButton

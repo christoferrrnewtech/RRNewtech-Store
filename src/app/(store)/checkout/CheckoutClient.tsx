@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
+import { useActionState, useCallback, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
@@ -12,12 +12,16 @@ import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 import { FLAT_SHIPPING_FEE, quoteShipping } from "@/lib/shipping";
 import { PAYMENT_METHODS_SENTENCE } from "@/lib/payment-methods";
 import { PendingPaymentNotice } from "@/components/checkout/PendingPaymentNotice";
-import { SearchableSelect, type SelectOption } from "@/components/checkout/SearchableSelect";
+import { SearchableSelect } from "@/components/checkout/SearchableSelect";
+import { useLocations } from "@/components/checkout/useLocations";
 import {
   listBarangaysAction,
   listCitiesAction,
   placeOrderAction,
 } from "@/app/(store)/actions";
+import { ADDRESS_LABEL_NAMES, type CustomerAddress } from "@/lib/address-book";
+import { addressLines } from "@/lib/addresses";
+import { formatPhone } from "@/lib/customer-fields";
 import type { ActionState } from "@/lib/form-data";
 
 const field =
@@ -45,50 +49,6 @@ function Field({
 }
 
 /**
- * Fetch one level of the address cascade.
- *
- * `key` identifies WHAT is wanted ("" means nothing yet, which is what makes this a cascade: no
- * province, no city list). Everything the caller renders is derived from comparing it against the
- * key the held options came back under:
- *
- *   key === ""            → disabled, no options
- *   loaded.key === key    → these are the right options
- *   otherwise             → loading
- *
- * That comparison is doing two jobs. It gives `loading` without storing it, so nothing sets state
- * synchronously inside the effect. And it discards a slow reply for a level the customer has
- * already moved past — the same out-of-order hazard as the shipping quote, fixed the same way.
- */
-function useLocations(
-  key: string,
-  load: () => Promise<SelectOption[]>,
-): { options: SelectOption[]; loading: boolean } {
-  const [loaded, setLoaded] = useState<{ key: string; options: SelectOption[] } | null>(null);
-
-  useEffect(() => {
-    if (!key) return;
-    let cancelled = false;
-    load().then(
-      (options) => {
-        if (!cancelled) setLoaded({ key, options });
-      },
-      // A failed lookup settles as an empty list rather than staying "loading" forever. The action
-      // already logged why; the customer sees an empty dropdown, which is at least honest.
-      () => {
-        if (!cancelled) setLoaded({ key, options: [] });
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [key, load]);
-
-  if (!key) return { options: [], loading: false };
-  if (loaded?.key === key) return { options: loaded.options, loading: false };
-  return { options: [], loading: true };
-}
-
-/**
  * Checkout — a bold, brand-forward split screen (compact shipping form on white, order summary on a
  * full-height brand-blue panel). Submitting records the order in Firestore via `placeOrderAction`
  * as `awaiting_payment` and sends the customer to `/checkout/pay`, which is where the hand-off to
@@ -105,6 +65,59 @@ function useLocations(
  * The two exceptions are city and province, which ARE mirrored — not to post them, but because
  * each one decides what the next dropdown can offer.
  */
+/**
+ * One selectable saved address, plus the "use a new one" tile.
+ *
+ * A button rather than a radio input: nothing here is posted — the selection only decides what the
+ * real fields below are filled with, and the server reads those. `aria-pressed` is what tells a
+ * screen reader which one is active.
+ */
+function AddressChoice({
+  selected,
+  onSelect,
+  title,
+  badge,
+  isDefault,
+  lines,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  title: string;
+  badge?: string;
+  isDefault?: boolean;
+  lines: string[];
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      className={`rounded-xl border p-3 text-left transition-colors ${
+        selected
+          ? "border-brand-500 bg-brand-50/60 ring-2 ring-brand-500/20"
+          : "border-line bg-surface hover:bg-elevated"
+      }`}
+    >
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-fg">{title}</span>
+        {badge && (
+          <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] font-semibold text-muted">
+            {badge}
+          </span>
+        )}
+        {isDefault && (
+          <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
+            Default
+          </span>
+        )}
+      </span>
+      <span className="mt-1 block text-xs leading-relaxed text-muted">
+        {lines.join(", ")}
+      </span>
+    </button>
+  );
+}
+
 /** The resume notice's data, resolved server-side in `page.tsx`. */
 export type PendingCheckout = {
   ref: string;
@@ -113,15 +126,29 @@ export type PendingCheckout = {
   retry: boolean;
 };
 
+/** The signed-in customer, or null for a guest checkout. Contact details only — see `CheckoutClient`. */
+export type CheckoutCustomer = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+};
+
 export function CheckoutClient({
   paymentsEnabled,
   cancelled,
   pending,
+  customer,
+  savedAddresses,
   provinces,
 }: {
   paymentsEnabled: boolean;
   cancelled: boolean;
   pending: PendingCheckout | null;
+  /** Null for a guest — checkout has never required an account and still doesn't. */
+  customer: CheckoutCustomer | null;
+  /** The signed-in customer's address book, default first. Empty for a guest. */
+  savedAddresses: CustomerAddress[];
   /** Philippine provinces, rendered in by the server — see checkout/page.tsx. */
   provinces: string[];
 }) {
@@ -141,11 +168,36 @@ export function CheckoutClient({
     [items],
   );
 
+  /**
+   * Which saved address is selected; "" means "a new one", and is what a guest always has.
+   *
+   * The book arrives default-first, so `[0]` is the default whenever one exists — checkout
+   * preselects it, which is the whole point of storing a default at all.
+   */
+  const [addressId, setAddressId] = useState(savedAddresses[0]?.id ?? "");
+  const selected = savedAddresses.find((a) => a.id === addressId);
+
   // The three cascading location fields. Controlled, unlike the rest of the form, because each one
-  // decides what the next can offer.
-  const [region, setRegion] = useState("");
-  const [city, setCity] = useState("");
-  const [barangay, setBarangay] = useState("");
+  // decides what the next can offer — and because a saved address has to be able to set them.
+  const [region, setRegion] = useState(savedAddresses[0]?.shipping.region ?? "");
+  const [city, setCity] = useState(savedAddresses[0]?.shipping.city ?? "");
+  const [barangay, setBarangay] = useState(savedAddresses[0]?.shipping.barangay ?? "");
+
+  /**
+   * Switch the form to a saved address, or to a blank one.
+   *
+   * The uncontrolled fields follow through `key={addressId}` on the two sections below: changing
+   * the key remounts them, so every `defaultValue` is re-read from the new selection. Controlled
+   * inputs for all of it would be the alternative, and would mean mirroring eight fields into
+   * state that only the server ever reads.
+   */
+  function selectAddress(id: string) {
+    setAddressId(id);
+    const next = savedAddresses.find((a) => a.id === id);
+    setRegion(next?.shipping.region ?? "");
+    setCity(next?.shipping.city ?? "");
+    setBarangay(next?.shipping.barangay ?? "");
+  }
 
   // useCallback so each loader's identity changes only when what it fetches changes — the hook's
   // effect depends on it, and a fresh closure every render would re-fetch on every keystroke.
@@ -282,29 +334,88 @@ export function CheckoutClient({
             <input type="hidden" name="lines" value={linesPayload} />
             <Honeypot />
 
-            <section>
+            {savedAddresses.length > 0 && (
+              <section>
+                <h2 className="text-sm font-bold uppercase tracking-wide text-brand-600">
+                  Deliver to
+                </h2>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {savedAddresses.map((address) => (
+                    <AddressChoice
+                      key={address.id}
+                      selected={address.id === addressId}
+                      onSelect={() => selectAddress(address.id)}
+                      title={`${address.firstName} ${address.lastName}`.trim()}
+                      badge={ADDRESS_LABEL_NAMES[address.label]}
+                      isDefault={address.isDefault}
+                      lines={addressLines(address.shipping)}
+                    />
+                  ))}
+                  <AddressChoice
+                    selected={addressId === ""}
+                    onSelect={() => selectAddress("")}
+                    title="Use a new address"
+                    lines={["We'll save it to your account for next time."]}
+                  />
+                </div>
+              </section>
+            )}
+
+            {/* `key` remounts these two sections when the selection changes, so their uncontrolled
+                inputs pick up the new defaults — see `selectAddress`. */}
+            <section key={`contact:${addressId}`}>
               <h2 className="text-sm font-bold uppercase tracking-wide text-brand-600">Contact</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <Field label="Email">
-                  <input required type="email" name="email" className={field} placeholder="you@email.com" />
+                  <input
+                    required
+                    type="email"
+                    name="email"
+                    className={field}
+                    placeholder="you@email.com"
+                    // Always the ACCOUNT's address, whichever card is selected — the confirmation
+                    // and the payment receipt have to reach the person paying, not the delivery
+                    // site. The phone beside it does follow the card, because that is the number
+                    // the courier rings on arrival, and for a clinic that is its front desk.
+                    defaultValue={customer?.email ?? ""}
+                  />
                 </Field>
                 <Field label="Phone">
-                  <input required name="phone" className={field} placeholder="09xx xxx xxxx" inputMode="tel" />
+                  <input
+                    required
+                    name="phone"
+                    className={field}
+                    placeholder="09xx xxx xxxx"
+                    inputMode="tel"
+                    defaultValue={formatPhone(selected?.phone ?? customer?.phone ?? "")}
+                  />
                 </Field>
               </div>
             </section>
 
-            <section>
+            <section key={`shipping:${addressId}`}>
               <h2 className="text-sm font-bold uppercase tracking-wide text-brand-600">
                 Shipping address
               </h2>
               <div className="mt-3 flex flex-col gap-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="First name">
-                    <input required name="firstName" className={field} placeholder="Juan" />
+                    <input
+                      required
+                      name="firstName"
+                      className={field}
+                      placeholder="Juan"
+                      defaultValue={selected?.firstName ?? customer?.firstName ?? ""}
+                    />
                   </Field>
                   <Field label="Last name">
-                    <input required name="lastName" className={field} placeholder="dela Cruz" />
+                    <input
+                      required
+                      name="lastName"
+                      className={field}
+                      placeholder="dela Cruz"
+                      defaultValue={selected?.lastName ?? customer?.lastName ?? ""}
+                    />
                   </Field>
                 </div>
                 {/* Broadest first, narrowing down to the street. The three location fields are
@@ -333,7 +444,13 @@ export function CheckoutClient({
                     placeholder={region ? "Search…" : "Pick a province first"}
                   />
                   <Field label="Postal code">
-                    <input required name="postal" className={field} inputMode="numeric" />
+                    <input
+                      required
+                      name="postal"
+                      className={field}
+                      inputMode="numeric"
+                      defaultValue={selected?.shipping.postal ?? ""}
+                    />
                   </Field>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -355,7 +472,12 @@ export function CheckoutClient({
                       </>
                     }
                   >
-                    <input name="apartment" className={field} placeholder="Unit, floor, building" />
+                    <input
+                      name="apartment"
+                      className={field}
+                      placeholder="Unit, floor, building"
+                      defaultValue={selected?.shipping.apartment ?? ""}
+                    />
                   </Field>
                 </div>
                 <Field label="Address line">
@@ -364,6 +486,7 @@ export function CheckoutClient({
                     name="address"
                     className={field}
                     placeholder="House / unit no. and street"
+                    defaultValue={selected?.shipping.address ?? ""}
                   />
                 </Field>
               </div>

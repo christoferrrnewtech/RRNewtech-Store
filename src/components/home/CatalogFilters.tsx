@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
 export type FilterOption = { slug: string; name: string };
@@ -43,6 +44,16 @@ export function CatalogFilters({
     category || brand || sort || min !== undefined || max !== undefined,
   );
 
+  // How many of the controls *inside* the collapsible panel are set. Sort is excluded on purpose —
+  // it lives outside the panel on mobile, so counting it would label the button with something the
+  // panel doesn't contain.
+  const panelCount =
+    (category ? 1 : 0) + (brand ? 1 : 0) + (min !== undefined ? 1 : 0) + (max !== undefined ? 1 : 0);
+
+  // Start expanded when a filter is already applied, so a shared or reloaded filtered URL shows
+  // *why* the results are narrowed rather than just looking short.
+  const [open, setOpen] = useState(panelCount > 0);
+
   function push(next: URLSearchParams) {
     const qs = next.toString();
     // scroll: false — the controls sit at the section header, so staying put is right.
@@ -62,45 +73,113 @@ export function CatalogFilters({
     push(next);
   }
 
+  const sortControl = (className?: string) => (
+    <FilterSelect
+      label="Sort"
+      value={sort ?? ""}
+      allLabel="Featured"
+      options={SORT_CHOICES}
+      onChange={(v) => setParam("sort", v)}
+      className={className}
+    />
+  );
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <FilterSelect
-        label="Category"
-        value={category ?? ""}
-        allLabel="All categories"
-        options={categories.map((c) => ({ value: c.slug, label: c.name }))}
-        onChange={(v) => setParam("category", v)}
-        // The only genuinely long values — one category name runs 42 characters. 16rem fits all but
-        // that one; the tighter mobile cap keeps the pill inside a 375px viewport.
-        widthClass="max-w-40 sm:max-w-64"
-      />
-      <FilterSelect
-        label="Brand"
-        value={brand ?? ""}
-        allLabel="All brands"
-        options={brands.map((b) => ({ value: b.slug, label: b.name }))}
-        onChange={(v) => setParam("brand", v)}
-      />
-
-      <PriceRange min={min} max={max} onCommit={setParam} />
-
-      <FilterSelect
-        label="Sort"
-        value={sort ?? ""}
-        allLabel="Featured"
-        options={SORT_CHOICES}
-        onChange={(v) => setParam("sort", v)}
-      />
-
-      {anyActive && (
+    <div>
+      {/* Mobile toggle row. Four stacked pills ate ~225px before the first product on a phone;
+          collapsing them behind one button brings that back to a single line. Sort stays out here
+          because it's the control people reach for most. */}
+      <div className="flex items-center gap-2 lg:hidden">
         <button
           type="button"
-          onClick={clearAll}
-          className="rounded-full px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-elevated hover:text-brand-800"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls="catalog-filter-panel"
+          className={[
+            "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold",
+            panelCount > 0
+              ? "border-brand-600 bg-brand-50 text-brand-700"
+              : "border-line bg-surface text-fg",
+          ].join(" ")}
         >
-          Clear filters
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 6h16M7 12h10M10 18h4"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+          </svg>
+          Filters
+          {panelCount > 0 && (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1.5 text-xs font-bold text-white">
+              {panelCount}
+            </span>
+          )}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+            className={["transition-transform", open ? "rotate-180" : ""].join(" ")}
+          >
+            <path
+              d="M6 9l6 6 6-6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
-      )}
+        {sortControl()}
+      </div>
+
+      {/* The controls themselves: collapsible below lg, always one row at lg. */}
+      <div
+        id="catalog-filter-panel"
+        className={[
+          open ? "flex" : "hidden",
+          "mt-2 flex-col items-stretch gap-2",
+          "lg:mt-0 lg:flex lg:flex-row lg:flex-wrap lg:items-center",
+        ].join(" ")}
+      >
+        <FilterSelect
+          label="Category"
+          value={category ?? ""}
+          allLabel="All categories"
+          options={categories.map((c) => ({ value: c.slug, label: c.name }))}
+          onChange={(v) => setParam("category", v)}
+          // The only genuinely long values — one category name runs 42 characters. 16rem fits all
+          // but that one; the tighter mobile cap keeps the pill inside a 375px viewport.
+          widthClass="max-w-40 sm:max-w-64"
+        />
+        <FilterSelect
+          label="Brand"
+          value={brand ?? ""}
+          allLabel="All brands"
+          options={brands.map((b) => ({ value: b.slug, label: b.name }))}
+          onChange={(v) => setParam("brand", v)}
+        />
+
+        <PriceRange min={min} max={max} onCommit={setParam} />
+
+        {/* Second copy of Sort, for the desktop row. Tailwind's `hidden` is display:none, so
+            exactly one of the two is in the accessibility tree at any width — no duplicate label
+            announced, and both drive the same `sort` param. */}
+        {sortControl("hidden lg:flex")}
+
+        {anyActive && (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="rounded-full px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-elevated hover:text-brand-800"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -187,6 +266,7 @@ function FilterSelect({
   options,
   onChange,
   widthClass = "",
+  className = "",
 }: {
   label: string;
   value: string;
@@ -194,6 +274,8 @@ function FilterSelect({
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   widthClass?: string;
+  /** Extra classes on the pill itself — used to show/hide the two Sort copies per breakpoint. */
+  className?: string;
 }) {
   const active = Boolean(value);
   return (
@@ -201,7 +283,10 @@ function FilterSelect({
       className={[
         "inline-flex items-center gap-1.5 rounded-full border py-1.5 pl-3 pr-1.5 text-sm",
         active ? "border-brand-600 bg-brand-50" : "border-line bg-surface",
-      ].join(" ")}
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       <span className={active ? "font-semibold text-brand-700" : "text-muted"}>{label}</span>
       <select

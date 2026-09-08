@@ -17,6 +17,14 @@ export function StructuredData() {
         email: SITE.email,
         telephone: SITE.phones[0].value,
         description: SITE.description,
+        // A real PostalAddress rather than a flat string — this is what Google reads for the
+        // knowledge panel and local results.
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: SITE.address.street,
+          addressLocality: SITE.address.locality,
+          addressCountry: SITE.address.countryCode,
+        },
         areaServed: { "@type": "Country", name: "Philippines" },
         sameAs: [SITE.socials.facebook, SITE.socials.instagram, SITE.socials.linkedin],
         contactPoint: {

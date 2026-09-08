@@ -95,12 +95,42 @@
       ]
     },
     {
+      "//": "Account page /account \u2014 a signed-in customer's own orders by uid, newest first.",
+      "collectionGroup": "storeOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "customer.userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "//": "Account page /account \u2014 a customer's own inquiries, newest first.",
       "collectionGroup": "storeInquiries",
       "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "email",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "//": "Account page /account \u2014 a signed-in customer's own inquiries by uid, newest first.",
+      "collectionGroup": "storeInquiries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
           "order": "ASCENDING"
         },
         {
