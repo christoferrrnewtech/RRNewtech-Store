@@ -3,11 +3,17 @@
  * Keep brand/marketing strings here so components stay thin and copy is edited in one place.
  */
 
-// Public site URL — used for canonical links, sitemap, OG. Overridable via env for staging.
+// Public site URL — used for canonical links, sitemap, OG, the PayMongo return URLs and the
+// address Firebase sends account-verification links back to. Overridable via env for staging.
+//
+// THE FALLBACK MUST BE A DOMAIN THAT ACTUALLY RESOLVES. It was `rrnewtech.ph`, which was never
+// secured and does not resolve at all — so any build with NEXT_PUBLIC_SITE_URL unset advertised a
+// dead domain as its canonical and sent paying customers there on cancel.
+//
 // `||` not `??`: an env var present-but-empty (as in .env.example) must still fall back, otherwise
 // SITE_URL becomes "" and `new URL(SITE.url)` in the root layout throws on every page.
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || "https://rrnewtech.ph"
+  process.env.NEXT_PUBLIC_SITE_URL || "https://rrnewtechdental.com"
 ).replace(/\/$/, "");
 
 /**
@@ -43,7 +49,9 @@ export const ADDRESS_LINE = `${ADDRESS.street}, ${ADDRESS.locality}, ${ADDRESS.c
 export const SITE = {
   name: "R&R Newtech Dental",
   legalName: "R&R Newtech Dental Corporation",
-  domain: "rrnewtech.ph",
+  // Shown to customers in the terms and privacy copy and stamped on the OG image, so it has to be
+  // the domain they actually typed — not an aspirational one.
+  domain: "rrnewtechdental.com",
   url: SITE_URL,
   tagline: "Trusted dental supplies, delivered across the Philippines.",
   description:
