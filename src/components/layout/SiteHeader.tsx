@@ -77,18 +77,23 @@ export function SiteHeader({
             {/* Logo. The lockup already carries the company name, so there's no typed wordmark
                 beside it — printing it twice is what the old square-mark-plus-text did.
 
-                `width`/`height` are the file's real pixels (2.956:1) so next/image builds a correct
-                srcset; the height class drives the size and `w-auto` lets the ratio set the width.
+                Served straight from public/ at this size — App Hosting bypasses the Next image
+                optimizer, so whatever is on disk is what every visitor downloads. Pre-sized to 800px
+                (2.4x the widest it's ever drawn) rather than shipping the 5120px source. The name is
+                hyphenated on purpose: an `&` in a public path is read as a query delimiter and 404s.
+
+                `width`/`height` are the file's real pixels (2.96:1); the height class drives the
+                size and `w-auto` lets the ratio set the width.
                 At h-14 it lands ~166px wide, near enough to the old mark+text footprint that nothing
                 else in the row has to move. `alt=""` because the Link's aria-label already names it,
                 and an aria-label overrides the element's contents. No radius: the artwork is
                 transparent, so there's no plate to round — only a glyph to risk clipping. */}
             <Link href="/" className="flex shrink-0 items-center" aria-label={`${SITE.name} home`}>
               <Image
-                src="/brand/R&R Logo Upscale.png"
+                src="/brand/rnr-logo-upscale.png"
                 alt=""
-                width={5120}
-                height={1732}
+                width={800}
+                height={270}
                 priority
                 className="h-9 w-auto sm:h-11 lg:h-14"
               />

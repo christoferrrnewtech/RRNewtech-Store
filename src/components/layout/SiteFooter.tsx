@@ -26,7 +26,7 @@ export async function SiteFooter() {
                 No typed wordmark beside it — the artwork already carries the name. */}
             <span className="inline-flex items-center rounded-lg bg-white p-0.5">
               <Image
-                src="/brand/rnr logo.png"
+                src="/brand/rnr-logo.png"
                 alt={SITE.name}
                 width={1463}
                 height={340}
