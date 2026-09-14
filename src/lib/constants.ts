@@ -100,26 +100,75 @@ export const BRAND_GROUP_MAP: Record<BrandGroup, { label: string; tag: string }>
  */
 export const SECTIONS = {
   promoBar: false, // Free-shipping/payments strip above the header
-  categoryCircles: false, // "Shop by category" row under the banner
+  utilityBar: true, // Slim dark delivery/sales strip at the very top of the page
+  categoryCircles: false, // "Shop by category" row under the banner (superseded by categoryGrid)
   categoryNav: true, // "Categories" mega-menu in the header (desktop + mobile)
+  trustStrip: true, // Three-up "Authentic stock / Nationwide delivery / Install" band under the hero
+  categoryGrid: true, // "Shop by category" photo-tile grid on the landing view
+  promoShelf: true, // "On promo now" — two rows of marked-down products
+  brandWall: true, // "Brands we distribute" logo grid
+  clinicCta: true, // "Opening or upgrading a clinic?" dark band above the footer
   digitalDentistry: false, // "Featured · Digital Dentistry" promo shelf on the landing view
   allProducts: false, // "All Products" catalog on the *unfiltered* landing view
 } as const;
 
-/** Icon shapes available to the header nav strip — see components/layout/NavIcons.tsx. */
+/**
+ * The slim dark strip above the header. It sits OUTSIDE the sticky header (see (store)/layout.tsx)
+ * so it scrolls away and the header's height contract stays 64px / 128px.
+ */
+export const UTILITY_BAR = {
+  left: "Nationwide delivery across the Philippines · Authorized distributor",
+  right: { label: "Bulk & clinic pricing: talk to sales", href: "/contact" },
+} as const;
+
+/**
+ * Hero copy used when the banner doc is empty. Without this the landing page opened on whatever
+ * section came next, which read as a broken page rather than a soft launch.
+ */
+export const HERO_FALLBACK = {
+  eyebrow: "Authorized dental distributor · Philippines",
+  heading: "Everything your operatory runs on, sourced authentic.",
+  body:
+    "Imaging, lasers, 3D printing, chairs, infection control and everyday consumables from trusted " +
+    "brands — quoted fast and delivered nationwide.",
+  ctaLabel: "Shop the catalog",
+  ctaHref: "/shop",
+  ctaAltLabel: "Request a quote",
+  ctaAltHref: "/contact",
+} as const;
+
+/** The dark band that closes the landing page, just above the footer. */
+export const CLINIC_CTA = {
+  heading: "Opening or upgrading a clinic?",
+  body: "Send your equipment list — we return a consolidated quotation with delivery timelines.",
+  ctaLabel: "Talk to sales",
+  ctaHref: "/contact",
+} as const;
+
+/** Icon shapes — see components/layout/NavIcons.tsx. */
 export type NavIconKey =
   | "category"
   | "about"
   | "brand"
   | "events"
-  | "contact";
+  | "contact"
+  | "shop"
+  | "shield"
+  | "truck"
+  | "wrench"
+  | "graduation"
+  | "users"
+  | "building"
+  | "check"
+  | "pin";
 
 /**
- * The icon+label strip under the main header bar, in display order. Drives both the desktop row
- * and the mobile drawer, so items are added here and nowhere else.
+ * The nav strip under the main header bar, in display order. Drives both the desktop row and the
+ * mobile drawer, so items are added here and nowhere else.
  *
  * An item either navigates (`href`) or opens one of the two mega-menus (`menu`) — never both.
- * The logo already links home, so "Shop All" points at the flat all-products view instead.
+ * `icon` is used by the mobile drawer only; the desktop row is text so it stays quiet next to the
+ * search field. The logo links home, so "Shop" jumps to the catalog section instead.
  */
 export const NAV_ITEMS: {
   href?: string;
@@ -127,11 +176,35 @@ export const NAV_ITEMS: {
   label: string;
   icon: NavIconKey;
 }[] = [
-  { menu: "category", label: "Category", icon: "category" },
-  { href: "/about", label: "About Us", icon: "about" },
-  { menu: "brand", label: "Brand", icon: "brand" },
+  { menu: "category", label: "Categories", icon: "category" },
+  { menu: "brand", label: "Brands", icon: "brand" },
+  { href: "/shop", label: "Shop", icon: "shop" },
   { href: "/education-training", label: "Education & Training", icon: "events" },
+  { href: "/about", label: "About", icon: "about" },
   { href: "/contact", label: "Contact", icon: "contact" },
+];
+
+/**
+ * The three-up band directly under the hero. Deliberately shorter and more specific than
+ * {@link TRUST_POINTS} (which the About page uses): this one answers "can I buy equipment here?",
+ * not "is checkout safe?".
+ */
+export const HOME_TRUST: { icon: NavIconKey; title: string; body: string }[] = [
+  {
+    icon: "shield",
+    title: "Authentic stock",
+    body: "Sourced through authorized channels with full warranty.",
+  },
+  {
+    icon: "truck",
+    title: "Nationwide delivery",
+    body: "Consumables shipped anywhere in the Philippines.",
+  },
+  {
+    icon: "wrench",
+    title: "Install & training",
+    body: "Equipment commissioned and your team walked through it.",
+  },
 ];
 
 /** Trust badges shown on the home page and footer. */

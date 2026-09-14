@@ -1,312 +1,264 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams, usePathname } from "next/navigation";
+import { Button } from "@/components/ui/Button";
 
 export type FilterOption = { slug: string; name: string };
 
-/** Sort choices for the catalog grid. "" is Featured — the curated brand order, and the default. */
-const SORT_CHOICES = [
-  { value: "price-asc", label: "Price: Low to High" },
-  { value: "price-desc", label: "Price: High to Low" },
-  { value: "quote-first", label: "Quote on request first" },
-];
-
 /**
- * The homepage catalog filter row: Category · Brand · a typed price range · Sort.
+ * The catalog's filter sidebar: Categories · Brands.
  *
- * State lives in the URL (`?category=&brand=&min=&max=&sort=`) so the server does the filtering and
- * a filtered view stays shareable, matching how search already works. Options are resolved by the
- * server parent (HomeCatalog), so this stays presentational.
+ * A sidebar rather than a row of dropdowns because the whole taxonomy is small enough to show at
+ * once — a shopper can see what's stocked without opening a select to find out, and filtering is one
+ * click.
+ *
+ * Two catalog controls live in the toolbar above the grid instead: Sort, which decides the order of
+ * the list rather than its membership, and Price (see CatalogPrice), which is a typed range rather
+ * than a pick-one-from-a-list and was going unfound at the foot of these two long lists.
+ *
+ * State lives in the URL (`?category=&brand=`) so the server does the filtering and a filtered view
+ * stays shareable. `min`/`max` are still accepted, but only so "Clear all" appears when a price set
+ * from the toolbar is the sole active filter. Options are resolved by the server parent
+ * (HomeCatalog), so this stays presentational.
  */
 export function CatalogFilters({
   categories,
   brands,
   category,
   brand,
-  min,
-  max,
-  sort,
 }: {
   categories: FilterOption[];
   brands: FilterOption[];
+  /** The category currently in scope — from the path on a category page, unset on /shop. */
   category?: string;
   brand?: string;
-  min?: number;
-  max?: number;
-  sort?: string;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
-  const anyActive = Boolean(
-    category || brand || sort || min !== undefined || max !== undefined,
-  );
+  // Read from the params rather than the props: `category` is deliberately excluded, because on a
+  // category page it comes from the PATH and is always set — counting it would leave "Clear all"
+  // permanently on screen with nothing to clear. Includes `sub`, which only exists there.
+  const anyActive = ["brand", "min", "max", "sub"].some((key) => params.get(key));
 
-  // How many of the controls *inside* the collapsible panel are set. Sort is excluded on purpose —
-  // it lives outside the panel on mobile, so counting it would label the button with something the
-  // panel doesn't contain.
-  const panelCount =
-    (category ? 1 : 0) + (brand ? 1 : 0) + (min !== undefined ? 1 : 0) + (max !== undefined ? 1 : 0);
+  // Labels the mobile disclosure button. Counts only what the PANEL holds — price lives in the
+  // toolbar now, so counting it would promise something this panel doesn't contain.
+  const activeCount = (category ? 1 : 0) + (brand ? 1 : 0);
 
-  // Start expanded when a filter is already applied, so a shared or reloaded filtered URL shows
-  // *why* the results are narrowed rather than just looking short.
-  const [open, setOpen] = useState(panelCount > 0);
+  // Drawer state, mobile only. Starts closed: unlike the old inline disclosure, an overlay that
+  // opened itself on load would cover the results a shared filtered link was meant to show.
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
 
-  function push(next: URLSearchParams) {
+  // Lock the page behind the drawer, and close on Escape — mirroring CartDrawer.
+  useEffect(() => {
+    if (!open) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = original;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  function urlFor(next: URLSearchParams) {
     const qs = next.toString();
-    // scroll: false — the controls sit at the section header, so staying put is right.
-    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    return qs ? `${pathname}?${qs}` : pathname;
   }
 
-  function setParam(key: string, value: string) {
+  /**
+   * The href for setting (or, with "", clearing) one param.
+   *
+   * Real links rather than buttons: a filtered view is a URL, so it should be middle-clickable,
+   * openable in a new tab and crawlable. The old `<select>` + router.push could be none of those.
+   */
+  function hrefFor(key: string, value: string) {
     const next = new URLSearchParams(params.toString());
     if (value) next.set(key, value);
     else next.delete(key);
-    push(next);
+    return urlFor(next);
   }
 
-  function clearAll() {
+  const clearAllHref = (() => {
     const next = new URLSearchParams(params.toString());
-    for (const key of ["category", "brand", "min", "max", "sort"]) next.delete(key);
-    push(next);
-  }
+    // `sub` matters on a category page; the rest are no-ops there or on /shop as the case may be.
+    for (const key of ["category", "brand", "min", "max", "sub"]) next.delete(key);
+    return urlFor(next);
+  })();
 
-  const sortControl = (className?: string) => (
-    <FilterSelect
-      label="Sort"
-      value={sort ?? ""}
-      allLabel="Featured"
-      options={SORT_CHOICES}
-      onChange={(v) => setParam("sort", v)}
-      className={className}
-    />
+  /**
+   * The filter groups themselves. Rendered twice — in flow for desktop, inside the drawer for
+   * mobile — so `onNavigate` closes the drawer when a row is tapped. Every row is a Link, so a tap
+   * navigates; without this the drawer would stay open over the new results.
+   */
+  const panel = (
+    <>
+      {/* Categories NAVIGATE — a category is a page of its own (/categories/<slug>), with its own
+          title, subcategory chips and a place in the sitemap. Filtering in place here would give
+          the same category a second URL. Brands and Price below stay params on whichever page
+          this sidebar is rendered on. */}
+      <FilterGroup title="Categories">
+        <FilterRow href="/shop" active={!category} onNavigate={close}>
+          All categories
+        </FilterRow>
+        {categories.map((c) => (
+          <FilterRow
+            key={c.slug}
+            href={`/categories/${c.slug}`}
+            active={category === c.slug}
+            onNavigate={close}
+          >
+            {c.name}
+          </FilterRow>
+        ))}
+      </FilterGroup>
+
+      <FilterGroup title="Brands">
+        <FilterRow href={hrefFor("brand", "")} active={!brand} onNavigate={close}>
+          All brands
+        </FilterRow>
+        {brands.map((b) => (
+          <FilterRow
+            key={b.slug}
+            href={hrefFor("brand", b.slug)}
+            active={brand === b.slug}
+            onNavigate={close}
+          >
+            {b.name}
+          </FilterRow>
+        ))}
+      </FilterGroup>
+
+      {anyActive && (
+        <Link
+          href={clearAllHref}
+          scroll={false}
+          onClick={close}
+          className="mt-6 inline-block text-sm font-semibold text-brand-700 hover:text-brand-800"
+        >
+          Clear all
+        </Link>
+      )}
+    </>
   );
 
   return (
-    <div>
-      {/* Mobile toggle row. Four stacked pills ate ~225px before the first product on a phone;
-          collapsing them behind one button brings that back to a single line. Sort stays out here
-          because it's the control people reach for most. */}
-      <div className="flex items-center gap-2 lg:hidden">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-controls="catalog-filter-panel"
-          className={[
-            "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold",
-            panelCount > 0
-              ? "border-brand-600 bg-brand-50 text-brand-700"
-              : "border-line bg-surface text-fg",
-          ].join(" ")}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M4 6h16M7 12h10M10 18h4"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-          Filters
-          {panelCount > 0 && (
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1.5 text-xs font-bold text-white">
-              {panelCount}
-            </span>
-          )}
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            aria-hidden="true"
-            className={["transition-transform", open ? "rotate-180" : ""].join(" ")}
-          >
-            <path
-              d="M6 9l6 6 6-6"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        {sortControl()}
-      </div>
-
-      {/* The controls themselves: collapsible below lg, always one row at lg. */}
-      <div
-        id="catalog-filter-panel"
+    <aside aria-label="Filter products">
+      {/* Mobile trigger. Opens a drawer rather than expanding in place: the full list is ~1000px,
+          which shoved the count, the toolbar and every product off a phone screen. */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         className={[
-          open ? "flex" : "hidden",
-          "mt-2 flex-col items-stretch gap-2",
-          "lg:mt-0 lg:flex lg:flex-row lg:flex-wrap lg:items-center",
+          "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold lg:hidden",
+          activeCount > 0
+            ? "border-brand-600 bg-brand-50 text-brand-700"
+            : "border-line bg-surface text-fg",
         ].join(" ")}
       >
-        <FilterSelect
-          label="Category"
-          value={category ?? ""}
-          allLabel="All categories"
-          options={categories.map((c) => ({ value: c.slug, label: c.name }))}
-          onChange={(v) => setParam("category", v)}
-          // The only genuinely long values — one category name runs 42 characters. 16rem fits all
-          // but that one; the tighter mobile cap keeps the pill inside a 375px viewport.
-          widthClass="max-w-40 sm:max-w-64"
-        />
-        <FilterSelect
-          label="Brand"
-          value={brand ?? ""}
-          allLabel="All brands"
-          options={brands.map((b) => ({ value: b.slug, label: b.name }))}
-          onChange={(v) => setParam("brand", v)}
-        />
-
-        <PriceRange min={min} max={max} onCommit={setParam} />
-
-        {/* Second copy of Sort, for the desktop row. Tailwind's `hidden` is display:none, so
-            exactly one of the two is in the accessibility tree at any width — no duplicate label
-            announced, and both drive the same `sort` param. */}
-        {sortControl("hidden lg:flex")}
-
-        {anyActive && (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="rounded-full px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-elevated hover:text-brand-800"
-          >
-            Clear filters
-          </button>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+        Filters
+        {activeCount > 0 && (
+          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1.5 text-xs font-bold text-white">
+            {activeCount}
+          </span>
         )}
+      </button>
+
+      {/* Desktop: in flow beside the grid. */}
+      <div className="hidden lg:block">{panel}</div>
+
+      {/* Mobile: the same panel as a slide-over. Left-hand side, where the sidebar lives — the cart
+          drawer comes from the right, since a cart does. */}
+      <div
+        className={`fixed inset-0 z-50 lg:hidden ${open ? "" : "pointer-events-none"}`}
+        aria-hidden={!open}
+      >
+        <div
+          onClick={close}
+          className={`absolute inset-0 bg-ink/40 transition-opacity duration-300 ${
+            open ? "opacity-100" : "opacity-0"
+          }`}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Filters"
+          className={`absolute inset-y-0 left-0 flex w-[85%] max-w-sm flex-col bg-surface shadow-xl transition-transform duration-300 ${
+            open ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="flex items-center justify-between border-b border-line px-5 py-4">
+            <span className="font-bold text-fg">Filters</span>
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close filters"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-fg hover:bg-elevated"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+
+          {/* The list scrolls in here, so the page behind never moves. */}
+          <div className="flex-1 overflow-y-auto px-5 py-5">{panel}</div>
+
+          <div className="border-t border-line px-5 py-4">
+            <Button type="button" onClick={close} className="w-full">
+              Show results
+            </Button>
+          </div>
+        </div>
       </div>
+    </aside>
+  );
+}
+
+function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-7">
+      <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-muted-light">
+        {title}
+      </h3>
+      {children}
     </div>
   );
 }
 
-/**
- * Typed price bounds, committed on Enter or on blur.
- *
- * The inputs are uncontrolled and keyed on the current value: a navigation remounts them with the
- * new `defaultValue`, which re-seeds them from the URL without a setState-in-effect.
- */
-function PriceRange({
-  min,
-  max,
-  onCommit,
+function FilterRow({
+  href,
+  active,
+  children,
+  onNavigate,
 }: {
-  min?: number;
-  max?: number;
-  onCommit: (key: string, value: string) => void;
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+  /** Closes the mobile drawer — a tap navigates, so it mustn't stay open over the new results. */
+  onNavigate?: () => void;
 }) {
-  const active = min !== undefined || max !== undefined;
-
-  function commit(key: "min" | "max", raw: string, current?: number) {
-    const value = raw.trim();
-    // Nothing changed (including blurring an untouched empty box) — don't push a duplicate entry.
-    if (value === (current === undefined ? "" : String(current))) return;
-    const n = Number.parseInt(value, 10);
-    onCommit(key, Number.isFinite(n) && n >= 0 ? String(n) : "");
-  }
-
-  const box = (key: "min" | "max", placeholder: string, current?: number) => (
-    <span className="inline-flex items-center">
-      <span aria-hidden className="text-muted-light">
-        ₱
-      </span>
-      <input
-        key={current ?? ""}
-        type="number"
-        min="0"
-        step="1"
-        inputMode="numeric"
-        defaultValue={current ?? ""}
-        placeholder={placeholder}
-        aria-label={`${placeholder === "Min" ? "Minimum" : "Maximum"} price in pesos`}
-        onBlur={(e) => commit(key, e.currentTarget.value, current)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commit(key, e.currentTarget.value, current);
-          }
-        }}
-        className="w-16 bg-transparent px-1 py-0.5 text-sm font-medium text-fg placeholder:font-normal placeholder:text-muted focus:outline-none"
-      />
-    </span>
-  );
-
   return (
-    <div
+    <Link
+      href={href}
+      scroll={false}
+      onClick={onNavigate}
+      aria-current={active ? "true" : undefined}
       className={[
-        "inline-flex items-center gap-1 rounded-full border py-1.5 pl-3 pr-2 text-sm",
-        active ? "border-brand-600 bg-brand-50" : "border-line bg-surface",
+        "block py-1.5 text-sm leading-snug",
+        active ? "font-semibold text-brand-700" : "text-muted hover:text-brand-700",
       ].join(" ")}
     >
-      <span className={active ? "font-semibold text-brand-700" : "text-muted"}>Price</span>
-      {box("min", "Min", min)}
-      <span aria-hidden className="text-muted-light">
-        –
-      </span>
-      {box("max", "Max", max)}
-    </div>
-  );
-}
-
-/**
- * One filter pill. The label stays visible so the row reads as named filters, not blanks.
- *
- * No width cap by default — Brand and Sort values are short and a cap only ever clips them. Pass
- * `widthClass` for a control whose values genuinely run long (Category). `truncate` is always on so
- * that when a cut does happen it shows an ellipsis and reads as deliberate rather than broken.
- */
-function FilterSelect({
-  label,
-  value,
-  allLabel,
-  options,
-  onChange,
-  widthClass = "",
-  className = "",
-}: {
-  label: string;
-  value: string;
-  allLabel: string;
-  options: { value: string; label: string }[];
-  onChange: (value: string) => void;
-  widthClass?: string;
-  /** Extra classes on the pill itself — used to show/hide the two Sort copies per breakpoint. */
-  className?: string;
-}) {
-  const active = Boolean(value);
-  return (
-    <label
-      className={[
-        "inline-flex items-center gap-1.5 rounded-full border py-1.5 pl-3 pr-1.5 text-sm",
-        active ? "border-brand-600 bg-brand-50" : "border-line bg-surface",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <span className={active ? "font-semibold text-brand-700" : "text-muted"}>{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={label}
-        className={[
-          "truncate cursor-pointer bg-transparent py-0.5 pr-1 text-sm font-medium text-fg focus:outline-none",
-          widthClass,
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
-        <option value="">{allLabel}</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      {children}
+    </Link>
   );
 }

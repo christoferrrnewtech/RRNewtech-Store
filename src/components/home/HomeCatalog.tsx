@@ -1,6 +1,7 @@
 import { Container } from "@/components/ui/Container";
 import { AllProductsGrid } from "@/components/home/AllProductsGrid";
 import { CatalogFilters } from "@/components/home/CatalogFilters";
+import { CatalogToolbar } from "@/components/home/CatalogToolbar";
 import { getBrands, getCategoriesWithProducts } from "@/lib/content";
 
 /** Non-default sorts the grid understands. "featured" is the unset state (curated brand order). */
@@ -15,12 +16,13 @@ function bound(raw?: string): number | undefined {
 }
 
 /**
- * The homepage catalog section: header + the Category/Brand/Price/Sort filter row over one flat
- * product grid, narrowed to whatever is filtered.
+ * The catalog: header + the Category/Brand/Price/Sort filter row over one flat product grid,
+ * narrowed to whatever is filtered. Mounted by /shop, which is its only caller — it owns that
+ * page's <h1>.
  *
  * Params are validated here rather than in the page: the filters run on the admin-managed brand
- * catalog, whose category slugs are a different vocabulary from the legacy CATEGORY_MAP the page
- * validates `?category=` against for its search-results view.
+ * catalog, whose category slugs are a different vocabulary from the legacy CATEGORY_MAP the home
+ * page validates `?category=` against for its search-results view.
  */
 export async function HomeCatalog({
   category,
@@ -60,37 +62,42 @@ export async function HomeCatalog({
 
   return (
     <section id="catalog" className="scroll-mt-24 bg-surface lg:scroll-mt-36">
-      <Container className="py-14">
+      <Container className="pb-14 pt-6">
         <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">Shop</p>
-          <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
-            Browse Products
-          </h2>
-          <p className="mt-1.5 max-w-2xl text-sm text-muted">
+          <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-fg lg:text-4xl">
+            Shop
+          </h1>
+          <p className="mt-2 max-w-2xl text-muted">
             Filter by category, brand or price to find what your clinic needs.
           </p>
         </div>
 
-        <div className="mb-8">
+        {/* `minmax(0,1fr)` on the grid column, not `1fr`: a track's default `min-width: auto` won't
+            shrink below its content, so one long product title would widen the column past its
+            share and push the sidebar off. */}
+        <div className="mt-8 grid gap-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-10">
           <CatalogFilters
             categories={categoryOptions}
             brands={brandOptions}
             category={activeCategory}
             brand={activeBrand}
-            min={activeMin}
-            max={activeMax}
-            sort={activeSort}
           />
-        </div>
 
-        <AllProductsGrid
-          category={activeCategory}
-          brand={activeBrand}
-          min={activeMin}
-          max={activeMax}
-          sort={activeSort}
-          mix={mix}
-        />
+          {/* Wrapped: AllProductsGrid returns a fragment (toolbar + grid), and a fragment's children
+              become separate grid items — the grid would land in the next cell, under the sidebar. */}
+          <div>
+            <AllProductsGrid
+              category={activeCategory}
+              brand={activeBrand}
+              min={activeMin}
+              max={activeMax}
+              sort={activeSort}
+              mix={mix}
+              toolbar={<CatalogToolbar min={activeMin} max={activeMax} sort={activeSort} />}
+              gridClassName="grid grid-cols-2 gap-4 md:grid-cols-3"
+            />
+          </div>
+        </div>
       </Container>
     </section>
   );

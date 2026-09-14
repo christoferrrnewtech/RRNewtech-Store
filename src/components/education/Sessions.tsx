@@ -1,6 +1,9 @@
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
-import { sessionDateParts, formatSessionDate } from "@/lib/format";
+import { NAV_ICONS } from "@/components/layout/NavIcons";
+import { SessionDetails } from "@/components/education/SessionDetails";
+import { sessionDateParts } from "@/lib/format";
+import { safeHref, externalLinkProps, isExternalHref } from "@/lib/links";
 
 /**
  * One seminar or training session.
@@ -31,6 +34,9 @@ export type Session = {
   capacity?: number;
   /** Registration destination — your form, a Facebook event, or /contact. */
   registerHref?: string;
+  /** Optional "Learn more" destination — a brochure, event page or brand page. Blank hides that
+   *  button and lets "Reserve a seat" take the full width. */
+  detailsHref?: string;
   /** Optional photo. Absent renders a styled panel rather than a stand-in stock image. */
   image?: string;
   /** Display position, set by dragging in the admin. Absent on campaigns saved before ordering. */
@@ -38,48 +44,28 @@ export type Session = {
 };
 
 /** Registration always has somewhere to go, so the CTA is never a dead button. */
-const registerHref = (s: Session) => s.registerHref || "/contact";
+const registerHref = (s: Session) => safeHref(s.registerHref || "/contact");
 
 /** Seats read as urgent below this, and take the amber accent globals.css reserves for urgency. */
 const LOW_SEATS = 6;
 
 /**
- * "April 2027 · Makati City · 9:00 AM – 12:00 PM · In person" — skips whatever isn't filled in yet.
+ * "Makati City · In person", or just the format when no venue is set yet.
  *
- * The date leads here rather than sitting on its own line: the tile beside it is `aria-hidden`, so
- * this is the only date a screen reader gets, and a second spelled-out line would just repeat what
- * the tile already shows.
+ * Deliberately no date: the badge on the photo carries it, and repeating it here would say the same
+ * thing twice on one card.
  */
-function metaLine(s: Session): string {
-  return [
-    formatSessionDate(s.date),
-    s.venue,
-    s.time,
-    s.format === "online" ? "Online" : "In person",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+function placeLine(s: Session): string {
+  return [s.venue, s.format === "online" ? "Online" : "In person"].filter(Boolean).join(" · ");
 }
 
 /**
- * Calendar tile anchoring each campaign card. Month and year only — see `format.ts`; the stored
- * day drives sorting and expiry but is never advertised.
+ * Tells a screen-reader user that a link leaves the site, which a sighted user learns from the new
+ * tab itself. Renders nothing for an internal link.
  */
-export function DateBlock({ date }: { date: string }) {
-  const { month, year } = sessionDateParts(date);
-  return (
-    <div
-      aria-hidden
-      className="flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-2xl border border-line bg-surface-2 text-center"
-    >
-      <span className="font-[family-name:var(--font-display)] text-2xl font-extrabold uppercase leading-none tracking-wide text-brand-600">
-        {month}
-      </span>
-      <span className="mt-1.5 font-[family-name:var(--font-display)] text-xl font-bold leading-none text-fg">
-        {year}
-      </span>
-    </div>
-  );
+function NewTabNote({ href }: { href: string }) {
+  if (!isExternalHref(href)) return null;
+  return <span className="sr-only">(opens in a new tab)</span>;
 }
 
 /** Seats remaining, amber once they're running low. Renders nothing when seats aren't tracked. */
@@ -95,106 +81,100 @@ function Seats({ session }: { session: Session }) {
 }
 
 /**
- * One campaign, full width: details beside a photo panel at `lg`, stacked below it.
+ * One campaign as a vertical card: photo with a date badge, then the details, then the actions.
  *
- * Every campaign gets this same treatment — there is no featured/list split. The user runs around
- * five at a time, and at that volume promoting one to a card and demoting the rest to one-line rows
- * buys nothing and costs four campaigns their presence.
+ * Every campaign gets the same treatment — there is no featured/list split. The user runs around
+ * five at a time, and at that volume promoting one and demoting the rest to one-line rows buys
+ * nothing and costs four campaigns their presence.
+ *
+ * `h-full` plus the spacer above the buttons is what keeps a row of cards aligned: summaries differ
+ * wildly in length, and without it each card's CTA would sit at its own height.
  */
 export function CampaignCard({ session }: { session: Session }) {
+  const { month, year } = sessionDateParts(session.date);
+  const Pin = NAV_ICONS.pin;
+  const detailsUrl = session.detailsHref ? safeHref(session.detailsHref) : undefined;
+  const registerUrl = registerHref(session);
+
   return (
-    <article className="overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
-      <div className="grid lg:grid-cols-5">
-        {/* Details */}
-        <div className="p-6 sm:p-7 lg:col-span-3">
-          {/* Fee sits with the facts, not with the action — it describes the session, and the CTA
-              row reads cleaner as just the button. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="muted">{session.format === "online" ? "Online" : "In person"}</Badge>
+    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+      {/* Photo, or a branded panel when there isn't one yet — better than a stand-in stock image. */}
+      <div className="relative aspect-[16/10] bg-gradient-to-br from-brand-700 to-brand-900">
+        {session.image ? (
+          /* Plain <img>: session photos are remote admin uploads, same reasoning as AboutIntro. */
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={session.image}
+            alt={session.title}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center p-6 text-center">
+            <p className="text-sm font-semibold text-white/90">
+              {session.partnerBrand ? `With ${session.partnerBrand}` : "Hands-on training"}
+            </p>
+          </div>
+        )}
+
+        {/* Month and year only — the stored day drives sorting and expiry but is never advertised. */}
+        <p className="absolute left-3 top-3 bg-brand-600 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+          <span className="sr-only">Runs in </span>
+          {month} {year}
+        </p>
+      </div>
+
+      <div className="flex flex-1 flex-col p-5">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+          <Pin className="h-4 w-4 shrink-0" />
+          {placeLine(session)}
+        </p>
+
+        <h3 className="mt-2.5 font-[family-name:var(--font-display)] text-lg font-bold leading-snug text-fg">
+          {session.title}
+        </h3>
+
+        {(session.speaker || session.partnerBrand) && (
+          <p className="mt-1.5 text-sm font-semibold text-brand-700">
+            {session.speaker}
+            {session.speaker && session.partnerBrand && " · "}
+            {session.partnerBrand && `with ${session.partnerBrand}`}
+          </p>
+        )}
+
+        <SessionDetails summary={session.summary} highlights={session.highlights} />
+
+        {/* Fee and seats describe the session, so they sit with the facts, not with the actions. */}
+        {(session.fee || session.seatsLeft !== undefined) && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <Seats session={session} />
             {session.fee && <Badge tone="brand">{session.fee}</Badge>}
           </div>
+        )}
 
-          <div className="mt-5 flex gap-5">
-            <DateBlock date={session.date} />
-            <div className="min-w-0">
-              <h3 className="font-[family-name:var(--font-display)] text-xl font-bold leading-snug text-fg sm:text-2xl">
-                {session.title}
-              </h3>
-              <p className="mt-1.5 text-sm text-muted">{metaLine(session)}</p>
-            </div>
-          </div>
+        {/* Pushes the buttons to the bottom so every card in a row ends on the same line. */}
+        <div className="flex-1" />
 
-          <p className="mt-5 max-w-prose text-base leading-relaxed text-muted">{session.summary}</p>
-
-          {session.highlights && session.highlights.length > 0 && (
-            /* Two columns at sm+ so four bullets take two rows, not four. The dot is a span rather
-               than a list marker so it stays level with the first line when text wraps. */
-            <ul className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2">
-              {session.highlights.map((h) => (
-                <li key={h} className="flex gap-2.5 text-sm leading-relaxed text-fg">
-                  <span
-                    aria-hidden
-                    className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-600"
-                  />
-                  {h}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {(session.speaker || session.partnerBrand) && (
-            <p className="mt-4 text-sm text-fg">
-              {session.speaker && <span className="font-semibold">{session.speaker}</span>}
-              {session.speaker && session.partnerBrand && " · "}
-              {session.partnerBrand && <span>with {session.partnerBrand}</span>}
-            </p>
-          )}
-
-          <div className="mt-6">
-            <LinkButton href={registerHref(session)} size="lg">
-              Reserve a seat
+        <div className="mt-6 flex flex-wrap gap-3">
+          {detailsUrl && (
+            <LinkButton
+              href={detailsUrl}
+              className="flex-1 whitespace-nowrap"
+              {...externalLinkProps(detailsUrl)}
+            >
+              Learn more
+              <NewTabNote href={detailsUrl} />
             </LinkButton>
-          </div>
-        </div>
-
-        {/* Photo, or a panel when there isn't one yet — better than a stand-in stock image. */}
-        <div className="relative min-h-48 bg-gradient-to-br from-brand-700 to-brand-900 lg:col-span-2">
-          {session.image ? (
-            /* Plain <img>: session photos will be remote admin uploads, same reasoning as AboutIntro. */
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={session.image}
-              alt={session.title}
-              loading="lazy"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <rect
-                  x="3.4"
-                  y="5.2"
-                  width="17.2"
-                  height="15.4"
-                  rx="2.2"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  className="text-brand-300"
-                />
-                <path
-                  d="M3.4 10h17.2M8.4 3.4v3.6M15.6 3.4v3.6"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  className="text-brand-300"
-                />
-              </svg>
-              <p className="text-sm font-semibold text-white/90">
-                {session.partnerBrand ? `With ${session.partnerBrand}` : "Hands-on training"}
-              </p>
-            </div>
           )}
+          <LinkButton
+            href={registerUrl}
+            variant={detailsUrl ? "secondary" : "primary"}
+            className={detailsUrl ? "flex-1 whitespace-nowrap" : "w-full"}
+            {...externalLinkProps(registerUrl)}
+          >
+            Reserve a seat
+            <NewTabNote href={registerUrl} />
+          </LinkButton>
         </div>
       </div>
     </article>
@@ -202,12 +182,13 @@ export function CampaignCard({ session }: { session: Session }) {
 }
 
 /**
- * Shown when nothing is scheduled. Not optional polish — once sessions come from Firestore the
- * calendar WILL be empty between programmes, and a bare gap there reads as a broken page.
+ * Shown when nothing is scheduled. Not optional polish — the calendar WILL be empty between
+ * programmes, and a bare gap there reads as a broken page. Rendered in place of the whole grid, so
+ * it spans the full width rather than sitting in one narrow column.
  */
 export function SessionsEmpty() {
   return (
-    <div className="rounded-2xl border border-line bg-surface px-6 py-14 text-center">
+    <div className="w-full rounded-2xl border border-line bg-surface px-6 py-14 text-center">
       <p className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
         No sessions scheduled right now.
       </p>

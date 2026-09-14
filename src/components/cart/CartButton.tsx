@@ -4,7 +4,8 @@ import { useCart } from "@/lib/cart";
 
 /**
  * `icon` — bare 40px icon button with a corner count badge.
- * `pill` — solid brand pill with a "Cart" label and an inline count chip, for the header bar.
+ * `pill` — solid brand button with a "Cart" label and an inline count chip, for the header bar.
+ *          Squared like every other control; only the count chip stays circular.
  */
 export function CartButton({ variant = "icon" }: { variant?: "icon" | "pill" }) {
   const { count, openCart } = useCart();
@@ -16,7 +17,7 @@ export function CartButton({ variant = "icon" }: { variant?: "icon" | "pill" }) 
       <button
         onClick={openCart}
         aria-label={label}
-        className="inline-flex h-11 shrink-0 items-center gap-2 rounded-full bg-brand-600 px-4 text-sm font-bold text-white hover:bg-brand-700 sm:px-5"
+        className="inline-flex h-11 shrink-0 items-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-bold text-white hover:bg-brand-700 sm:px-5"
       >
         <CartIcon />
         <span className="hidden sm:inline">Cart</span>

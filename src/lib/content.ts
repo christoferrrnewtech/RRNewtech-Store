@@ -99,7 +99,30 @@ export type Brand = {
   cta: BrandCta;
 };
 
-export type Banner = { id: string; image: string; alt: string; href: string; order: number };
+/**
+ * A hero slide. The image is the only required part — every copy field below is optional and simply
+ * isn't rendered when blank, so banners saved before the hero overlay existed still display as plain
+ * full-bleed images. `href` remains the whole-slide link; the CTA pair is used instead when set.
+ */
+export type Banner = {
+  id: string;
+  image: string;
+  alt: string;
+  href: string;
+  order: number;
+  /** Small uppercase label above the heading. */
+  eyebrow?: string;
+  /** Hero headline (rendered as the page h1 on the first slide). */
+  heading?: string;
+  /** One or two sentences under the heading. */
+  body?: string;
+  /** Primary call to action. Both label and href must be set for the button to render. */
+  ctaLabel?: string;
+  ctaHref?: string;
+  /** Secondary call to action, outlined. */
+  ctaAltLabel?: string;
+  ctaAltHref?: string;
+};
 
 /**
  * Editable copy + image for the About page's "About" band (AboutIntro). A singleton, so it's stored as
@@ -144,6 +167,8 @@ export type StoreCategory = {
   name: string;
   blurb?: string;
   order: number;
+  /** Tile photo for the home "Shop by category" grid. Unset → the grid draws a gradient tile. */
+  image?: string;
   subcategories: Subcategory[];
 };
 
@@ -183,12 +208,22 @@ async function readMap(name: string): Promise<ItemMap> {
 }
 
 function toBanner(id: string, v: Record<string, unknown>): Banner {
+  // Blank strings become undefined so the hero can test a single condition per field.
+  const opt = (val: unknown) =>
+    typeof val === "string" && val.trim() ? val.trim() : undefined;
   return {
     id,
     image: String(v.image ?? ""),
     alt: String(v.alt ?? ""),
     href: String(v.href ?? ""),
     order: typeof v.order === "number" ? v.order : 0,
+    eyebrow: opt(v.eyebrow),
+    heading: opt(v.heading),
+    body: opt(v.body),
+    ctaLabel: opt(v.ctaLabel),
+    ctaHref: opt(v.ctaHref),
+    ctaAltLabel: opt(v.ctaAltLabel),
+    ctaAltHref: opt(v.ctaAltHref),
   };
 }
 
@@ -212,6 +247,7 @@ function toSession(id: string, v: Record<string, unknown>): Session {
     seatsLeft: num(v.seatsLeft),
     capacity: num(v.capacity),
     registerHref: str(v.registerHref),
+    detailsHref: str(v.detailsHref),
     image: str(v.image),
     order: num(v.order),
   };
@@ -349,6 +385,7 @@ function toStoreCategory(slug: string, v: Record<string, unknown>): StoreCategor
     name: String(v.name ?? slug),
     blurb: typeof v.blurb === "string" ? v.blurb : undefined,
     order: typeof v.order === "number" ? v.order : 0,
+    image: typeof v.image === "string" && v.image ? v.image : undefined,
     subcategories: toSubcategories(v.subcategories),
   };
 }
@@ -417,6 +454,33 @@ export const getCategoriesWithProducts = cache(async (): Promise<StoreCategory[]
         stockedSubcategories.has(`${c.slug}/${s.slug}`),
       ),
     }));
+});
+
+/** A category plus how many published products sit in it. */
+export type CategoryWithCount = StoreCategory & { count: number };
+
+/**
+ * Stocked categories with a product count each, biggest first — the home "Shop by category" grid.
+ *
+ * Counting is the point: a tile that says "4 products" sets an honest expectation, and ordering by
+ * count keeps the near-empty corners of the taxonomy off the landing page. Empty categories are
+ * dropped entirely, so the grid can never link somewhere with nothing to browse.
+ */
+export const getCategoriesWithCounts = cache(async (): Promise<CategoryWithCount[]> => {
+  const [categories, brands] = await Promise.all([getCategories(), getBrands()]);
+
+  const counts = new Map<string, number>();
+  for (const brand of brands) {
+    for (const product of brand.products) {
+      if (!product.category) continue;
+      counts.set(product.category, (counts.get(product.category) ?? 0) + 1);
+    }
+  }
+
+  return categories
+    .map((c) => ({ ...c, count: counts.get(c.slug) ?? 0 }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 });
 
 /** Published brand by slug, or undefined — drafts are invisible here on purpose. */
@@ -519,6 +583,11 @@ export async function renameCategory(slug: string, name: string): Promise<void> 
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Category name is required.");
   await storeDoc(DOCS.categories).set({ [slug]: { name: trimmed } }, { merge: true });
+}
+
+/** Set (or clear, with "") the tile photo shown on the home "Shop by category" grid. */
+export async function setCategoryImage(slug: string, image: string): Promise<void> {
+  await storeDoc(DOCS.categories).set({ [slug]: { image } }, { merge: true });
 }
 
 export async function deleteCategory(slug: string): Promise<void> {
@@ -645,6 +714,7 @@ export type SessionInput = {
   seatsLeft: number | null;
   capacity: number | null;
   registerHref: string;
+  detailsHref: string;
   /** Only present when a new file was uploaded; absent leaves the existing photo untouched. */
   image?: string;
 };

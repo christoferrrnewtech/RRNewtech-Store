@@ -71,7 +71,12 @@ export function CampaignFilters({ campaigns }: { campaigns: FilterableCampaign[]
         </>
       )}
 
-      <div className={chips.length > 0 ? "mt-6 space-y-6" : "space-y-6"}>
+      <div
+        className={[
+          "grid gap-6 md:grid-cols-2 lg:grid-cols-3",
+          chips.length > 0 ? "mt-6" : "",
+        ].join(" ")}
+      >
         {visible.map((c) => (
           <div key={c.id}>{c.card}</div>
         ))}
@@ -95,7 +100,7 @@ function Chip({
       onClick={onClick}
       aria-pressed={active}
       className={[
-        "rounded-full border px-4 py-2 text-sm font-semibold transition-colors",
+        "rounded-lg border px-4 py-2 text-sm font-semibold transition-colors",
         active
           ? "border-brand-600 bg-brand-600 text-white"
           : "border-line bg-surface text-fg hover:bg-elevated hover:text-brand-700",

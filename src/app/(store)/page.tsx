@@ -1,11 +1,15 @@
+import { redirect } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { ShopControls } from "@/components/shop/ShopControls";
-import { ShopBanner } from "@/components/shop/ShopBanner";
 import { CategoryCircles } from "@/components/shop/CategoryCircles";
 import { DigitalDentistryPromo } from "@/components/home/DigitalDentistryPromo";
 import { BrandShowcase } from "@/components/home/BrandShowcase";
-import { HomeCatalog } from "@/components/home/HomeCatalog";
+import { StoreHero } from "@/components/home/StoreHero";
+import { TrustStrip } from "@/components/home/TrustStrip";
+import { CategoryGrid } from "@/components/home/CategoryGrid";
+import { PromoShelf } from "@/components/home/PromoShelf";
+import { ClinicCta } from "@/components/home/ClinicCta";
 import {
   CATEGORY_MAP,
   brandSlug,
@@ -47,6 +51,16 @@ export default async function HomePage({
 }) {
   const { category, sort, q, brand, min, max } = await searchParams;
 
+  // The filterable catalog moved to /shop. Anything already linking a filter at the root — a
+  // bookmark, an indexed URL, a link the old CatalogFilters pushed — is forwarded there rather than
+  // landing on a marketing page that silently ignores it. A keyword search still belongs here.
+  if (!q?.trim() && (category || brand || min || max || sort)) {
+    const forwarded = new URLSearchParams(
+      Object.entries({ category, brand, min, max, sort }).filter(([, v]) => v) as [string, string][],
+    );
+    redirect(`/shop?${forwarded}`);
+  }
+
   const activeCategory =
     category && VALID_CATEGORIES.has(category) ? (category as CategorySlug) : "all";
   const activeSort: SortKey =
@@ -83,23 +97,21 @@ export default async function HomePage({
 
   return (
     <>
-      <ShopBanner />
+      <StoreHero />
+
+      {SECTIONS.trustStrip && isUnfiltered && <TrustStrip />}
+
+      {SECTIONS.categoryGrid && isUnfiltered && <CategoryGrid />}
+
+      {SECTIONS.promoShelf && isUnfiltered && <PromoShelf />}
 
       {SECTIONS.categoryCircles && <CategoryCircles activeCategory={activeCategory} />}
 
-      {isUnfiltered && <BrandShowcase />}
-
-      {isUnfiltered && (
-        <HomeCatalog
-          category={category}
-          brand={brand}
-          min={min}
-          max={max}
-          sort={sort}
-        />
-      )}
+      {SECTIONS.brandWall && isUnfiltered && <BrandShowcase />}
 
       {SECTIONS.digitalDentistry && isUnfiltered && <DigitalDentistryPromo />}
+
+      {SECTIONS.clinicCta && isUnfiltered && <ClinicCta />}
 
       {/* A filtered/search view always shows its results — the flag only hides the plain catalog. */}
       {(SECTIONS.allProducts || !isUnfiltered) && (

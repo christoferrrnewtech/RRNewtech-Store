@@ -154,7 +154,7 @@ function Chip({
       className={[
         // shrink-0/nowrap: inside the mobile scroller flex would otherwise squeeze the pills
         // and wrap their labels onto two lines.
-        "shrink-0 whitespace-nowrap rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors",
+        "shrink-0 whitespace-nowrap rounded-lg border px-4 py-1.5 text-sm font-semibold transition-colors",
         active
           ? "border-ink bg-ink text-white"
           : "border-line bg-surface text-fg hover:border-brand-600",

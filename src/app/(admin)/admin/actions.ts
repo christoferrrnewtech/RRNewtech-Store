@@ -31,6 +31,7 @@ import {
   getCategories,
   createCategory,
   renameCategory,
+  setCategoryImage,
   deleteCategory,
   reorderCategories,
   createSubcategory,
@@ -48,6 +49,7 @@ import {
   updateUserBrands,
   deleteAdminUserDoc,
   nextBrandOrder,
+  type Banner,
   type Brand,
   type BrandProduct,
   type GalleryImage,
@@ -204,6 +206,23 @@ export async function logoutAction(): Promise<void> {
 // Banner (admin only)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The hero's optional overlay copy. Pulled out because add and update take the identical set, and
+ * the storefront treats a blank field as "don't render this part" — so an untouched form still
+ * produces the old image-only banner.
+ */
+function bannerOverlay(form: FormData) {
+  return {
+    eyebrow: text(form, "eyebrow"),
+    heading: text(form, "heading"),
+    body: text(form, "body"),
+    ctaLabel: text(form, "ctaLabel"),
+    ctaHref: text(form, "ctaHref"),
+    ctaAltLabel: text(form, "ctaAltLabel"),
+    ctaAltHref: text(form, "ctaAltHref"),
+  };
+}
+
 export async function addBannerAction(
   _prev: ActionState,
   form: FormData,
@@ -213,7 +232,12 @@ export async function addBannerAction(
   try {
     const image = await storeUpload(form.get("image"), "banner");
     if (!image) return { error: "Choose an image for the banner." };
-    await addBanner({ image, alt: text(form, "alt"), href: text(form, "href") });
+    await addBanner({
+      image,
+      alt: text(form, "alt"),
+      href: text(form, "href"),
+      ...bannerOverlay(form),
+    });
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not add the banner." };
   }
@@ -231,9 +255,10 @@ export async function updateBannerAction(
 
   try {
     const uploaded = await storeUpload(form.get("image"), "banner");
-    const patch: { alt: string; href: string; image?: string } = {
+    const patch: Partial<Omit<Banner, "id" | "order">> = {
       alt: text(form, "alt"),
       href: text(form, "href"),
+      ...bannerOverlay(form),
     };
     if (uploaded) patch.image = uploaded;
     await updateBanner(id, patch);
@@ -323,6 +348,7 @@ export async function saveSessionAction(
       seatsLeft: optionalInt(form, "seatsLeft"),
       capacity: optionalInt(form, "capacity"),
       registerHref: text(form, "registerHref"),
+      detailsHref: text(form, "detailsHref"),
     };
     // A new upload wins; otherwise an explicit "remove" clears it, and a plain save keeps it.
     if (uploaded) data.image = uploaded;
@@ -413,6 +439,30 @@ export async function renameCategoryAction(_prev: ActionState, form: FormData): 
   }
   revalidateStorefront();
   return { ok: "Category renamed." };
+}
+
+/**
+ * Set or clear a category's tile photo for the home grid. "Remove" wins only when no new file was
+ * chosen, so picking a replacement and ticking remove in the same save doesn't wipe the upload.
+ */
+export async function setCategoryImageAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const slug = text(form, "slug");
+
+  let uploaded: string;
+  try {
+    uploaded = await storeUpload(form.get("image"), `category-${slug}`);
+    if (!uploaded && !form.get("remove")) return { error: "Choose an image first." };
+    await setCategoryImage(slug, uploaded);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not save the category image." };
+  }
+
+  revalidateStorefront();
+  return { ok: uploaded ? "Category image saved." : "Category image removed." };
 }
 
 export async function deleteCategoryAction(form: FormData): Promise<void> {

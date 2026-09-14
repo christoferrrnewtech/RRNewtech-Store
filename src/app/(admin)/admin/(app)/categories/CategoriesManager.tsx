@@ -11,9 +11,11 @@ import {
   renameSubcategoryAction,
   deleteSubcategoryAction,
   reorderSubcategoriesAction,
+  setCategoryImageAction,
 } from "@/app/(admin)/admin/actions";
+import Image from "next/image";
 import type { ActionState } from "@/lib/form-data";
-import { FormMessage, SubmitButton, TextInput } from "@/components/admin/Form";
+import { Field, FormMessage, SubmitButton, TextInput } from "@/components/admin/Form";
 import type { StoreCategory, Subcategory } from "@/lib/content";
 
 export function CategoriesManager({ categories }: { categories: StoreCategory[] }) {
@@ -183,6 +185,8 @@ function SubcategoryPanel({ category }: { category: StoreCategory }) {
       </h2>
       <p className="text-sm text-muted">Subcategories under this category</p>
 
+      <CategoryImageForm key={category.slug} category={category} />
+
       <div className="mt-4">
         <NewNameForm
           key={`sub-${category.slug}-${items.length}`}
@@ -209,6 +213,49 @@ function SubcategoryPanel({ category }: { category: StoreCategory }) {
         )}
       </ul>
     </div>
+  );
+}
+
+/**
+ * The category's tile photo on the home "Shop by category" grid. Optional — without one the grid
+ * draws a brand-blue gradient tile, so the section looks finished either way.
+ */
+function CategoryImageForm({ category }: { category: StoreCategory }) {
+  const [state, action] = useActionState<ActionState, FormData>(setCategoryImageAction, {});
+
+  return (
+    <form action={action} className="mt-5 rounded-xl border border-line bg-bg p-4">
+      <input type="hidden" name="slug" value={category.slug} />
+
+      <div className="flex flex-wrap items-start gap-4">
+        <span className="relative aspect-[16/10] w-32 shrink-0 overflow-hidden rounded-lg bg-elevated">
+          {category.image ? (
+            <Image src={category.image} alt="" fill sizes="128px" className="object-cover" />
+          ) : (
+            <span className="flex h-full items-center justify-center text-xs text-muted-light">
+              No image
+            </span>
+          )}
+        </span>
+
+        <div className="min-w-[220px] flex-1 space-y-3">
+          <Field
+            label="Home tile image"
+            hint="Wide shot, ≈16:10 · up to 5 MB. Shown on the storefront's “Shop by category” grid."
+          >
+            <TextInput type="file" name="image" accept="image/*" />
+          </Field>
+          {category.image && (
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input type="checkbox" name="remove" value="1" />
+              Remove the current image
+            </label>
+          )}
+          <SubmitButton>Save image</SubmitButton>
+          <FormMessage state={state} />
+        </div>
+      </div>
+    </form>
   );
 }
 

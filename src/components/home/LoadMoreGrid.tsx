@@ -1,7 +1,8 @@
 "use client";
 
-import { Children, useEffect, useRef, useState } from "react";
+import { Children, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { GRID_CLASS, useGridColumns } from "@/components/home/RowGrid";
 
 /**
  * Progressive product grid. The card children are rendered on the server (so `BrandProductCard` can
@@ -15,38 +16,27 @@ export function LoadMoreGrid({
   children,
   initialRows = 4,
   stepRows = 2,
+  className = GRID_CLASS,
 }: {
   children: React.ReactNode;
   initialRows?: number;
   stepRows?: number;
+  /** Replaces the shared grid shell — for a narrower column (e.g. beside the /shop sidebar). The
+   *  row measurement reads the live column count either way, so it adapts on its own. */
+  className?: string;
 }) {
   const items = Children.toArray(children);
   const total = items.length;
 
   const gridRef = useRef<HTMLDivElement>(null);
-  // Default to the widest (lg) column count so the first server paint matches desktop, the common
-  // case; the effect corrects it to the real count on mount and on resize.
-  const [cols, setCols] = useState(4);
+  const cols = useGridColumns(gridRef);
   const [rowsShown, setRowsShown] = useState(initialRows);
-
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    const measure = () => {
-      const n = getComputedStyle(el).gridTemplateColumns.split(" ").filter(Boolean).length;
-      if (n > 0) setCols(n);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   const visible = Math.min(rowsShown * cols, total);
 
   return (
     <div>
-      <div ref={gridRef} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div ref={gridRef} className={className}>
         {items.slice(0, visible)}
       </div>
 

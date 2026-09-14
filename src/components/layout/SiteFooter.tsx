@@ -9,7 +9,7 @@ export async function SiteFooter() {
   const categories = await getCategories().catch(() => []);
 
   return (
-    <footer className="mt-16 bg-ink text-white/80 lg:mt-20">
+    <footer className="bg-ink text-white/80">
       {/*
         Two columns from the smallest width up. Stacking all four blocks made the footer ~1300px
         tall on a phone; the two link lists sit side by side instead, and only the brand and contact
@@ -17,20 +17,22 @@ export async function SiteFooter() {
       */}
       <Container className="grid grid-cols-2 gap-x-6 gap-y-8 py-10 lg:grid-cols-4 lg:gap-10 lg:py-14">
         <div className="col-span-2 lg:col-span-1">
-          <div className="flex items-center gap-3">
-            {/* The logo already carries its own brand-blue field, so the Clinical White tile is only
-                a hairline edge separating it from the ink footer — hence p-0.5, not real clear space.
-                Inner radius is one step down from the tile's so the blue corners follow the curve. */}
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-white p-0.5">
+          <div className="flex items-center">
+            {/* This lockup carries its own blue field (#003da5), which against the ink footer
+                (#2d3791) is only 1.07:1 — the white wordmark stays legible, but the plate's edge
+                would be indistinguishable from the background. So the white tile is a hairline
+                separating the two blues, not clear space: p-0.5, as the square mark here used
+                before. It got more necessary, not less, when ink moved to Primary Blue.
+                No typed wordmark beside it — the artwork already carries the name. */}
+            <span className="inline-flex items-center rounded-lg bg-white p-0.5">
               <Image
-                src="/brand/logo.png"
-                alt={`${SITE.name} logo`}
-                width={36}
-                height={36}
-                className="h-full w-full rounded-md"
+                src="/brand/rnr logo.png"
+                alt={SITE.name}
+                width={1463}
+                height={340}
+                className="h-10 w-auto rounded-md"
               />
             </span>
-            <span className="text-base font-bold text-white">Newtech Dental</span>
           </div>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/60">{SITE.tagline}</p>
         </div>

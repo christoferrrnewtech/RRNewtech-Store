@@ -1,10 +1,12 @@
 import { CartProvider } from "@/lib/cart";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { TopUtilityBar } from "@/components/layout/TopUtilityBar";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { SignInPrompt } from "@/components/cart/SignInPrompt";
 import { PendingPaymentBanner } from "@/components/checkout/PendingPaymentBanner";
 import { getBrands, getCategoriesWithProducts } from "@/lib/content";
+import { SECTIONS } from "@/lib/constants";
 
 /**
  * Storefront chrome. Brands are read here (server) and passed into the client header, since the
@@ -21,9 +23,11 @@ export default async function StoreLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   // The header's brand menu. If Firestore is unreachable (e.g. a build with no credentials), fall
   // back to an empty menu rather than failing every page that renders this shared chrome.
-  const brands = await getBrands()
-    .then((list) => list.map((b) => ({ slug: b.slug, name: b.name })))
-    .catch(() => []);
+  const brandList = await getBrands().catch(() => []);
+  const brands = brandList.map((b) => ({ slug: b.slug, name: b.name }));
+  // Catalog size for the search placeholder. Free: `getBrands()` is request-cached and each brand
+  // doc already carries its full product array.
+  const productCount = brandList.reduce((n, b) => n + b.products.length, 0);
   // Category mega-menu data (server-only content store → passed into the client header). Filtered
   // to categories that actually have products, so every link in the menu lands somewhere useful.
   const categories = await getCategoriesWithProducts()
@@ -52,7 +56,8 @@ export default async function StoreLayout({
               `scroll-mt-24 lg:scroll-mt-36`) — so a strip that appears and disappears mid-session
               must not change that height. */}
           <PendingPaymentBanner />
-          <SiteHeader brands={brands} categories={categories} />
+          {SECTIONS.utilityBar && <TopUtilityBar />}
+          <SiteHeader brands={brands} categories={categories} productCount={productCount} />
           <main id="main" className="flex flex-1 flex-col">
             {children}
           </main>
