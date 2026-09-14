@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { CartButton } from "@/components/cart/CartButton";
+import { LinkButton } from "@/components/ui/Button";
 import { AccountLink } from "@/components/layout/AccountLink";
 import { SearchBar } from "@/components/layout/SearchBar";
 import { NAV_ICONS } from "@/components/layout/NavIcons";
@@ -19,9 +20,12 @@ type MenuKey = "category" | "brand";
 export function SiteHeader({
   brands,
   categories,
+  productCount,
 }: {
   brands: BrandLink[];
   categories: MenuCategory[];
+  /** Catalog size for the search placeholder — counted in the layout, which already has the brands. */
+  productCount?: number;
 }) {
   const [activeMenu, setActiveMenu] = useState<MenuKey | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -55,7 +59,7 @@ export function SiteHeader({
   );
 
   return (
-    <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/80">
+    <header className="sticky top-0 z-40 bg-shell/95 backdrop-blur supports-[backdrop-filter]:bg-shell/80">
       {/* Promo bar */}
       {SECTIONS.promoBar && (
         <div className="relative z-40 bg-ink text-center text-xs font-medium text-white/90">
@@ -67,37 +71,59 @@ export function SiteHeader({
       )}
 
       <div className="border-b border-line" onMouseLeave={() => setActiveMenu(null)}>
-        <div className="relative z-40 bg-surface">
+        <div className="relative z-40 bg-shell">
           {/* Row 1 — logo · search · account · cart */}
           <Container className="flex h-16 items-center gap-3 lg:h-20 lg:gap-6">
-            {/* Logo */}
-            <Link
-              href="/"
-              className="flex shrink-0 items-center gap-3"
-              aria-label={`${SITE.name} home`}
-            >
+            {/* Logo. The lockup already carries the company name, so there's no typed wordmark
+                beside it — printing it twice is what the old square-mark-plus-text did.
+
+                `width`/`height` are the file's real pixels (2.956:1) so next/image builds a correct
+                srcset; the height class drives the size and `w-auto` lets the ratio set the width.
+                At h-14 it lands ~166px wide, near enough to the old mark+text footprint that nothing
+                else in the row has to move. `alt=""` because the Link's aria-label already names it,
+                and an aria-label overrides the element's contents. No radius: the artwork is
+                transparent, so there's no plate to round — only a glyph to risk clipping. */}
+            <Link href="/" className="flex shrink-0 items-center" aria-label={`${SITE.name} home`}>
               <Image
-                src="/brand/logo.png"
-                alt={`${SITE.name} logo`}
-                width={44}
-                height={44}
+                src="/brand/R&R Logo Upscale.png"
+                alt=""
+                width={5120}
+                height={1732}
                 priority
-                className="h-10 w-10 rounded-lg lg:h-11 lg:w-11"
+                className="h-9 w-auto sm:h-11 lg:h-14"
               />
-              <span className="hidden text-base font-bold leading-tight text-fg sm:block lg:text-lg">
-                Newtech <span className="text-brand-600">Dental</span>
-              </span>
             </Link>
 
-            {/* Search (desktop) — the primary action, so it takes the width the old nav row used. */}
-            <SearchBar className="mx-auto hidden w-full max-w-2xl flex-1 lg:flex" />
+            {/* Search (desktop) — the primary action, so it fills everything between the logo and
+                the actions. No max-width: capping it left slack on both sides of the bar. */}
+            <SearchBar className="hidden w-full flex-1 lg:flex" productCount={productCount} />
 
-            {/* Right actions */}
-            <div className="ml-auto flex items-center gap-2 lg:ml-0">
-              <AccountLink variant="pill" />
-              <AccountLink variant="icon" />
+            {/* Right actions. `-mr-2` optically squares the trailing icon button with the container
+                edge — its glyph is inset inside a 40px hit area, so flush metrics read as short. */}
+            <div className="-mr-2 ml-auto flex items-center gap-2 lg:ml-0">
+              {/* Equipment buyers ask before they add to cart, so the quote route sits next to Cart.
+                  Hidden below md, where it crowds the bar; the mobile drawer carries it instead.
+
+                  The wrapper owns that visibility, not the button. `hidden` on the button itself
+                  loses: LinkButton's base sets `inline-flex`, and Tailwind emits `.inline-flex`
+                  after `.hidden`, so the later rule wins no matter how the classes are ordered in
+                  the attribute. That kept this button on screen at every width. */}
+              <span className="hidden md:inline-flex">
+                <LinkButton
+                  href="/contact"
+                  variant="outline"
+                  className="h-11 whitespace-nowrap px-4"
+                >
+                  Request a quote
+                </LinkButton>
+              </span>
 
               <CartButton variant="pill" />
+
+              <AccountLink
+                variant="icon"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-fg hover:bg-elevated"
+              />
 
               <button
                 onClick={() => setMobileOpen((v) => !v)}
@@ -117,55 +143,76 @@ export function SiteHeader({
             </div>
           </Container>
 
-          {/* Row 2 — icon nav strip (desktop) */}
+          {/* Row 2 — nav strip (desktop). Text-only and left-aligned: the search field above is
+              already busy, and icons on both rows made the header shout. */}
           <nav className="hidden border-t border-line lg:block" aria-label="Primary">
-            <Container className="flex h-12 items-center justify-center gap-1">
-              {navItems.map((item) => {
-                const Icon = NAV_ICONS[item.icon];
-                if (item.menu) {
+            <Container>
+              {/* `-ml-3` cancels the first item's own px-3 so its TEXT lands on the container edge,
+                  level with the logo above it rather than 12px inside it. It sits on this inner row
+                  rather than on Container, whose `mx-auto` a margin-left would override — that
+                  would left-align the whole header instead of nudging the nav. */}
+              <div className="-ml-3 flex h-12 items-center justify-start gap-1">
+                {navItems.map((item) => {
+                  if (item.menu) {
+                    const key = item.menu;
+                    return (
+                      // `h-full` so the panel's `top-full` lands at the bottom of the nav ROW rather
+                      // than the bottom of the button. The panel is a DOM descendant of the wrapper
+                      // the header's onMouseLeave is on, so moving the pointer down into it doesn't
+                      // count as leaving — mouseleave only fires once every descendant is exited.
+                      <div key={key} className="relative flex h-full items-center">
+                        <MenuTrigger
+                          label={item.label}
+                          menuKey={key}
+                          activeMenu={activeMenu}
+                          setActiveMenu={setActiveMenu}
+                        />
+                        {/* Brands only. Categories needs the full-width panel below — its tree is
+                            too big for a 256px column — and that one can't live in here, because
+                            `inset-x-0` would resolve against this wrapper (the trigger's width). */}
+                        {activeMenu === key && key === "brand" && (
+                          // `left-3` cancels the trigger's own px-3, so the panel's edge sits under
+                          // the trigger's text. White on the warm shell, so it reads as raised.
+                          <div
+                            id={`menu-${key}`}
+                            className="absolute left-3 top-full z-50 min-w-[16rem] rounded-2xl border border-line bg-surface py-2 shadow-xl"
+                          >
+                            <BrandMenu brands={brands} onNavigate={closeAll} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  // href items only — the filter above guarantees one of the two is set.
+                  const active = pathname === item.href;
                   return (
-                    <MenuTrigger
-                      key={item.menu}
-                      label={item.label}
-                      icon={<Icon />}
-                      menuKey={item.menu}
-                      activeMenu={activeMenu}
-                      setActiveMenu={setActiveMenu}
-                    />
+                    <Link
+                      key={item.href}
+                      href={item.href!}
+                      className={[
+                        "flex items-center whitespace-nowrap rounded-lg px-3 py-2 text-[15px] font-semibold hover:bg-elevated hover:text-brand-700",
+                        active ? "text-brand-700" : "text-fg",
+                      ].join(" ")}
+                    >
+                      {item.label}
+                    </Link>
                   );
-                }
-                // href items only — the filter above guarantees one of the two is set.
-                const active = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href!}
-                    className={[
-                      "flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold hover:bg-elevated hover:text-brand-700",
-                      active ? "text-brand-700" : "text-fg",
-                    ].join(" ")}
-                  >
-                    <Icon className="text-brand-600" />
-                    {item.label}
-                  </Link>
-                );
-              })}
+                })}
+              </div>
             </Container>
           </nav>
         </div>
 
-        {/* Desktop mega-menu panel */}
-        {activeMenu && (
+        {/* Categories mega-menu. Out here rather than inside the trigger so `inset-x-0` resolves
+            against the sticky <header> and the panel spans the page. Still a descendant of the
+            wrapper carrying onMouseLeave, so moving the pointer into it doesn't close the menu. */}
+        {activeMenu === "category" && (
           <div
-            id={`menu-${activeMenu}`}
-            className="absolute inset-x-0 top-full z-40 hidden border-b border-line bg-surface shadow-xl lg:block"
+            id="menu-category"
+            className="absolute inset-x-0 top-full z-50 hidden border-b border-line bg-surface shadow-xl lg:block"
           >
             <Container className="py-8">
-              {activeMenu === "category" ? (
-                <CategoryMenu categories={categories} onNavigate={closeAll} />
-              ) : (
-                <BrandMenu brands={brands} onNavigate={closeAll} />
-              )}
+              <CategoryMenu categories={categories} onNavigate={closeAll} />
             </Container>
           </div>
         )}
@@ -174,7 +221,7 @@ export function SiteHeader({
         {mobileOpen && (
           <nav className="border-t border-line lg:hidden" aria-label="Mobile">
             <Container className="flex flex-col gap-1 py-4">
-              <SearchBar className="mb-2 w-full" onSubmitted={closeAll} />
+              <SearchBar className="mb-2 w-full" onSubmitted={closeAll} productCount={productCount} />
 
               {navItems.map((item) => {
                 const Icon = NAV_ICONS[item.icon];
@@ -209,6 +256,15 @@ export function SiteHeader({
                 );
               })}
 
+              {/* The desktop bar's quote button is hidden below md — this is where it lands. */}
+              <Link
+                href="/contact"
+                onClick={closeAll}
+                className="mt-2 flex items-center justify-center rounded-lg border border-brand-800 px-3 py-3 text-sm font-semibold text-fg hover:bg-brand-800 hover:text-white"
+              >
+                Request a quote
+              </Link>
+
               <AccountLink variant="row" onNavigate={closeAll} />
             </Container>
           </nav>
@@ -220,13 +276,11 @@ export function SiteHeader({
 
 function MenuTrigger({
   label,
-  icon,
   menuKey,
   activeMenu,
   setActiveMenu,
 }: {
   label: string;
-  icon: React.ReactNode;
   menuKey: MenuKey;
   activeMenu: MenuKey | null;
   setActiveMenu: (m: MenuKey | null) => void;
@@ -241,11 +295,10 @@ function MenuTrigger({
       onMouseEnter={() => setActiveMenu(menuKey)}
       onClick={() => setActiveMenu(active ? null : menuKey)}
       className={[
-        "flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold hover:bg-elevated hover:text-brand-700",
+        "flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-[15px] font-semibold hover:bg-elevated hover:text-brand-700",
         active ? "text-brand-700" : "text-fg",
       ].join(" ")}
     >
-      <span className="text-brand-600">{icon}</span>
       {label}
       <svg
         width="14"

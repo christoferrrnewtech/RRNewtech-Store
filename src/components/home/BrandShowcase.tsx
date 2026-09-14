@@ -1,8 +1,8 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { getBrands } from "@/lib/content";
 import { BrandFilterGrid, type BrandCard } from "@/components/home/BrandFilterGrid";
-import { BrandLogoCarousel } from "@/components/home/BrandLogoCarousel";
 
 /** Map published brands → serializable card data for the client grid. Server-only data lives here. */
 async function brandCards(): Promise<BrandCard[]> {
@@ -18,42 +18,39 @@ async function brandCards(): Promise<BrandCard[]> {
 }
 
 /**
- * "Shop by Brand" — header + an auto-scrolling logo-only carousel, shown on the unfiltered home
- * page. Each logo leads to /brands/[slug]. The full filterable grid lives on the /brands index page
- * (see `BrandGrid`). Logos ship with their own backgrounds, so they sit contained on a white plate.
+ * "Brands we distribute" — a static wall of logo plates on the home page, each leading to
+ * /brands/[slug]. Every brand is visible at once; this replaced an auto-scrolling marquee, which
+ * only ever showed part of the list and moved the target while you aimed at it.
+ *
+ * Logos ship with their own backgrounds, so each sits contained on a white plate rather than being
+ * knocked out. The full filterable grid lives on the /brands index page (see `BrandGrid`).
  */
 export async function BrandShowcase() {
   const brands = await brandCards();
   if (brands.length === 0) return null;
   return (
-    <section aria-labelledby="brands-heading" className="bg-bg">
-      <Container className="py-10">
-        <div className="mb-6 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand-600">
-              Our Brands
-            </p>
-            <h2
-              id="brands-heading"
-              className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl"
-            >
-              Shop by Brand
-            </h2>
-            <p className="mt-1.5 max-w-xl text-sm text-muted">
-              Trusted names, from clinic equipment to everyday consumables.
-            </p>
-          </div>
-          <Link
-            href="/brands"
-            className="whitespace-nowrap text-sm font-semibold text-brand-700 hover:text-brand-800"
-          >
-            View all →
-          </Link>
-        </div>
+    <section aria-labelledby="brands-heading" className="bg-bg py-14 lg:py-16">
+      <Container>
+        <h2
+          id="brands-heading"
+          className="font-[family-name:var(--font-display)] text-3xl font-bold text-fg lg:text-4xl"
+        >
+          Brands we distribute
+        </h2>
 
-        <BrandLogoCarousel
-          brands={brands.map((b) => ({ slug: b.slug, name: b.name, logo: b.logo }))}
-        />
+        <ul className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+          {brands.map((b) => (
+            <li key={b.slug}>
+              <Link
+                href={`/brands/${b.slug}`}
+                aria-label={b.name}
+                className="relative flex h-28 items-center justify-center rounded-2xl border border-line bg-surface p-6 transition-shadow hover:shadow-md"
+              >
+                <Image src={b.logo} alt={b.name} fill sizes="300px" className="object-contain p-6" />
+              </Link>
+            </li>
+          ))}
+        </ul>
       </Container>
     </section>
   );

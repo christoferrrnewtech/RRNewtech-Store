@@ -1,24 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { Container } from "@/components/ui/Container";
+import { HeroSlide } from "@/components/home/HeroSlide";
 import type { Banner } from "@/lib/content";
 
 const AUTOPLAY_MS = 5000;
 
 /**
- * Storefront banner carousel: auto-advances (~5s), pauses on hover, and skips autoplay under
- * prefers-reduced-motion. Arrows + dots for manual control. Slides share a fixed aspect box so
- * differing image sizes don't shift the layout. Rendered only for 2+ banners — ShopBanner handles
- * the 0/1 cases.
+ * Storefront hero carousel: auto-advances (~5s), pauses on hover, and skips autoplay under
+ * prefers-reduced-motion. Manual control is the row of bars at bottom-left — no arrows, since each
+ * slide's own CTAs are the thing to click and floating arrows fought them for attention. Slides
+ * share a min-height so differing image sizes don't shift the layout. Rendered only for 2+ banners;
+ * StoreHero handles the 0/1 cases.
  */
 export function BannerCarousel({ banners }: { banners: Banner[] }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const count = banners.length;
-
-  const go = useCallback((n: number) => setIndex((n + count) % count), [count]);
 
   // Autoplay, unless paused (hover/focus) or the user prefers reduced motion.
   const reduced = useRef(false);
@@ -35,83 +34,50 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
     <section
       aria-roledescription="carousel"
       aria-label="Promotions"
-      className="relative w-full overflow-hidden bg-elevated"
+      className="relative w-full overflow-hidden bg-brand-900"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
     >
-      <div className="relative aspect-[1489/551]">
-        {banners.map((b, i) => {
-          const img = (
-            <Image
-              src={b.image}
-              alt={b.alt}
-              fill
-              priority={i === 0}
-              sizes="100vw"
-              className="object-cover"
-            />
-          );
-          return (
-            <div
-              key={b.id}
-              aria-hidden={i !== index}
-              className={[
-                "absolute inset-0 transition-opacity duration-700",
-                i === index ? "opacity-100" : "pointer-events-none opacity-0",
-              ].join(" ")}
-            >
-              {b.href ? (
-                <Link href={b.href} tabIndex={i === index ? 0 : -1} className="block h-full w-full">
-                  {img}
-                </Link>
-              ) : (
-                img
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Arrows */}
-      <button
-        type="button"
-        onClick={() => go(index - 1)}
-        aria-label="Previous banner"
-        className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-brand-700 shadow-md backdrop-blur transition hover:bg-white"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        onClick={() => go(index + 1)}
-        aria-label="Next banner"
-        className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-brand-700 shadow-md backdrop-blur transition hover:bg-white"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-
-      {/* Dots */}
-      <div className="absolute inset-x-0 bottom-3 flex justify-center gap-2">
+      {/* All slides occupy the same single grid cell, so they stack and the section takes the
+          height of the tallest one. A fixed aspect box used to clip whichever slide had the most
+          copy, and absolute positioning would hide that overflow instead of accommodating it.
+          `inert` on the inactive slides keeps their CTAs out of the tab order. */}
+      <div className="grid">
         {banners.map((b, i) => (
-          <button
+          <div
             key={b.id}
-            type="button"
-            onClick={() => setIndex(i)}
-            aria-label={`Go to banner ${i + 1}`}
-            aria-current={i === index}
+            aria-hidden={i !== index}
+            inert={i !== index}
             className={[
-              "h-2 rounded-full transition-all",
-              i === index ? "w-6 bg-white" : "w-2 bg-white/60 hover:bg-white/80",
+              "col-start-1 row-start-1 transition-opacity duration-700",
+              i === index ? "opacity-100" : "pointer-events-none opacity-0",
             ].join(" ")}
-          />
+          >
+            <HeroSlide banner={b} priority={i === 0} headingLevel={i === 0 ? "h1" : "h2"} />
+          </div>
         ))}
       </div>
+
+      {/* Indicators — bars, aligned with the copy above them rather than centered. */}
+      <Container className="pointer-events-none absolute inset-x-0 bottom-8">
+        <div className="pointer-events-auto flex gap-2">
+          {banners.map((b, i) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => setIndex(i)}
+              aria-label={`Go to banner ${i + 1}`}
+              aria-current={i === index}
+              className={[
+                "h-1 w-8 transition-colors",
+                i === index ? "bg-white" : "bg-white/35 hover:bg-white/60",
+              ].join(" ")}
+            />
+          ))}
+        </div>
+      </Container>
     </section>
   );
 }

@@ -155,27 +155,124 @@ export async function deleteCustomerAccount(uid: string): Promise<void> {
 }
 
 /**
+ * Remembers, for the life of this process, that Firebase refused our `continueUrl`.
+ *
+ * Without it the fallback below is close to useless. A REJECTED SEND STILL COUNTS AGAINST THE
+ * PER-ACCOUNT QUOTA, so "try with continueUrl, then retry without" spends the account's one
+ * attempt learning something that is a property of the PROJECT, not of the account — and the retry
+ * comes back TOO_MANY_ATTEMPTS_TRY_LATER having sent nothing. Every registration paid that price
+ * and every registration failed.
+ *
+ * Learning it once per instance costs at most one customer per cold start instead of all of them,
+ * and it resets on the next deploy, so allowlisting the domain takes effect without any code
+ * change. It is a cache of a remote config value, which is why it is only ever set to true: the
+ * conservative direction, and the one that still sends mail.
+ */
+let continueUrlBlocked = false;
+
+/**
  * Ask Firebase to send its templated "verify your email" message.
  *
- * `continueUrl` is what brings the visitor back to us after Firebase's confirmation page — but
- * Firebase rejects a continueUrl whose domain isn't on the project's Authorized domains list, and
- * failing to send the email is far worse than landing on Firebase's own page. So: try with it, and
- * fall back to a plain send if the domain isn't allowed.
+ * `continueUrl` is what brings the visitor back to us after Firebase's confirmation page. The
+ * fallback below exists because Firebase refuses a continueUrl whose host is not on the project's
+ * Authorized domains list, and landing on Firebase's own page beats sending nothing.
+ *
+ * ⚠ SITE_URL'S HOST MUST BE ON THE AUTHORIZED DOMAINS LIST (Firebase console → Authentication →
+ * Settings → Authorized domains). This is not a nice-to-have, and the fallback is not a substitute
+ * for it: a rejected first attempt still COUNTS AGAINST THE PER-ACCOUNT SEND QUOTA, so the retry
+ * comes straight back with TOO_MANY_ATTEMPTS_TRY_LATER and nothing is sent at all. That is exactly
+ * how registration stopped emailing anyone — the deployed host was never allowlisted, so every
+ * sign-up spent its one attempt on a call that could not succeed. Add each new domain to that list
+ * BEFORE pointing NEXT_PUBLIC_SITE_URL at it.
+ *
+ * Failures are logged with their Identity Toolkit code, because the calling actions treat a failed
+ * send as non-fatal — without a log there is nothing anywhere to say why no email arrived.
  */
 export async function sendVerificationEmail(idToken: string): Promise<void> {
-  const first = await identityToolkit("sendOobCode", {
-    requestType: "VERIFY_EMAIL",
-    idToken,
-    continueUrl: `${SITE_URL}/account/login?verified=1`,
-  });
-  if (first.ok) return;
+  if (!continueUrlBlocked) {
+    const first = await identityToolkit("sendOobCode", {
+      requestType: "VERIFY_EMAIL",
+      idToken,
+      continueUrl: `${SITE_URL}/account/login?verified=1`,
+    });
+    if (first.ok) return;
 
-  if (first.code === "INVALID_CONTINUE_URI" || first.code === "UNAUTHORIZED_DOMAIN") {
-    const retry = await identityToolkit("sendOobCode", { requestType: "VERIFY_EMAIL", idToken });
-    if (retry.ok) return;
-    throw new Error(retry.code || "Could not send the verification email.");
+    console.error(
+      `[auth] verification email rejected (${first.code || "unknown"}) for continueUrl host ` +
+        `${hostOf(SITE_URL)} — if this is UNAUTHORIZED_DOMAIN, add that host to Firebase ` +
+        `Authentication → Settings → Authorized domains.`,
+    );
+
+    // Not a continueUrl problem, so a bare retry would fail the same way. Report it as-is.
+    if (first.code !== "INVALID_CONTINUE_URI" && first.code !== "UNAUTHORIZED_DOMAIN") {
+      throw new Error(first.code || "Could not send the verification email.");
+    }
+    continueUrlBlocked = true;
   }
-  throw new Error(first.code || "Could not send the verification email.");
+
+  const bare = await identityToolkit("sendOobCode", { requestType: "VERIFY_EMAIL", idToken });
+  if (bare.ok) return;
+
+  console.error(`[auth] verification email failed without continueUrl: ${bare.code || "unknown"}`);
+  throw new Error(bare.code || "Could not send the verification email.");
+}
+
+/** Never throws — used only to make a log line readable. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Send the verification email for an account we can NAME but hold no password for.
+ *
+ * The resend button on /account/verify needs this. Firebase will only send a verification message
+ * for an idToken, and an idToken normally comes from a password — which the visitor has already
+ * typed once and should not have to type again just to get a second copy of an email.
+ *
+ * So the uid is exchanged for one instead: the Admin SDK mints a custom token, Identity Toolkit
+ * swaps that for an idToken, and the send proceeds as usual. The private key we already hold is
+ * what authorizes it, so no credential of the customer's is stored, cached, or asked for twice.
+ *
+ * THE CALLER DECIDES WHOSE ACCOUNT THIS IS, AND THAT IS THE WHOLE SECURITY MODEL. This function
+ * will happily mail anyone, so a uid must never be derived from something the visitor posted —
+ * `resendVerificationAction` reads it from the httpOnly cookie set when they registered, which a
+ * stranger cannot write. Driving it from a posted email address would turn it into a way to spam
+ * an inbox on demand, and an account-enumeration oracle besides.
+ */
+export async function sendVerificationEmailForUid(uid: string): Promise<void> {
+  const customToken = await getAdminAuth().createCustomToken(uid);
+
+  const { ok, code, data } = await identityToolkit("signInWithCustomToken", {
+    token: customToken,
+    returnSecureToken: true,
+  });
+  if (!ok) throw new Error(code || "Could not start a verification session.");
+
+  const idToken = typeof data.idToken === "string" ? data.idToken : "";
+  if (!idToken) throw new Error("Could not start a verification session.");
+
+  await sendVerificationEmail(idToken);
+}
+
+/**
+ * The uid behind an address, but only while it still needs verifying.
+ *
+ * Returns "" for an unknown address AND for one that is already confirmed, so a resend can't be
+ * used to mail someone who has finished — and so the button reports "already confirmed" instead of
+ * silently sending a link that would do nothing.
+ */
+export async function unverifiedUidForEmail(email: string): Promise<string> {
+  if (!email) return "";
+  try {
+    const user = await getAdminAuth().getUserByEmail(email);
+    return user.emailVerified ? "" : user.uid;
+  } catch {
+    return "";
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
-type Variant = "primary" | "secondary" | "secondaryDark" | "inverse" | "ghost";
+type Variant = "primary" | "secondary" | "outline" | "secondaryDark" | "inverse" | "ghost";
 type Size = "sm" | "md" | "lg";
 
 const base =
@@ -10,6 +10,9 @@ const base =
 const variants: Record<Variant, string> = {
   primary: "bg-brand-600 text-white hover:bg-brand-700",
   secondary: "border border-line bg-surface text-fg hover:bg-elevated hover:border-line-strong",
+  // Like `secondary` but with a border you can actually see — for a button that has to hold its own
+  // beside a solid one, where the hairline `border-line` reads as no border at all.
+  outline: "border border-brand-800 bg-surface text-fg hover:bg-brand-800 hover:text-white",
   secondaryDark:
     "border border-white/20 bg-transparent text-white/85 hover:border-white/40 hover:text-white",
   // White button with brand-blue text — for use on dark/blue panels.

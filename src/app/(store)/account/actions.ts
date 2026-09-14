@@ -30,9 +30,12 @@ import {
   destroyCustomerSession,
   emailInUse,
   isEmailVerified,
+  readPendingVerifyEmail,
   sendVerificationEmail,
+  sendVerificationEmailForUid,
   setPendingVerifyEmail,
   signInCustomer,
+  unverifiedUidForEmail,
 } from "@/lib/customer-auth";
 import {
   createCustomer,
@@ -184,18 +187,72 @@ export async function registerAction(
   // Sending the verification email needs an idToken, and only a real sign-in produces one — the
   // Admin SDK can generate the link but cannot make Firebase send it. Signing in here costs
   // nothing: we already hold the password the visitor just chose. A failure to send is not worth
-  // destroying a good account over; the visitor can trigger a fresh link by signing in.
+  // destroying a good account over; /account/verify offers a resend button that does not need the
+  // password again.
+  //
+  // LOGGED, not swallowed. This was a bare `catch {}`, and when the send started failing for every
+  // single registration (SITE_URL's host was missing from Firebase's Authorized domains list) there
+  // was no trace of it anywhere — the account appeared, the page said "check your inbox", and
+  // nothing had been sent. A non-fatal failure still has to be visible.
   try {
     const signedIn = await signInCustomer(email, pass);
     if (signedIn) await sendVerificationEmail(signedIn.idToken);
-  } catch {
-    // Intentionally ignored — see above.
+    else console.error("[account] could not sign in to send the verification email for", email);
+  } catch (err) {
+    console.error("[account] verification email failed for", email, err);
   }
 
   // The account exists but is unverified, and is deliberately NOT signed in: the visitor confirms
   // the address first, then signs in normally.
   await setPendingVerifyEmail(email);
   redirect("/account/verify");
+}
+
+/**
+ * Re-send the verification link from /account/verify, with no password and no email field.
+ *
+ * WHOSE ACCOUNT IS READ FROM THE httpOnly COOKIE, NEVER FROM THE REQUEST. That is the entire
+ * security model, and it is what makes a one-click resend safe where an email-address form would
+ * not be: this action takes no input, so there is nothing for a stranger to point it at. A form
+ * that accepted an address would be both a way to have us mail anyone on demand and an
+ * account-enumeration oracle — which is why this page used to say "sign in again" instead.
+ *
+ * The cookie is set when the visitor registers (and again when an unverified sign-in bounces them
+ * here) and lasts 30 minutes, so the button is only live for the person who just came through one
+ * of those doors, on the browser they used. Once it lapses, signing in still re-sends.
+ *
+ * Firebase rate-limits the send itself, so hammering the button gets TOO_MANY_ATTEMPTS from the
+ * source of truth rather than from a counter of ours that would have to be stored somewhere.
+ */
+export async function resendVerificationAction(): Promise<ActionState> {
+  const email = await readPendingVerifyEmail();
+  if (!email) {
+    return {
+      error:
+        "This link has expired. Sign in with your email and password and we'll send a new one.",
+    };
+  }
+
+  const uid = await unverifiedUidForEmail(email);
+  if (!uid) {
+    // Already confirmed, or the account is gone. Both are better said plainly than papered over
+    // with a "sent!" for a message that will never arrive.
+    return { ok: "That address is already confirmed — you can sign in now." };
+  }
+
+  try {
+    await sendVerificationEmailForUid(uid);
+  } catch (err) {
+    console.error("[account] could not resend the verification email to", email, err);
+    const rateLimited = err instanceof Error && /TOO_MANY_ATTEMPTS/i.test(err.message);
+    return {
+      error: rateLimited
+        ? "We've sent a few already — please wait a minute and try again."
+        : "We couldn't send it just now. Please try again in a moment.",
+    };
+  }
+
+  return { ok: `Sent. Check ${email} — including your spam folder.` };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

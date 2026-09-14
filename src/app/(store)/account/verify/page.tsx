@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LinkButton } from "@/components/ui/Button";
 import { AccountShell, AccountShellLink } from "@/components/account/AccountShell";
 import { readPendingVerifyEmail } from "@/lib/customer-auth";
+import { ResendVerification } from "./ResendVerification";
 
 export const metadata: Metadata = {
   title: "Confirm your email",
@@ -12,10 +13,13 @@ export const metadata: Metadata = {
 /**
  * The "check your inbox" screen, reached after registering and after an unverified sign-in attempt.
  *
- * There is no resend button here on purpose. Firebase only sends a verification email for a token
- * from a real sign-in, so a resend endpoint driven by an email address alone would either not work
- * or would let a stranger spam someone's inbox. Signing in again does exactly the right thing —
- * it proves the password and sends a fresh link — so that is where this page points.
+ * This page used to send people back to sign in again for a fresh link, on the reasoning that
+ * Firebase will only send a verification email for an idToken and an idToken needs a password — so
+ * a resend driven by a typed-in email address would either not work or would let a stranger spam
+ * someone's inbox. That reasoning still holds, and the resend here does not break it: it takes NO
+ * input, reads whose account to mail from the httpOnly cookie set when they registered, and mints
+ * its own idToken from the uid. Nothing a visitor can type reaches it. See
+ * `resendVerificationAction`.
  */
 export default async function VerifyEmailPage({
   searchParams,
@@ -63,16 +67,14 @@ export default async function VerifyEmailPage({
         <p className="mt-4 text-sm leading-relaxed text-muted">
           {resent === "1"
             ? "Your account isn't confirmed yet, so we've sent a new link. Open it, then come back and sign in."
-            : "Open the link in that email to activate your account, then sign in. It can take a minute to arrive — check your spam folder if it doesn't."}
+            : "Open the link in that email to activate your account, then sign in."}
         </p>
 
         <LinkButton href="/account/login" size="lg" className="mt-6 w-full">
           Back to sign in
         </LinkButton>
 
-        <p className="mt-4 text-xs leading-relaxed text-muted">
-          Didn&apos;t get the email? Sign in again and we&apos;ll send a fresh link.
-        </p>
+        <ResendVerification />
       </div>
     </AccountShell>
   );

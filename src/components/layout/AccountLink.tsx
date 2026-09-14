@@ -78,7 +78,7 @@ export function AccountLink({
       onClick={onNavigate}
       className={
         className ??
-        "hidden h-11 items-center gap-2 rounded-full border border-line px-4 text-fg hover:border-brand-600 hover:text-brand-700 lg:flex"
+        "hidden h-11 items-center gap-2 rounded-lg border border-line px-4 text-fg hover:border-brand-600 hover:text-brand-700 lg:flex"
       }
     >
       <UserIcon />

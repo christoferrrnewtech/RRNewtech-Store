@@ -9,7 +9,7 @@ import {
   updateBannerAction,
 } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
-import { Field, FormMessage, SubmitButton, TextInput } from "@/components/admin/Form";
+import { Field, FormMessage, SubmitButton, TextArea, TextInput } from "@/components/admin/Form";
 import type { Banner } from "@/lib/content";
 
 const ADD = "add" as const;
@@ -221,9 +221,13 @@ function EditPanel({ banner, index }: { banner: Banner; index: number }) {
         <Field label="Alt text" hint="Describes the image for screen readers and search.">
           <TextInput name="alt" defaultValue={banner.alt} required />
         </Field>
-        <Field label="Links to" hint="Where clicking the slide goes, e.g. /brands. Empty = no link.">
+        <Field
+          label="Links to"
+          hint="Where clicking the slide goes, e.g. /brands. Empty = no link. Ignored once the slide has its own buttons below."
+        >
           <TextInput name="href" defaultValue={banner.href} placeholder="/brands" />
         </Field>
+        <OverlayFields banner={banner} />
         <SubmitButton>Save slide</SubmitButton>
         <FormMessage state={state} />
       </form>
@@ -259,12 +263,73 @@ function AddPanel() {
         <Field label="Alt text" hint="Describes the image for screen readers and search.">
           <TextInput name="alt" required />
         </Field>
-        <Field label="Links to" hint="Where clicking the slide goes, e.g. /brands. Empty = no link.">
+        <Field
+          label="Links to"
+          hint="Where clicking the slide goes, e.g. /brands. Empty = no link. Ignored once the slide has its own buttons below."
+        >
           <TextInput name="href" placeholder="/brands" />
         </Field>
+        <OverlayFields />
         <SubmitButton>Add banner</SubmitButton>
         <FormMessage state={state} />
       </form>
     </div>
+  );
+}
+
+/**
+ * The copy laid over the slide. Optional throughout: anything left blank simply isn't drawn, so a
+ * slide with all of these empty renders as a plain full-bleed image, exactly as banners behaved
+ * before this existed.
+ */
+function OverlayFields({ banner }: { banner?: Banner }) {
+  return (
+    <fieldset className="space-y-4 border-t border-line pt-4">
+      <legend className="sr-only">Overlay copy</legend>
+      <div>
+        <h3 className="text-sm font-bold text-fg">Overlay copy</h3>
+        <p className="mt-1 text-xs text-muted">
+          Text drawn over the image, so it stays sharp and readable on a phone. Leave everything
+          blank for an image-only slide. Keep the heading short — it&rsquo;s set very large.
+        </p>
+      </div>
+
+      <Field label="Eyebrow" hint="Small uppercase line above the heading.">
+        <TextInput
+          name="eyebrow"
+          defaultValue={banner?.eyebrow}
+          placeholder="Authorized dental distributor · Philippines"
+        />
+      </Field>
+      <Field label="Heading">
+        <TextInput
+          name="heading"
+          defaultValue={banner?.heading}
+          placeholder="Everything your operatory runs on."
+        />
+      </Field>
+      <Field label="Body" hint="One or two sentences.">
+        <TextArea name="body" rows={3} defaultValue={banner?.body} />
+      </Field>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Button label" hint="Both fields needed for the button to appear.">
+          <TextInput name="ctaLabel" defaultValue={banner?.ctaLabel} placeholder="Shop the catalog" />
+        </Field>
+        <Field label="Button links to">
+          <TextInput name="ctaHref" defaultValue={banner?.ctaHref} placeholder="/shop" />
+        </Field>
+        <Field label="Second button label" hint="Outlined button beside the first.">
+          <TextInput
+            name="ctaAltLabel"
+            defaultValue={banner?.ctaAltLabel}
+            placeholder="Request a quote"
+          />
+        </Field>
+        <Field label="Second button links to">
+          <TextInput name="ctaAltHref" defaultValue={banner?.ctaAltHref} placeholder="/contact" />
+        </Field>
+      </div>
+    </fieldset>
   );
 }

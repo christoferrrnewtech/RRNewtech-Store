@@ -13,10 +13,14 @@
   --color-surface: #ffffff;   /* cards — Clinical White */
   --color-surface-2: #eef0f9; /* blue-tinted fills, selected chips */
   --color-elevated: #f0f2f9;  /* hover surface on light */
+  --color-shell: #fbfbf9;     /* header chrome — warm off-white, so white panels read as raised */
 
-  /* Dark surfaces (footer, emphasis bands, hero) — deep brand blue */
-  --color-ink: #1d2460;       /* Blue Dark — footer / dark sections */
-  --color-card-dark: #252d78; /* cards on dark */
+  /* Dark surfaces (footer, emphasis bands, hero) — Primary Blue, matching the logo.
+     Deliberately the same value as --color-brand-600: they mean different things (this is "the dark
+     surface", that is "the primary action") but the brand uses one blue for both. Anything placed on
+     this needs ≥4.5:1 against #2d3791 — brand-300 only manages 3.53:1, so eyebrows use brand-200. */
+  --color-ink: #2d3791;
+  --color-card-dark: #252d78; /* cards on dark — declared but currently unused anywhere in src/ */
 
   /* Text — Charcoal per manual */
   --color-fg: #151515;        /* primary text on light */
@@ -52,6 +56,19 @@
     var(--font-kumbh), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display:
     var(--font-kumbh), ui-sans-serif, system-ui, sans-serif;
+
+  /* Corner radius — squared off. Rounded pills read consumer-retail; a hairline edge reads
+     clinical and professional, which is what a distributor's site should look like. Tailwind
+     generates `rounded-lg`, `rounded-2xl` etc. from these, so overriding here re-shapes the whole
+     store and admin at once. `rounded-full` is NOT in this scale: it stays for things that are
+     genuinely circles (cart count bubble, avatar initials, spinners), never for text pills. */
+  --radius-xs: 0;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px; /* buttons, inputs — the most common radius in the codebase */
+  --radius-xl: 4px;
+  --radius-2xl: 4px; /* cards, panels */
+  --radius-3xl: 4px;
 }
 
 html {
@@ -79,26 +96,7 @@ textarea {
 :where(a, button, input, select, textarea, summary):focus-visible {
   outline: 2px solid var(--color-brand-600);
   outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Brand logo marquee (home "Shop by Brand"). Track holds the logo set duplicated once, so a
-   -50% shift lands exactly on the copy for a seamless loop. Pauses on hover.
-   The duration is tuned to the tile width in BrandLogoCarousel — the shift is a fixed -50%, so
-   narrower tiles cover less ground in the same time and the marquee reads as slower. */
-@keyframes marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-.marquee-track {
-  animation: marquee 31s linear infinite;
-}
-.marquee:hover .marquee-track {
-  animation-play-state: paused;
+  border-radius: 2px;
 }
 
 /* Respect reduced-motion preferences */
@@ -111,13 +109,5 @@ textarea {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
-  }
-  /* No auto-scroll: let the logos sit as a horizontally scrollable row instead. */
-  .marquee {
-    overflow-x: auto;
-  }
-  .marquee-track {
-    animation: none;
-    transform: none;
   }
 }

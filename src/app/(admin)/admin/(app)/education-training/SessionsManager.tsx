@@ -379,6 +379,17 @@ function SessionForm({ session }: { session?: Session }) {
           />
         </Field>
 
+        <Field
+          label="Learn more link"
+          hint="Optional. A brochure, event page or brand page. Blank hides the Learn more button and widens Reserve a seat."
+        >
+          <TextInput
+            name="detailsHref"
+            defaultValue={session?.detailsHref ?? ""}
+            placeholder="/brands/sol-laser"
+          />
+        </Field>
+
         <CurrentPhoto image={session?.image} />
 
         <Field

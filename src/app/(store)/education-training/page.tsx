@@ -3,8 +3,10 @@ import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
 import { CampaignCard, SessionsEmpty } from "@/components/education/Sessions";
 import { CampaignFilters } from "@/components/education/CampaignFilters";
+import { EducationHero } from "@/components/education/EducationHero";
+import { NAV_ICONS } from "@/components/layout/NavIcons";
 import { getSessions } from "@/lib/content";
-import { SITE } from "@/lib/constants";
+import { SITE, type NavIconKey } from "@/lib/constants";
 
 /**
  * Rebuild hourly. Admin saves already push a fresh page through `revalidateStorefront()`, but a
@@ -22,20 +24,24 @@ export const metadata: Metadata = {
 };
 
 /** What we run when the calendar is between programmes — context, not a schedule. */
-const PROGRAMS = [
+const PROGRAMS: { icon: NavIconKey; title: string; body: string }[] = [
   {
+    icon: "graduation",
     title: "Hands-on workshops",
     body: "Small-group sessions on scanners, curing lights, handpieces and chairside units, run with our brand partners.",
   },
   {
+    icon: "users",
     title: "CE & lecture sessions",
     body: "Evening and online lectures for dentists and clinic staff, often with continuing-education credit.",
   },
   {
+    icon: "events",
     title: "Dental trade shows",
     body: "Catch us at conventions and expos across the Philippines — see the equipment in person and talk pricing.",
   },
   {
+    icon: "building",
     title: "Clinic open houses",
     body: "Visit a partner practice already running the setup you're considering and see how it works day to day.",
   },
@@ -47,15 +53,19 @@ export default async function EducationTrainingPage() {
 
   return (
     <>
-      {/* The campaigns. This heading is the page's only <h1> — it moved here when the hero band was
-          removed, so the page still has exactly one for search and heading navigation. */}
-      <section>
-        <Container className="py-10 lg:py-14">
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
-            Education &amp; Training
-          </h1>
+      <EducationHero />
 
-          <div className="mt-6">
+      {/* Upcoming sessions */}
+      <section className="bg-bg py-16">
+        <Container>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">
+            Upcoming sessions
+          </p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-bold text-fg lg:text-4xl">
+            Reserve your seat
+          </h2>
+
+          <div className="mt-8">
             {sessions.length > 0 ? (
               // Cards render here on the server; CampaignFilters only decides which are shown.
               <CampaignFilters
@@ -74,33 +84,53 @@ export default async function EducationTrainingPage() {
       </section>
 
       {/* What we run */}
-      <section className="bg-surface">
-        <Container className="py-14">
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
+      <section className="border-t border-line bg-bg py-16">
+        <Container>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">
             What we run
+          </p>
+          <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-bold text-fg lg:text-4xl">
+            Training formats for every practice
           </h2>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {PROGRAMS.map((p) => (
-              <div key={p.title} className="rounded-2xl border border-line bg-bg p-5">
-                <h3 className="text-sm font-bold text-fg">{p.title}</h3>
-                <p className="mt-1.5 text-sm text-muted">{p.body}</p>
-              </div>
-            ))}
+
+          <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {PROGRAMS.map((p) => {
+              const Icon = NAV_ICONS[p.icon];
+              return (
+                <div key={p.title} className="rounded-2xl border border-line bg-surface p-6">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-ink text-white">
+                    <Icon className="h-6 w-6" />
+                  </span>
+                  <h3 className="mt-5 font-bold text-fg">{p.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted">{p.body}</p>
+                </div>
+              );
+            })}
           </div>
         </Container>
       </section>
 
-      {/* Closing CTA */}
-      <Container className="pb-16">
-        <div className="flex flex-col items-center gap-5 rounded-2xl bg-ink px-6 py-12 text-center">
-          <h2 className="max-w-xl font-[family-name:var(--font-display)] text-2xl font-bold text-white">
+      {/* Private sessions */}
+      <Container className="py-16">
+        <div className="rounded-2xl bg-ink p-10 lg:p-14">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-200">
+            Private sessions
+          </p>
+          <h2 className="mt-3 max-w-2xl font-[family-name:var(--font-display)] text-2xl font-bold text-white lg:text-3xl">
             Want a session at your clinic?
           </h2>
-          <p className="max-w-lg text-white/70">
+          <p className="mt-4 max-w-2xl text-white/70">
             We run private demos and training for practice teams. Tell us what you&apos;d like
-            covered and we&apos;ll arrange a date — or email {SITE.email}.
+            covered and we&apos;ll arrange a date — or email{" "}
+            <a
+              href={`mailto:${SITE.email}`}
+              className="font-semibold text-brand-200 underline underline-offset-4 hover:text-white"
+            >
+              {SITE.email}
+            </a>
+            .
           </p>
-          <LinkButton href="/contact" size="lg" variant="inverse">
+          <LinkButton href="/contact" size="lg" variant="inverse" className="mt-8">
             Request a session
           </LinkButton>
         </div>

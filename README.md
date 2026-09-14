@@ -46,7 +46,9 @@ Set in `.env.local` before running paid traffic:
 
 - `NEXT_PUBLIC_META_PIXEL_ID` — Meta Pixel (PageView + ecommerce events)
 - `NEXT_PUBLIC_GA_ID` — GA4 measurement ID (`G-XXXXXXXXXX`)
-- `NEXT_PUBLIC_SITE_URL` — canonical/sitemap/OG base URL (defaults to `https://rrnewtech.ph`)
+- `NEXT_PUBLIC_SITE_URL` — canonical/sitemap/OG base URL, PayMongo return URLs, and Firebase
+  verification links (defaults to `https://rrnewtechdental.com`). Baked in at build time, so
+  changing it requires a new rollout.
 
 ## Project structure
 

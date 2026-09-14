@@ -11,10 +11,13 @@ import { useState, useEffect } from "react";
 export function SearchBar({
   className,
   onSubmitted,
+  productCount,
 }: {
   className?: string;
   /** Optional callback after submit (e.g. close the mobile drawer). */
   onSubmitted?: () => void;
+  /** Catalog size, named in the placeholder so the box advertises what's behind it. */
+  productCount?: number;
 }) {
   const router = useRouter();
   const [term, setTerm] = useState("");
@@ -53,9 +56,13 @@ export function SearchBar({
         name="q"
         value={term}
         onChange={(e) => setTerm(e.target.value)}
-        placeholder="Search dental products…"
+        placeholder={
+          productCount
+            ? `Search ${productCount} products, brands or equipment…`
+            : "Search dental products…"
+        }
         aria-label="Search products"
-        className="h-11 w-full rounded-full border border-line-strong bg-surface pl-11 pr-4 text-sm text-fg placeholder:text-muted-light focus:border-brand-500 focus:outline-none lg:h-12"
+        className="h-11 w-full rounded-lg border border-line-strong bg-surface pl-11 pr-4 text-sm text-fg placeholder:text-muted-light focus:border-brand-500 focus:outline-none lg:h-12"
       />
     </form>
   );

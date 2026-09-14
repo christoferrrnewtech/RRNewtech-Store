@@ -49,7 +49,7 @@ export function BrandFilterGrid({ brands }: { brands: BrandCard[] }) {
                 onClick={() => setFilter(c.key)}
                 aria-pressed={active}
                 className={[
-                  "rounded-full border px-4 py-2 text-sm font-semibold transition-colors",
+                  "rounded-lg border px-4 py-2 text-sm font-semibold transition-colors",
                   active
                     ? "border-ink bg-ink text-white"
                     : "border-line bg-surface text-fg hover:border-brand-600",
@@ -75,7 +75,7 @@ export function BrandFilterGrid({ brands }: { brands: BrandCard[] }) {
                 src={b.logo}
                 alt={b.name}
                 fill
-                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 380px"
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 400px"
                 className="object-contain p-8 transition-transform duration-300 group-hover:scale-[1.03]"
               />
               <span className="absolute left-3 top-3">

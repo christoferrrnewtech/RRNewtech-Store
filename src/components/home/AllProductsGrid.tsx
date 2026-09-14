@@ -34,19 +34,32 @@ function interleaveByBrand<T extends { brandSlug: string }>(items: T[]): T[] {
  */
 export async function AllProductsGrid({
   category,
+  sub,
   brand,
   min,
   max,
   sort,
   mix,
+  toolbar,
+  gridClassName,
+  emptyState,
 }: {
   category?: string;
+  /** Narrows to one subcategory within `category` — the category page's chips. */
+  sub?: string;
   brand?: string;
   min?: number;
   max?: number;
   sort?: CatalogSort;
   /** Round-robin the brands instead of listing them one after another. */
   mix?: boolean;
+  /** Sits opposite the result count above the grid — the sort control, in practice. The count is
+   *  computed here, so the bar is built here rather than by the parent. */
+  toolbar?: React.ReactNode;
+  /** Overrides the grid shell when the column is narrower than full width. */
+  gridClassName?: string;
+  /** Replaces the generic "nothing matches" panel — the category page names the subcategory. */
+  emptyState?: React.ReactNode;
 }) {
   const [brands, categories] = await Promise.all([
     getBrands().catch(() => []),
@@ -67,6 +80,7 @@ export async function AllProductsGrid({
   if (mix) items = interleaveByBrand(items);
 
   if (category) items = items.filter((it) => it.product.category === category);
+  if (sub) items = items.filter((it) => it.product.subcategory === sub);
   if (brand) items = items.filter((it) => it.brandSlug === brand);
 
   // Bounds are inclusive — that's what people expect from numbers they typed themselves.
@@ -98,6 +112,7 @@ export async function AllProductsGrid({
   }
 
   if (items.length === 0) {
+    if (emptyState) return <>{emptyState}</>;
     return (
       <div className="rounded-2xl border border-line bg-bg px-6 py-14 text-center">
         <p className="font-semibold text-fg">No products match these filters.</p>
@@ -106,15 +121,15 @@ export async function AllProductsGrid({
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-3">
           <Link
-            href="/"
+            href="/shop"
             scroll={false}
-            className="rounded-full border border-line px-4 py-2 text-sm font-semibold text-fg hover:bg-elevated"
+            className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-fg hover:bg-elevated"
           >
             Clear filters
           </Link>
           <Link
             href="/contact"
-            className="rounded-full bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
           >
             Talk to a sales agent
           </Link>
@@ -138,10 +153,13 @@ export async function AllProductsGrid({
 
   return (
     <>
-      <p className="mb-4 text-sm text-muted">
-        {items.length} product{items.length === 1 ? "" : "s"}
-      </p>
-      <LoadMoreGrid initialRows={4} stepRows={2}>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+        <p className="text-sm text-muted">
+          {items.length} product{items.length === 1 ? "" : "s"}
+        </p>
+        {toolbar}
+      </div>
+      <LoadMoreGrid initialRows={4} stepRows={2} className={gridClassName}>
         {items.map((it) => (
           <BrandProductCard
             key={`${it.brandSlug}-${it.product.id}`}
