@@ -43,10 +43,16 @@ export function LoadMoreGrid({
   const cols = useGridColumns(gridRef);
   const [rowsShown, setRowsShown] = useState(initialRows);
 
-  // Resolved after mount so the first server render and the first client render agree; without it
-  // the two disagree about whether to draw the button and React complains of a hydration mismatch.
-  const [autoLoads, setAutoLoads] = useState(false);
-  useEffect(() => setAutoLoads(typeof IntersectionObserver !== "undefined"), []);
+  // Starts true — assumed available rather than detected after mount.
+  //
+  // Detecting it post-mount meant the server rendered the button, hydration removed it, and every
+  // visitor saw a "Load more" flash before it vanished. Assuming the other way costs nothing: the
+  // button needs JavaScript for its onClick regardless, so a client that can't run the observer
+  // was never served a working button by the server either — it just gets one a moment later.
+  const [autoLoads, setAutoLoads] = useState(true);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") setAutoLoads(false);
+  }, []);
 
   const visible = Math.min(rowsShown * cols, total);
   const done = visible >= total;
