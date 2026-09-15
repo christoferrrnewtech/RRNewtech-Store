@@ -111,34 +111,117 @@ export default async function ContactPage({
           </div>
         </div>
 
-        <aside className="h-fit rounded-2xl border border-line bg-surface p-6">
-          <h2 className="text-base font-bold text-fg">Reach us directly</h2>
-          <dl className="mt-4 space-y-4 text-sm">
-            <div>
-              <dt className="text-muted-light">Email</dt>
-              <dd>
-                <a href={`mailto:${SITE.email}`} className="font-medium text-brand-700 hover:text-brand-800">
-                  {SITE.email}
-                </a>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-light">Phone</dt>
-              {SITE.phones.map((p) => (
-                <dd key={p.tel} className="font-medium text-fg">
-                  <a href={`tel:${p.tel}`} className="hover:text-brand-700">
-                    {p.label ? `${p.label}: ${p.value}` : p.value}
-                  </a>
-                </dd>
-              ))}
-            </div>
-            <div>
-              <dt className="text-muted-light">Support hours</dt>
-              <dd className="font-medium text-fg">{SITE.supportLine}</dd>
-            </div>
-          </dl>
+        {/* One card per way of reaching us, rather than one card of stacked rows. Each is a single
+            scannable claim, so a visitor who wants to phone rather than type finds it without
+            reading the block. */}
+        <aside className="h-fit space-y-4">
+          <InfoCard title="Sales line" icon={<PhoneIcon />}>
+            {SITE.phones.map((p) => (
+              <a
+                key={p.tel}
+                href={`tel:${p.tel}`}
+                className="block text-muted hover:text-brand-700"
+              >
+                {p.label ? `${p.label}: ${p.value}` : p.value}
+              </a>
+            ))}
+          </InfoCard>
+
+          <InfoCard title="Email" icon={<MailIcon />}>
+            <a href={`mailto:${SITE.email}`} className="break-all text-muted hover:text-brand-700">
+              {SITE.email}
+            </a>
+          </InfoCard>
+
+          <InfoCard title="Coverage" icon={<PinIcon />}>
+            <p className="text-muted">Nationwide delivery across the Philippines</p>
+          </InfoCard>
+
+          <InfoCard title="Support hours" icon={<ClockIcon />}>
+            <p className="text-muted">{SITE.supportLine}</p>
+          </InfoCard>
+
+          {/* Tinted rather than outlined, so it reads as a note about the form rather than another
+              contact route. brand-50, not the amber accent — amber is reserved for SALE/savings. */}
+          <div className="rounded-2xl bg-brand-50 p-5">
+            <h2 className="text-sm font-bold text-fg">Bulk &amp; clinic pricing</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              Volume discounts are available for consumables and multi-unit equipment orders.
+              Mention your expected quantities and we will price accordingly.
+            </p>
+          </div>
         </aside>
       </div>
     </Container>
+  );
+}
+
+/** One contact route: icon, label, and the value(s) beneath it. */
+function InfoCard({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5">
+      <div className="flex items-center gap-2.5">
+        <span className="text-brand-600" aria-hidden="true">
+          {icon}
+        </span>
+        <h2 className="text-sm font-bold text-fg">{title}</h2>
+      </div>
+      <div className="mt-1.5 space-y-0.5 pl-[26px] text-sm">{children}</div>
+    </section>
+  );
+}
+
+/* Inline strokes rather than an icon dependency — four glyphs used once each on one page. */
+const iconProps = {
+  width: 18,
+  height: 18,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.7,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+} as const;
+
+function PhoneIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M6.6 3.5h-2a1.5 1.5 0 0 0-1.5 1.6A16.5 16.5 0 0 0 18.9 20.9a1.5 1.5 0 0 0 1.6-1.5v-2a1.5 1.5 0 0 0-1.3-1.5l-2.3-.3a1.5 1.5 0 0 0-1.4.6l-.8 1a12.5 12.5 0 0 1-5.5-5.5l1-.8a1.5 1.5 0 0 0 .6-1.4l-.3-2.3a1.5 1.5 0 0 0-1.5-1.3Z" />
+    </svg>
+  );
+}
+
+function MailIcon() {
+  return (
+    <svg {...iconProps}>
+      <rect x="2.75" y="5" width="18.5" height="14" rx="2.5" />
+      <path d="m3.5 7 7.6 5.3a1.6 1.6 0 0 0 1.8 0L20.5 7" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg {...iconProps}>
+      <path d="M12 21.2s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" />
+      <circle cx="12" cy="10" r="2.6" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg {...iconProps}>
+      <circle cx="12" cy="12" r="8.8" />
+      <path d="M12 7v5.2l3.2 1.9" />
+    </svg>
   );
 }

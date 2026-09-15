@@ -21,6 +21,59 @@ import type { Session } from "@/components/education/Sessions";
 const ADD = "add" as const;
 type Selection = string | typeof ADD;
 
+/**
+ * Paired time/entry rows for a session's programme.
+ *
+ * Two parallel input names rather than one encoded string ("8:00 AM|Registration"): the action
+ * zips `scheduleTime` and `scheduleItem` by index, so nothing has to be parsed back out and a
+ * stray separator in an entry can't split a row.
+ */
+function ScheduleEditor({ initial }: { initial: { time: string; item: string }[] }) {
+  const [rows, setRows] = useState<{ time: string; item: string }[]>(
+    initial.length ? initial : [{ time: "", item: "" }],
+  );
+
+  const update = (i: number, patch: Partial<{ time: string; item: string }>) =>
+    setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  return (
+    <div className="space-y-3">
+      {rows.map((row, i) => (
+        <div key={i} className="flex gap-2">
+          <TextInput
+            name="scheduleTime"
+            value={row.time}
+            onChange={(e) => update(i, { time: e.target.value })}
+            placeholder="8:00 AM"
+            className="w-32 shrink-0"
+          />
+          <TextInput
+            name="scheduleItem"
+            value={row.item}
+            onChange={(e) => update(i, { item: e.target.value })}
+            placeholder="Registration and coffee"
+          />
+          <button
+            type="button"
+            onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}
+            className="shrink-0 rounded-lg border border-line px-3 text-sm text-muted hover:bg-elevated"
+            aria-label={`Remove row ${i + 1}`}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => setRows((prev) => [...prev, { time: "", item: "" }])}
+        className="text-sm font-semibold text-brand-700 hover:underline"
+      >
+        Add row
+      </button>
+    </div>
+  );
+}
+
 /** Today in Manila, for flagging past campaigns in the list. Matches `getSessions`' cutoff. */
 function todayInManila(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
@@ -380,13 +433,110 @@ function SessionForm({ session }: { session?: Session }) {
         </Field>
 
         <Field
-          label="Learn more link"
-          hint="Optional. A brochure, event page or brand page. Blank hides the Learn more button and widens Reserve a seat."
+          label="Official event page"
+          hint="Optional. An external brochure, Facebook event or brand page — shown as a link on the session's own page. Learn more always opens that page now, so this no longer controls the button."
         >
           <TextInput
             name="detailsHref"
             defaultValue={session?.detailsHref ?? ""}
-            placeholder="/brands/sol-laser"
+            placeholder="https://facebook.com/events/..."
+          />
+        </Field>
+
+        {/* ---- Everything below fills the session's own page (the Learn more destination). ---- */}
+        <div className="border-t border-line pt-5">
+          <h3 className="font-semibold text-fg">Session page</h3>
+          <p className="mt-1 text-sm text-muted">
+            What Learn more opens. Every field is optional — a section you leave blank is left off
+            the page entirely rather than shown empty.
+          </p>
+        </div>
+
+        <Field
+          label="About this session"
+          hint="The long description. Blank falls back to the short card description above."
+        >
+          <TextArea name="about" rows={6} defaultValue={session?.about ?? ""} />
+        </Field>
+
+        <Field label="Who should attend" hint="One paragraph describing the right audience.">
+          <TextArea
+            name="audience"
+            rows={3}
+            defaultValue={session?.audience ?? ""}
+            placeholder="General dentists and specialists who want to add soft-tissue laser procedures — no prior experience required."
+          />
+        </Field>
+
+        <Field
+          label="Schedule"
+          hint="The running order. Leave a row blank to drop it; a row with only an entry and no time is fine."
+        >
+          <ScheduleEditor initial={session?.schedule ?? []} />
+        </Field>
+
+        <Field label="What&apos;s included" hint="What a seat actually buys — one item per box.">
+          <RepeatableText
+            name="included"
+            initial={session?.included ?? []}
+            rows={2}
+            placeholder="All training materials and use of the units"
+            addLabel="Add item"
+          />
+        </Field>
+
+        <Field
+          label="Certificate note"
+          hint="Optional. Highlighted under What's included."
+        >
+          <TextInput
+            name="certificateNote"
+            defaultValue={session?.certificateNote ?? ""}
+            placeholder="Certificate of completion issued by ..."
+          />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Pricing note"
+            hint="Sits under the fee in the registration box, e.g. early-bird terms."
+          >
+            <TextInput
+              name="feeNote"
+              defaultValue={session?.feeNote ?? ""}
+              placeholder="Early-bird rates for groups of two or more"
+            />
+          </Field>
+          <Field
+            label="Date note"
+            hint="Optional override for the date shown on the page, when the exact day isn't set."
+          >
+            <TextInput
+              name="dateNote"
+              defaultValue={session?.dateNote ?? ""}
+              placeholder="April 2027 (exact day to be announced)"
+            />
+          </Field>
+        </div>
+
+        <Field
+          label="Format note"
+          hint="How the day runs, in words."
+        >
+          <TextInput
+            name="formatNote"
+            defaultValue={session?.formatNote ?? ""}
+            placeholder="Lecture in the morning, hands-on workshop in the afternoon"
+          />
+        </Field>
+
+        <Field label="Payment terms" hint="One term per box. Shown in its own box on the page.">
+          <RepeatableText
+            name="payment"
+            initial={session?.payment ?? []}
+            rows={2}
+            placeholder="50% down payment to reserve your seat"
+            addLabel="Add term"
           />
         </Field>
 

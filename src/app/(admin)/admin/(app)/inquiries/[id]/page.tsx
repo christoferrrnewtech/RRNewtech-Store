@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getInquiry } from "@/lib/inquiries";
+import { INQUIRY_KIND_LABELS } from "@/lib/inquiry-status";
 import { StatusBadge, formatWhen } from "@/components/admin/Queue";
 import { inquiryTone } from "../tone";
 import { InquiryControls } from "./InquiryControls";
@@ -36,6 +37,11 @@ export default async function AdminInquiryPage({
           {inquiry.name}
         </h1>
         <StatusBadge label={inquiry.status} tone={inquiryTone(inquiry.status)} />
+        {inquiry.kind === "quote" && (
+          <span className="rounded-lg bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">
+            {INQUIRY_KIND_LABELS.quote}
+          </span>
+        )}
       </div>
       <p className="mt-2 text-muted">
         {inquiry.ref} · received {formatWhen(inquiry.createdAt)}
@@ -59,7 +65,9 @@ export default async function AdminInquiryPage({
           )}
 
           <section className="rounded-2xl border border-line bg-surface p-5">
-            <h2 className="font-semibold text-fg">Message</h2>
+            <h2 className="font-semibold text-fg">
+              {inquiry.kind === "quote" ? "What they need" : "Message"}
+            </h2>
             {/* whitespace-pre-wrap: the customer's own line breaks are part of what they wrote. */}
             <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted">
               {inquiry.message}
@@ -99,6 +107,14 @@ export default async function AdminInquiryPage({
                   )}
                 </dd>
               </div>
+              {/* Optional on the form, and "" on every inquiry taken before the field existed —
+                  so the row is dropped entirely rather than shown as empty. */}
+              {inquiry.clinic && (
+                <div>
+                  <dt className="text-muted-light">Clinic or company</dt>
+                  <dd className="font-medium text-fg">{inquiry.clinic}</dd>
+                </div>
+              )}
             </dl>
           </section>
         </aside>

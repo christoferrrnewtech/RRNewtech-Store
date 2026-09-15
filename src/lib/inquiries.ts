@@ -12,10 +12,16 @@
 import "server-only";
 import { COLLECTIONS, storeCollection } from "@/lib/firebase";
 import { makeRef } from "@/lib/reference";
-import { INQUIRY_STATUSES, type InquiryStatus } from "@/lib/inquiry-status";
+import { INQUIRY_STATUSES, INQUIRY_KINDS, type InquiryKind, type InquiryStatus } from "@/lib/inquiry-status";
 
 // See orders.ts — the vocabulary lives client-side so the admin's status dropdown can import it.
-export { INQUIRY_STATUSES, INQUIRY_STATUS_LABELS, type InquiryStatus } from "@/lib/inquiry-status";
+export {
+  INQUIRY_STATUSES,
+  INQUIRY_STATUS_LABELS,
+  INQUIRY_KIND_LABELS,
+  type InquiryKind,
+  type InquiryStatus,
+} from "@/lib/inquiry-status";
 
 /** The product being asked about, resolved server-side — never taken from the query string. */
 export type InquiryProduct = {
@@ -30,9 +36,24 @@ export type Inquiry = {
   ref: string;
   createdAt: number;
   status: InquiryStatus;
+  /**
+   * Which form this came from. "quote" is /request-quote, where the visitor is asking to be
+   * priced; "message" is the general /contact form. Sales works the two differently, which is the
+   * whole reason they are told apart rather than landing in one undifferentiated queue.
+   */
+  kind: InquiryKind;
   name: string;
   email: string;
   phone: string;
+  /**
+   * Clinic or company the enquirer is buying for. Free text and often empty — it is an optional
+   * field on /contact, and a practitioner buying for themselves has nothing to put in it.
+   *
+   * NOT named `company` on the form. That name belongs to the honeypot in `Honeypot`, and
+   * `isBot()` discards any submission where it is filled — a real field under that name would
+   * silently bin every inquiry a customer sent. The form input is `clinic` for that reason.
+   */
+  clinic: string;
   message: string;
   /** Absent when the visitor came to /contact directly rather than from a product. */
   product?: InquiryProduct;
@@ -80,9 +101,13 @@ function toInquiry(id: string, value: Record<string, unknown>): Inquiry {
     ref: str(value.ref),
     createdAt: num(value.createdAt),
     status: toInquiryStatus(value.status),
+    // Every inquiry stored before /request-quote existed is a general message by definition.
+    kind: INQUIRY_KINDS.includes(value.kind as InquiryKind) ? (value.kind as InquiryKind) : "message",
     name: str(value.name),
     email: str(value.email),
     phone: str(value.phone),
+    // "" for every inquiry stored before this field existed, which `str` already yields.
+    clinic: str(value.clinic),
     message: str(value.message),
     product,
     // Omitted rather than "" so the field's absence stays meaningful — a guest inquiry has no uid.

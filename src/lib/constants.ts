@@ -134,7 +134,7 @@ export const HERO_FALLBACK = {
   ctaLabel: "Shop the catalog",
   ctaHref: "/shop",
   ctaAltLabel: "Request a quote",
-  ctaAltHref: "/contact",
+  ctaAltHref: "/request-quote",
 } as const;
 
 /** The dark band that closes the landing page, just above the footer. */

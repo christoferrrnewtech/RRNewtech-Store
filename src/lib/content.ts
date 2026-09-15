@@ -20,7 +20,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getDb, storeDoc, DOCS } from "@/lib/firebase";
 // Type-only, so no module side-effect crosses the server-only boundary in either direction. The
 // shape lives with the components that render it; this file just reads and writes it.
-import type { Session } from "@/components/education/Sessions";
+import { sessionSlug, type Session } from "@/components/education/Sessions";
 import { type Product, CATEGORIES, brandSlug, brandProductSlugify } from "@/lib/products";
 import { SITE, type BrandGroup } from "@/lib/constants";
 
@@ -230,6 +230,11 @@ function toBanner(id: string, v: Record<string, unknown>): Banner {
 function toSession(id: string, v: Record<string, unknown>): Session {
   const num = (val: unknown) => (typeof val === "number" && Number.isFinite(val) ? val : undefined);
   const str = (val: unknown) => (typeof val === "string" && val.trim() ? val.trim() : undefined);
+  const strList = (val: unknown) => {
+    if (!Array.isArray(val)) return undefined;
+    const out = val.map(String).map((x) => x.trim()).filter(Boolean);
+    return out.length ? out : undefined;
+  };
   return {
     id,
     title: String(v.title ?? ""),
@@ -250,6 +255,25 @@ function toSession(id: string, v: Record<string, unknown>): Session {
     detailsHref: str(v.detailsHref),
     image: str(v.image),
     order: num(v.order),
+    // Detail-page fields. Each stays undefined when empty so the page can skip its whole section
+    // rather than render an empty heading.
+    about: str(v.about),
+    audience: str(v.audience),
+    schedule: Array.isArray(v.schedule)
+      ? v.schedule
+          .map((row) => {
+            const r = (row ?? {}) as Record<string, unknown>;
+            return { time: String(r.time ?? "").trim(), item: String(r.item ?? "").trim() };
+          })
+          // A row with neither a time nor an entry is a leftover blank from the editor.
+          .filter((r) => r.time || r.item)
+      : undefined,
+    included: strList(v.included),
+    certificateNote: str(v.certificateNote),
+    feeNote: str(v.feeNote),
+    dateNote: str(v.dateNote),
+    formatNote: str(v.formatNote),
+    payment: strList(v.payment),
   };
 }
 
@@ -325,7 +349,7 @@ export async function getBanners(): Promise<Banner[]> {
  * The timezone matters: comparing against `new Date()` in UTC would drop a session up to 8 hours
  * early for a Philippine audience.
  */
-function todayInManila(): string {
+export function todayInManila(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 }
 
@@ -342,6 +366,20 @@ export async function getSessions(): Promise<Session[]> {
     .map(([id, v]) => toSession(id, v))
     .filter((s) => s.date >= today)
     .sort(bySessionOrder);
+}
+
+/**
+ * One session by URL slug, for its detail page.
+ *
+ * Reads every session rather than only upcoming ones: a page linked from an email or a chat should
+ * still resolve the day after the seminar runs, and the page says plainly that it has passed. The
+ * listing keeps its own upcoming-only filter.
+ */
+export async function getSessionBySlug(slug: string): Promise<Session | undefined> {
+  const map = await readMap(DOCS.sessions);
+  return Object.entries(map)
+    .map(([id, v]) => toSession(id, v))
+    .find((s) => sessionSlug(s) === slug);
 }
 
 /**
@@ -715,6 +753,15 @@ export type SessionInput = {
   capacity: number | null;
   registerHref: string;
   detailsHref: string;
+  about: string;
+  audience: string;
+  schedule: { time: string; item: string }[];
+  included: string[];
+  certificateNote: string;
+  feeNote: string;
+  dateNote: string;
+  formatNote: string;
+  payment: string[];
   /** Only present when a new file was uploaded; absent leaves the existing photo untouched. */
   image?: string;
 };

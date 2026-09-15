@@ -115,7 +115,7 @@ export function SiteHeader({
                   the attribute. That kept this button on screen at every width. */}
               <span className="hidden md:inline-flex">
                 <LinkButton
-                  href="/contact"
+                  href="/request-quote"
                   variant="outline"
                   className="h-11 whitespace-nowrap px-4"
                 >
@@ -263,7 +263,7 @@ export function SiteHeader({
 
               {/* The desktop bar's quote button is hidden below md — this is where it lands. */}
               <Link
-                href="/contact"
+                href="/request-quote"
                 onClick={closeAll}
                 className="mt-2 flex items-center justify-center rounded-lg border border-brand-800 px-3 py-3 text-sm font-semibold text-fg hover:bg-brand-800 hover:text-white"
               >

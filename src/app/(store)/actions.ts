@@ -36,6 +36,7 @@ import {
   type OrderLine,
 } from "@/lib/orders";
 import { createInquiry, type InquiryProduct } from "@/lib/inquiries";
+import { type InquiryKind } from "@/lib/inquiry-status";
 import { getSessionCustomer } from "@/lib/customer-auth";
 import { rememberOrderAddress } from "@/lib/customer-addresses";
 import { getAllProducts } from "@/lib/catalog";
@@ -637,7 +638,14 @@ export async function sendInquiryAction(
   // Lower-cased for the same reason as an order's — see placeOrderAction.
   const email = cappedText(form, "email", MAX_EMAIL).toLowerCase();
   const phone = cappedText(form, "phone", MAX_PHONE);
+  // `clinic`, not `company` — that name is the honeypot's, and isBot() above would treat anything
+  // typed into it as a bot and silently discard the inquiry. Optional: left "" when not filled.
+  const clinic = cappedText(form, "clinic", MAX_NAME);
   const message = cappedText(form, "message", MAX_MESSAGE);
+
+  // Which form this came from. Matched against the vocabulary rather than stored as posted — a
+  // hand-crafted POST must not be able to invent a kind the admin can't render.
+  const kind: InquiryKind = text(form, "kind") === "quote" ? "quote" : "message";
 
   if (!name) return { error: "Enter your name." };
   if (!looksLikeEmail(email)) return { error: "Enter a valid email address." };
@@ -650,7 +658,16 @@ export async function sendInquiryAction(
     // visitor typed an address other than the one they registered with; see
     // `listInquiriesForCustomer`. A signed-out visitor still gets the guest path, unchanged.
     const session = await getSessionCustomer();
-    await createInquiry({ name, email, phone, message, product, userId: session?.uid });
+    await createInquiry({
+      name,
+      email,
+      phone,
+      clinic,
+      kind,
+      message,
+      product,
+      userId: session?.uid,
+    });
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "Could not send your message. Please try again.",

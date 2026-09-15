@@ -307,6 +307,38 @@ function highlightList(form: FormData): string[] {
     .filter(Boolean);
 }
 
+/**
+ * The same tidy-up as `highlightList`, for any repeated or newline-separated text field on the
+ * session editor ("What's included", payment terms).
+ */
+function lineList(form: FormData, key: string): string[] {
+  return form
+    .getAll(key)
+    .filter((v): v is string => typeof v === "string")
+    .flatMap((v) => v.split(/\r?\n/))
+    .map((s) => s.replace(/^[\s✔✓•·\-–—*]+/, "").trim())
+    .filter(Boolean);
+}
+
+/**
+ * Schedule rows from the two parallel inputs the editor renders per row.
+ *
+ * Paired by index, so a row keeps its time with its entry. Rows where the author filled in neither
+ * are dropped; a row with only one of the two is kept, because "12:00 PM — Lunch" and a timeless
+ * entry are both things a programme legitimately contains.
+ */
+function scheduleRows(form: FormData): { time: string; item: string }[] {
+  const times = form.getAll("scheduleTime").map(String);
+  const items = form.getAll("scheduleItem").map(String);
+  const rows: { time: string; item: string }[] = [];
+  for (let i = 0; i < Math.max(times.length, items.length); i++) {
+    const time = (times[i] ?? "").trim();
+    const item = (items[i] ?? "").trim();
+    if (time || item) rows.push({ time, item });
+  }
+  return rows;
+}
+
 /** Optional whole-number field. Blank or unparseable reads as null, which clears the stored value. */
 function optionalInt(form: FormData, key: string): number | null {
   const raw = text(form, key);
@@ -348,6 +380,15 @@ export async function saveSessionAction(
       seatsLeft: optionalInt(form, "seatsLeft"),
       capacity: optionalInt(form, "capacity"),
       registerHref: text(form, "registerHref"),
+      about: text(form, "about"),
+      audience: text(form, "audience"),
+      schedule: scheduleRows(form),
+      included: lineList(form, "included"),
+      certificateNote: text(form, "certificateNote"),
+      feeNote: text(form, "feeNote"),
+      dateNote: text(form, "dateNote"),
+      formatNote: text(form, "formatNote"),
+      payment: lineList(form, "payment"),
       detailsHref: text(form, "detailsHref"),
     };
     // A new upload wins; otherwise an explicit "remove" clears it, and a plain save keeps it.

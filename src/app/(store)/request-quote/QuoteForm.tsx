@@ -8,23 +8,17 @@ import { sendInquiryAction } from "@/app/(store)/actions";
 import type { ActionState } from "@/lib/form-data";
 
 /**
- * Contact / sales inquiry form. Submits to `sendInquiryAction`, which records the message in
- * Firestore for the team to work from /admin/inquiries.
+ * Quote request form. Shares `sendInquiryAction` with /contact rather than duplicating it — the
+ * hidden `kind` field is what separates the two in the admin queue, and the action validates it
+ * against the vocabulary instead of trusting what is posted.
  *
- * When the visitor arrived from a product priced on request ("Contact a sales agent"), the page
- * passes that product down and the hidden slug fields travel with the message — the action
- * re-resolves them server-side, so the stored record can't be faked from the query string.
- *
- * A signed-in customer gets their details prefilled. Convenience, but also the thing that keeps
- * the inquiry findable on /account by email rather than only by uid — the reason they're
- * *editable* is that a clinic may genuinely want a reply somewhere else, which is exactly why the
- * stored `userId` can't be derived from whatever ends up in this box.
+ * The field set is deliberately the same as /contact's — what differs is the errand, not the
+ * details asked for. Anything else sales needs (delivery address, urgency) is a reply away, and
+ * belongs there rather than in front of a visitor who wants a price.
  */
-export function ContactForm({
-  product,
+export function QuoteForm({
   customer,
 }: {
-  product?: { brandSlug: string; productSlug: string; name: string; href: string };
   customer?: { name: string; email: string; phone: string };
 }) {
   const [state, action] = useActionState<ActionState, FormData>(sendInquiryAction, {});
@@ -33,8 +27,8 @@ export function ContactForm({
     "w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-muted-light focus:border-brand-500";
   const label = "flex flex-col gap-1.5 text-sm font-medium text-fg";
 
-  // On success the form is replaced rather than reset: re-submitting the same message by accident
-  // would just create a duplicate for sales to dedupe.
+  // Replaced rather than reset, as on /contact: re-sending the same list would only create a
+  // duplicate for sales to reconcile.
   if (state.ok) {
     return (
       <div className="rounded-2xl border border-line bg-surface p-8 text-center">
@@ -44,34 +38,29 @@ export function ContactForm({
           </svg>
         </div>
         <h2 className="mt-4 font-[family-name:var(--font-display)] text-lg font-bold text-fg">
-          Message sent
+          Quote request sent
         </h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted">{state.ok}</p>
-        <LinkButton href="/" variant="secondary" className="mt-6">
-          Continue shopping
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          Our sales team will come back with pricing, availability and delivery timelines — usually
+          within one business day.
+        </p>
+        <LinkButton href="/shop" variant="secondary" className="mt-6">
+          Browse products
         </LinkButton>
       </div>
     );
   }
 
   return (
-    /* The form sits in its own panel rather than loose on the page background, so the input column
-       reads as one object against the contact cards beside it. */
     <form
       action={action}
       className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6 sm:p-8"
     >
       <Honeypot />
 
-      {product && (
-        <input type="hidden" name="brand" value={product.brandSlug} />
-      )}
-      {product && (
-        <input type="hidden" name="product" value={product.productSlug} />
-      )}
+      {/* What tells this apart from a general contact message once it reaches /admin/inquiries. */}
+      <input type="hidden" name="kind" value="quote" />
 
-      {/* Two pairs of short fields, then the message full width. The pairs collapse to one column
-          below sm — side-by-side inputs on a phone leave neither wide enough to read. */}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={label}>
           Full name
@@ -86,9 +75,8 @@ export function ContactForm({
         </label>
         <label className={label}>
           Clinic or company
-          {/* `clinic`, NOT `company`: that name belongs to the honeypot above, and the action
-              discards as a bot any submission that fills it. Optional — a practitioner buying for
-              themselves has nothing to put here. */}
+          {/* `clinic`, NOT `company` — that name is the honeypot's, and the action discards as a
+              bot anything that fills it. See ContactForm for the same note. */}
           <input
             name="clinic"
             autoComplete="organization"
@@ -122,27 +110,27 @@ export function ContactForm({
       </div>
 
       <label className={label}>
-        What do you need?
+        Equipment or products needed
         <textarea
           required
           name="message"
-          rows={5}
+          rows={6}
           className={field}
-          defaultValue={product ? `I'd like a quote for ${product.name}.\n\n` : ""}
-          placeholder="Products, quantities, or the equipment you are planning for…"
+          placeholder={"List the items and quantities, e.g.\n2 × dental chair\n10 boxes composite A2\n1 × intraoral scanner"}
         />
       </label>
 
       <FormMessage state={state} />
 
-      <SubmitButton size="lg" className="sm:self-start">
+      <SubmitButton size="lg" pendingLabel="Sending…" className="sm:self-start">
         Send request
       </SubmitButton>
 
       <p className="text-xs text-muted-light">
-        We usually reply within one business day. Prefer to talk?{" "}
-        <Link href="/about" className="font-medium text-brand-700 hover:underline">
-          More ways to reach us
+        We reply with a consolidated quotation, usually within one business day. Just have a
+        question?{" "}
+        <Link href="/contact" className="font-medium text-brand-700 hover:underline">
+          Send us a message instead
         </Link>
         .
       </p>

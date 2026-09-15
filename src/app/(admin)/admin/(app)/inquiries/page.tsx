@@ -70,6 +70,9 @@ export default async function AdminInquiriesPage({
                   </span>
                 </p>
                 <p className="mt-0.5 truncate text-sm text-muted">
+                  {/* Quote requests are worked differently from questions, so the row says which
+                      it is before it says anything else. */}
+                  {inquiry.kind === "quote" ? "Quote request · " : ""}
                   {inquiry.product ? `About ${inquiry.product.name} · ` : ""}
                   {inquiry.message}
                 </p>

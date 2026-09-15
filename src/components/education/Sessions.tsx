@@ -34,9 +34,35 @@ export type Session = {
   capacity?: number;
   /** Registration destination — your form, a Facebook event, or /contact. */
   registerHref?: string;
-  /** Optional "Learn more" destination — a brochure, event page or brand page. Blank hides that
-   *  button and lets "Reserve a seat" take the full width. */
+  /**
+   * An external event page — a brochure, Facebook event or brand microsite.
+   *
+   * No longer what "Learn more" opens: every session now has its own page on the site, and this is
+   * surfaced there as a secondary link. Kept because sessions already carry one.
+   */
   detailsHref?: string;
+
+  /* ---- Detail page. All optional: a session announced before its programme is settled still
+     renders a correct page, just a shorter one. Each section is hidden when its field is empty. */
+
+  /** Long-form description under "About this session". Falls back to `summary` when unset. */
+  about?: string;
+  /** "Who should attend" — one paragraph, not a list. */
+  audience?: string;
+  /** Running order. Time is shown as written ("8:00 AM"), so half-days and multi-days both work. */
+  schedule?: { time: string; item: string }[];
+  /** "What's included" — what a seat actually buys. */
+  included?: string[];
+  /** Certificate line, called out under what's included. */
+  certificateNote?: string;
+  /** Sits under the registration heading, e.g. early-bird terms. */
+  feeNote?: string;
+  /** Overrides the formatted date in the registration card, for "April 2027 (day to be announced)". */
+  dateNote?: string;
+  /** Prose form of the format, e.g. "Lecture in the morning, hands-on in the afternoon". */
+  formatNote?: string;
+  /** Payment terms, one per line. */
+  payment?: string[];
   /** Optional photo. Absent renders a styled panel rather than a stand-in stock image. */
   image?: string;
   /** Display position, set by dragging in the admin. Absent on campaigns saved before ordering. */
@@ -45,6 +71,28 @@ export type Session = {
 
 /** Registration always has somewhere to go, so the CTA is never a dead button. */
 const registerHref = (s: Session) => safeHref(s.registerHref || "/contact");
+
+/**
+ * URL slug for a session, from its title, falling back to its id when the title is empty or is
+ * all punctuation. Derived rather than stored so a retitled session's URL follows it — these are
+ * announcements with a short life, not permalinks anyone has bookmarked for years.
+ */
+export function sessionSlug(s: Pick<Session, "id" | "title">): string {
+  const fromTitle = s.title
+    // Fold accents to their base letter first, so "DURR DENTAL" stays readable instead of
+    // collapsing to "d-rr" once the bare strip removes the U.
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return fromTitle || s.id;
+}
+
+/** Canonical detail-page URL. Single source of truth for the shape, as `brandProductHref` is. */
+export function sessionHref(s: Pick<Session, "id" | "title">): string {
+  return `/education-training/${sessionSlug(s)}`;
+}
 
 /** Seats read as urgent below this, and take the amber accent globals.css reserves for urgency. */
 const LOW_SEATS = 6;
@@ -93,7 +141,9 @@ function Seats({ session }: { session: Session }) {
 export function CampaignCard({ session }: { session: Session }) {
   const { month, year } = sessionDateParts(session.date);
   const Pin = NAV_ICONS.pin;
-  const detailsUrl = session.detailsHref ? safeHref(session.detailsHref) : undefined;
+  // Always the session's own page now, so every card has a "Learn more" rather than only those
+  // given an external link. `detailsHref` still exists and is surfaced on that page.
+  const detailsUrl = sessionHref(session);
   const registerUrl = registerHref(session);
 
   return (
@@ -156,20 +206,13 @@ export function CampaignCard({ session }: { session: Session }) {
         <div className="flex-1" />
 
         <div className="mt-6 flex flex-wrap gap-3">
-          {detailsUrl && (
-            <LinkButton
-              href={detailsUrl}
-              className="flex-1 whitespace-nowrap"
-              {...externalLinkProps(detailsUrl)}
-            >
-              Learn more
-              <NewTabNote href={detailsUrl} />
-            </LinkButton>
-          )}
+          <LinkButton href={detailsUrl} className="flex-1 whitespace-nowrap">
+            Learn more
+          </LinkButton>
           <LinkButton
             href={registerUrl}
-            variant={detailsUrl ? "secondary" : "primary"}
-            className={detailsUrl ? "flex-1 whitespace-nowrap" : "w-full"}
+            variant="secondary"
+            className="flex-1 whitespace-nowrap"
             {...externalLinkProps(registerUrl)}
           >
             Reserve a seat
