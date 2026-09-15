@@ -59,7 +59,6 @@ export default async function SessionPage({ params }: { params: Promise<{ slug: 
 
   const past = session.date < todayInManila();
   const registerUrl = safeHref(session.registerHref || "/contact");
-  const detailsUrl = session.detailsHref ? safeHref(session.detailsHref) : undefined;
   const about = session.about || session.summary;
 
   return (
@@ -248,7 +247,7 @@ export default async function SessionPage({ params }: { params: Promise<{ slug: 
                   className="w-full"
                   {...externalLinkProps(registerUrl)}
                 >
-                  Reserve a seat
+                  {session.registerLabel || "Reserve a seat"}
                 </LinkButton>
                 <LinkButton
                   href={`mailto:${SITE.email}?subject=${encodeURIComponent(session.title)}`}
@@ -258,16 +257,6 @@ export default async function SessionPage({ params }: { params: Promise<{ slug: 
                 >
                   Email us
                 </LinkButton>
-                {detailsUrl && (
-                  <a
-                    href={detailsUrl}
-                    className="block text-center text-sm font-medium text-brand-700 hover:underline"
-                    {...externalLinkProps(detailsUrl)}
-                  >
-                    Official event page
-                    <span className="sr-only"> (opens in a new tab)</span>
-                  </a>
-                )}
               </div>
             </section>
 

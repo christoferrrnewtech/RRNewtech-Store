@@ -3,8 +3,14 @@ import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { getCategoriesWithCounts, type CategoryWithCount } from "@/lib/content";
 
-/** Tiles shown before the grid stops. Six fills two clean rows of three at `lg`. */
-const LIMIT = 6;
+/**
+ * Tiles shown before the grid stops. Six fills two clean rows of three at `lg`.
+ *
+ * Exported because the admin's "Shop by category" panel draws the same cut-off line: it has to
+ * show which categories actually reach the landing page, and a second copy of this number would
+ * quietly start lying the first time one of them changed.
+ */
+export const HOME_CATEGORY_LIMIT = 6;
 
 /**
  * "Shop by category" — photo tiles into the biggest stocked categories.
@@ -30,7 +36,7 @@ export async function CategoryGrid() {
         </div>
 
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.slice(0, LIMIT).map((category) => (
+          {categories.slice(0, HOME_CATEGORY_LIMIT).map((category) => (
             <CategoryCard key={category.slug} category={category} />
           ))}
         </div>

@@ -27,7 +27,7 @@ function interleaveByBrand<T extends { brandSlug: string }>(items: T[]): T[] {
 /**
  * The flat product grid — every product across all published brands, narrowed by the optional
  * category/brand/price filters and reordered by `sort`. Each card shows its brand + category.
- * Renders 16 up front with a "Load more" button (see LoadMoreGrid).
+ * Renders four rows up front and reveals more as the reader scrolls (see LoadMoreGrid).
  *
  * The section shell, heading and filter row are owned by the parent (HomeCatalog), which also
  * validates the filter values before they get here.

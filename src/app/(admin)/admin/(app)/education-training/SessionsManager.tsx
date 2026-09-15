@@ -17,9 +17,52 @@ import {
   Select,
 } from "@/components/admin/Form";
 import type { Session } from "@/components/education/Sessions";
+import type { LinkOption } from "@/lib/content";
 
 const ADD = "add" as const;
 type Selection = string | typeof ADD;
+
+/**
+ * A link input backed by the site's own pages.
+ *
+ * A native <datalist> rather than a custom combobox: the browser already filters the list as you
+ * type, keeps keyboard and screen-reader behaviour, and — crucially — leaves the field free text,
+ * so an external brochure or Facebook event URL is still just as typeable as an internal path.
+ *
+ * The ids are suffixed per field because two inputs on one form can't share a list element and
+ * still be described independently.
+ */
+function LinkField({
+  name,
+  defaultValue,
+  options,
+  placeholder,
+}: {
+  name: string;
+  defaultValue: string;
+  options: LinkOption[];
+  placeholder?: string;
+}) {
+  const listId = `links-${name}`;
+  return (
+    <>
+      <TextInput
+        name={name}
+        defaultValue={defaultValue}
+        list={listId}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+      <datalist id={listId}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </datalist>
+    </>
+  );
+}
 
 /**
  * Paired time/entry rows for a session's programme.
@@ -79,7 +122,13 @@ function todayInManila(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 }
 
-export function SessionsManager({ sessions }: { sessions: Session[] }) {
+export function SessionsManager({
+  sessions,
+  linkOptions,
+}: {
+  sessions: Session[];
+  linkOptions: LinkOption[];
+}) {
   const [selected, setSelected] = useState<Selection>(sessions[0]?.id ?? ADD);
   // Local order for instant drag/arrow feedback; reconciled to the server's list below.
   const [items, setItems] = useState<Session[]>(sessions);
@@ -176,9 +225,9 @@ export function SessionsManager({ sessions }: { sessions: Session[] }) {
       {/* Right — editor */}
       <div>
         {selected === ADD || !current ? (
-          <SessionForm key="add" />
+          <SessionForm key="add" linkOptions={linkOptions} />
         ) : (
-          <SessionForm key={current.id} session={current} />
+          <SessionForm key={current.id} session={current} linkOptions={linkOptions} />
         )}
       </div>
     </div>
@@ -328,7 +377,13 @@ function CurrentPhoto({ image }: { image?: string }) {
  * One form for both add and edit — the only difference is the hidden `id`, which is what
  * `saveSessionAction` branches on.
  */
-function SessionForm({ session }: { session?: Session }) {
+function SessionForm({
+  session,
+  linkOptions,
+}: {
+  session?: Session;
+  linkOptions: LinkOption[];
+}) {
   const [state, action] = useActionState<ActionState, FormData>(saveSessionAction, {});
   const editing = Boolean(session);
 
@@ -421,27 +476,53 @@ function SessionForm({ session }: { session?: Session }) {
           </Field>
         </div>
 
-        <Field
-          label="Registration link"
-          hint="Your form, a Facebook event, or a page path. Blank sends people to /contact."
-        >
-          <TextInput
-            name="registerHref"
-            defaultValue={session?.registerHref ?? ""}
-            placeholder="/contact"
-          />
-        </Field>
+        {/* The two buttons on the card, each with its own wording and destination. */}
+        <div className="border-t border-line pt-5">
+          <h3 className="font-semibold text-fg">Card buttons</h3>
+          <p className="mt-1 text-sm text-muted">
+            The two buttons at the bottom of the campaign card. Start typing in a link box to pick
+            from your own pages, or paste any external address.
+          </p>
+        </div>
 
-        <Field
-          label="Official event page"
-          hint="Optional. An external brochure, Facebook event or brand page — shown as a link on the session's own page. Learn more always opens that page now, so this no longer controls the button."
-        >
-          <TextInput
-            name="detailsHref"
-            defaultValue={session?.detailsHref ?? ""}
-            placeholder="https://facebook.com/events/..."
-          />
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Button 1 text" hint="Blank shows &ldquo;Learn more&rdquo;.">
+            <TextInput
+              name="detailsLabel"
+              defaultValue={session?.detailsLabel ?? ""}
+              placeholder="Learn more"
+            />
+          </Field>
+          <Field
+            label="Button 1 link"
+            hint="Blank opens this session's own page on the site."
+          >
+            <LinkField
+              name="detailsHref"
+              defaultValue={session?.detailsHref ?? ""}
+              options={linkOptions}
+              placeholder="This session's page"
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Button 2 text" hint="Blank shows &ldquo;Reserve a seat&rdquo;.">
+            <TextInput
+              name="registerLabel"
+              defaultValue={session?.registerLabel ?? ""}
+              placeholder="Reserve a seat"
+            />
+          </Field>
+          <Field label="Button 2 link" hint="Blank sends people to /contact.">
+            <LinkField
+              name="registerHref"
+              defaultValue={session?.registerHref ?? ""}
+              options={linkOptions}
+              placeholder="/contact"
+            />
+          </Field>
+        </div>
 
         {/* ---- Everything below fills the session's own page (the Learn more destination). ---- */}
         <div className="border-t border-line pt-5">

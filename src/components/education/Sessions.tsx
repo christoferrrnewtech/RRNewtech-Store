@@ -34,11 +34,16 @@ export type Session = {
   capacity?: number;
   /** Registration destination — your form, a Facebook event, or /contact. */
   registerHref?: string;
+  /** Overrides the "Reserve a seat" button text. */
+  registerLabel?: string;
+  /** Overrides the "Learn more" button text. */
+  detailsLabel?: string;
   /**
-   * An external event page — a brochure, Facebook event or brand microsite.
+   * Where "Learn more" goes.
    *
-   * No longer what "Learn more" opens: every session now has its own page on the site, and this is
-   * surfaced there as a secondary link. Kept because sessions already carry one.
+   * Blank is the normal case and means the session's own page on this site — so a campaign that
+   * nobody has configured still has a working button. Set it to send the button somewhere else
+   * instead: an external brochure, a Facebook event, a brand page.
    */
   detailsHref?: string;
 
@@ -141,9 +146,9 @@ function Seats({ session }: { session: Session }) {
 export function CampaignCard({ session }: { session: Session }) {
   const { month, year } = sessionDateParts(session.date);
   const Pin = NAV_ICONS.pin;
-  // Always the session's own page now, so every card has a "Learn more" rather than only those
-  // given an external link. `detailsHref` still exists and is surfaced on that page.
-  const detailsUrl = sessionHref(session);
+  // Blank falls through to the session's own page, so the button is never dead — but an admin who
+  // sets a link gets exactly that link.
+  const detailsUrl = session.detailsHref ? safeHref(session.detailsHref) : sessionHref(session);
   const registerUrl = registerHref(session);
 
   return (
@@ -206,8 +211,13 @@ export function CampaignCard({ session }: { session: Session }) {
         <div className="flex-1" />
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <LinkButton href={detailsUrl} className="flex-1 whitespace-nowrap">
-            Learn more
+          <LinkButton
+            href={detailsUrl}
+            className="flex-1 whitespace-nowrap"
+            {...externalLinkProps(detailsUrl)}
+          >
+            {session.detailsLabel || "Learn more"}
+            <NewTabNote href={detailsUrl} />
           </LinkButton>
           <LinkButton
             href={registerUrl}
@@ -215,7 +225,7 @@ export function CampaignCard({ session }: { session: Session }) {
             className="flex-1 whitespace-nowrap"
             {...externalLinkProps(registerUrl)}
           >
-            Reserve a seat
+            {session.registerLabel || "Reserve a seat"}
             <NewTabNote href={registerUrl} />
           </LinkButton>
         </div>

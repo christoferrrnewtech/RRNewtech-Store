@@ -35,8 +35,14 @@ export default async function AdminAppLayout({
     { href: "/admin/banner", label: "Home banner", icon: "banner", show: isAdmin },
     { href: "/admin/about", label: "About section", icon: "about", show: isAdmin },
     {
+      href: "/admin/shop-by-category",
+      label: "Shop by category",
+      icon: "categories",
+      show: isAdmin,
+    },
+    {
       href: "/admin/education-training",
-      label: "Training campaigns",
+      label: "Education & Training",
       icon: "events",
       show: isAdmin,
     },

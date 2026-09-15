@@ -183,7 +183,7 @@ function SubcategoryPanel({ category }: { category: StoreCategory }) {
       <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
         {category.name}
       </h2>
-      <p className="text-sm text-muted">Subcategories under this category</p>
+      <p className="text-sm text-muted">Landing-page tile and subcategories</p>
 
       <CategoryImageForm key={category.slug} category={category} />
 
@@ -241,7 +241,7 @@ function CategoryImageForm({ category }: { category: StoreCategory }) {
         <div className="min-w-[220px] flex-1 space-y-3">
           <Field
             label="Home tile image"
-            hint="Wide shot, ≈16:10 · up to 5 MB. Shown on the storefront's “Shop by category” grid."
+            hint="Wide shot, ≈16:10 · up to 5 MB. Shown on the landing page’s “Shop by category” grid — the same photo the Shop by category screen sets."
           >
             <TextInput type="file" name="image" accept="image/*" />
           </Field>

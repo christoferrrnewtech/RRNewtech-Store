@@ -252,7 +252,9 @@ function toSession(id: string, v: Record<string, unknown>): Session {
     seatsLeft: num(v.seatsLeft),
     capacity: num(v.capacity),
     registerHref: str(v.registerHref),
+    registerLabel: str(v.registerLabel),
     detailsHref: str(v.detailsHref),
+    detailsLabel: str(v.detailsLabel),
     image: str(v.image),
     order: num(v.order),
     // Detail-page fields. Each stays undefined when empty so the page can skip its whole section
@@ -724,6 +726,44 @@ export async function reorderBanners(ids: string[]): Promise<void> {
 }
 
 /** Every campaign including past ones — the admin list, where old entries stay editable. */
+/** A page on the storefront that an admin can point a button at. */
+export type LinkOption = { value: string; label: string };
+
+/**
+ * Every internal destination worth offering in the admin's link fields.
+ *
+ * Exists so link fields can be typed-and-picked rather than hand-written: a mistyped path is a
+ * dead button that nothing catches until a customer clicks it. The list is suggestions only — the
+ * inputs stay free text, because an external event page or Facebook link is equally valid.
+ */
+export async function getLinkOptions(): Promise<LinkOption[]> {
+  const [categories, brands, sessions] = await Promise.all([
+    getCategories().catch(() => []),
+    getBrands().catch(() => []),
+    getAllSessionsForAdmin().catch(() => []),
+  ]);
+
+  return [
+    { value: "/", label: "Home" },
+    { value: "/shop", label: "Shop — all products" },
+    { value: "/request-quote", label: "Request a quote" },
+    { value: "/contact", label: "Contact us" },
+    { value: "/education-training", label: "Education & Training" },
+    { value: "/about", label: "About us" },
+    { value: "/faq", label: "FAQ" },
+    { value: "/shipping-returns", label: "Shipping & Returns" },
+    ...sessions.map((s) => ({
+      value: `/education-training/${sessionSlug(s)}`,
+      label: `${s.title} — session page`,
+    })),
+    ...brands.map((b) => ({ value: `/brands/${b.slug}`, label: `${b.name} — brand` })),
+    ...categories.map((c) => ({
+      value: `/categories/${c.slug}`,
+      label: `${c.name} — category`,
+    })),
+  ];
+}
+
 export async function getAllSessionsForAdmin(): Promise<Session[]> {
   const map = await readMap(DOCS.sessions);
   return Object.entries(map)
@@ -752,7 +792,9 @@ export type SessionInput = {
   seatsLeft: number | null;
   capacity: number | null;
   registerHref: string;
+  registerLabel: string;
   detailsHref: string;
+  detailsLabel: string;
   about: string;
   audience: string;
   schedule: { time: string; item: string }[];

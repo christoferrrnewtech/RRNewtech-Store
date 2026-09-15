@@ -380,6 +380,8 @@ export async function saveSessionAction(
       seatsLeft: optionalInt(form, "seatsLeft"),
       capacity: optionalInt(form, "capacity"),
       registerHref: text(form, "registerHref"),
+      registerLabel: text(form, "registerLabel"),
+      detailsLabel: text(form, "detailsLabel"),
       about: text(form, "about"),
       audience: text(form, "audience"),
       schedule: scheduleRows(form),
