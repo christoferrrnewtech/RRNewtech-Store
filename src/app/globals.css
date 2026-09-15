@@ -4,7 +4,8 @@
   R&R Newtech Dental — brand system (Tailwind v4 CSS config).
   Aligned to the R&R Brand Manual: Primary Blue #2D3791 as the brand/action color, Charcoal
   #151515 for text, Clinical White surfaces, deep brand-blue for dark sections, and a warm amber
-  reserved for SALE/savings badges only. Typeface is Kumbh Sans (manual's digital typeface).
+  reserved for SALE/savings badges only. Type is a two-family pairing: Space Grotesk for headings
+  and display text, DM Sans for body copy.
   No hardcoded hex in components — use these tokens everywhere.
 */
 @theme {
@@ -52,10 +53,13 @@
   --color-danger: #dc2626;
   --color-success: #059669;
 
+  /* Two roles, two families. `--font-sans` is the body face and what `body` inherits; the ~93
+     `font-[family-name:var(--font-display)]` call sites across store and admin all resolve through
+     `--font-display`, so the pairing is switched from here rather than site-wide find-and-replace. */
   --font-sans:
-    var(--font-kumbh), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    var(--font-dm-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display:
-    var(--font-kumbh), ui-sans-serif, system-ui, sans-serif;
+    var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
 
   /* Corner radius — squared off. Rounded pills read consumer-retail; a hairline edge reads
      clinical and professional, which is what a distributor's site should look like. Tailwind
@@ -83,6 +87,24 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/*
+  Headings take the display face by default. Most already opt in explicitly with the
+  `font-[family-name:var(--font-display)]` utility, but ~51 — mostly small section labels and card
+  titles — do not, and would otherwise silently render in the body face. Kept in `@layer base` on
+  purpose: unlayered rules outrank Tailwind utilities, so at the top level this would override
+  `font-sans` and make it impossible to put a heading back on the body face.
+*/
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+  }
 }
 
 /* Form controls inherit the light scheme (native selects, autofill, etc.) */

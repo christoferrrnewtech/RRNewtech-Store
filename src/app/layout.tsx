@@ -1,17 +1,27 @@
 import type { Metadata, Viewport } from "next";
-import { Kumbh_Sans } from "next/font/google";
+import { Space_Grotesk, DM_Sans } from "next/font/google";
 import { SITE } from "@/lib/constants";
 import { MetaPixel } from "@/components/analytics/MetaPixel";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { StructuredData } from "@/components/analytics/StructuredData";
 import "./globals.css";
 
-// Kumbh Sans — the R&R Brand Manual's primary typeface for all digital/screen content.
-// One family across body and display; hierarchy comes from weight. (Cambria is print-only.)
-const kumbh = Kumbh_Sans({
-  variable: "--font-kumbh",
+// Two families, split by role: Space Grotesk sets headings and display text, DM Sans carries body
+// copy. This replaces the single-family Kumbh Sans pairing the brand manual specifies for digital.
+//
+// Both are variable fonts, so `weight` is deliberately omitted — that ships the whole axis in one
+// file rather than a static cut per weight. Worth knowing: Space Grotesk's axis stops at 700, so
+// `font-extrabold` on a heading would be synthesised. The five extrabold call sites are all price
+// and badge spans, which stay on DM Sans (axis to 1000), so nothing currently hits that ceiling.
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
+  display: "swap",
+});
+
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
+  subsets: ["latin"],
   display: "swap",
 });
 
@@ -67,7 +77,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en-PH" className={`${kumbh.variable} h-full`}>
+    <html lang="en-PH" className={`${spaceGrotesk.variable} ${dmSans.variable} h-full`}>
       <body className="min-h-full bg-bg text-fg antialiased">
         <MetaPixel />
         <GoogleAnalytics />

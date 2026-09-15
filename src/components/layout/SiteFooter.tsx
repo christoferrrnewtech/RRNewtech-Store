@@ -18,21 +18,18 @@ export async function SiteFooter() {
       <Container className="grid grid-cols-2 gap-x-6 gap-y-8 py-10 lg:grid-cols-4 lg:gap-10 lg:py-14">
         <div className="col-span-2 lg:col-span-1">
           <div className="flex items-center">
-            {/* This lockup carries its own blue field (#003da5), which against the ink footer
-                (#2d3791) is only 1.07:1 — the white wordmark stays legible, but the plate's edge
-                would be indistinguishable from the background. So the white tile is a hairline
-                separating the two blues, not clear space: p-0.5, as the square mark here used
-                before. It got more necessary, not less, when ink moved to Primary Blue.
+            {/* Footer-only cut of the lockup: the artwork in white on a transparent plate, so the
+                ink background (#2d3791) reads straight through it. The shipped rnr-logo.png bakes
+                its own #003da5 field, which sat 1.07:1 against ink and needed a white hairline to
+                keep its edge from dissolving — dropping the plate drops the need for the hairline.
                 No typed wordmark beside it — the artwork already carries the name. */}
-            <span className="inline-flex items-center rounded-lg bg-white p-0.5">
-              <Image
-                src="/brand/rnr-logo.png"
-                alt={SITE.name}
-                width={1463}
-                height={340}
-                className="h-10 w-auto rounded-md"
-              />
-            </span>
+            <Image
+              src="/brand/rnr-logo-white.png"
+              alt={SITE.name}
+              width={1463}
+              height={340}
+              className="h-10 w-auto"
+            />
           </div>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/60">{SITE.tagline}</p>
         </div>
