@@ -1,24 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, DM_Sans } from "next/font/google";
+import { DM_Sans } from "next/font/google";
 import { SITE } from "@/lib/constants";
 import { MetaPixel } from "@/components/analytics/MetaPixel";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { StructuredData } from "@/components/analytics/StructuredData";
 import "./globals.css";
 
-// Two families, split by role: Space Grotesk sets headings and display text, DM Sans carries body
-// copy. This replaces the single-family Kumbh Sans pairing the brand manual specifies for digital.
+// DM Sans throughout — headings and body both. Hierarchy comes from weight and size rather than
+// from a second typeface, as it did under the brand manual's single-family Kumbh Sans.
 //
-// Both are variable fonts, so `weight` is deliberately omitted — that ships the whole axis in one
-// file rather than a static cut per weight. Worth knowing: Space Grotesk's axis stops at 700, so
-// `font-extrabold` on a heading would be synthesised. The five extrabold call sites are all price
-// and badge spans, which stay on DM Sans (axis to 1000), so nothing currently hits that ceiling.
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
-  subsets: ["latin"],
-  display: "swap",
-});
-
+// Variable, so `weight` is deliberately omitted: that ships the whole 100-1000 axis in one file
+// instead of a static cut per weight, and it means `font-extrabold` (800) is a real cut rather
+// than a synthesised one.
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
   subsets: ["latin"],
@@ -77,7 +70,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en-PH" className={`${spaceGrotesk.variable} ${dmSans.variable} h-full`}>
+    <html lang="en-PH" className={`${dmSans.variable} h-full`}>
       <body className="min-h-full bg-bg text-fg antialiased">
         <MetaPixel />
         <GoogleAnalytics />
