@@ -83,6 +83,16 @@ export function Select(props: React.ComponentProps<"select">) {
 /**
  * A list of text rows the editor can grow or shrink. All rows post under the same field `name`,
  * so the server action reads them with `formData.getAll(name)`.
+ *
+ * The boxes are CONTROLLED. They used to be uncontrolled (`defaultValue`) while keyed by array
+ * index, and those two together silently rearranged the editor's text: React matches rows by key,
+ * so deleting row 0 of ["a", "b"] left the DOM node for index 0 in place — still showing "a",
+ * because `defaultValue` is ignored on re-render — and unmounted the *last* box instead. You
+ * deleted the first paragraph and watched the second one disappear. Whatever you retyped to
+ * recover then fought the same mismatch, which is an easy way to end up saving nothing at all.
+ *
+ * Holding the text in state means the value React renders is the value that posts, and removal
+ * drops the row you actually clicked.
  */
 export function RepeatableText({
   name,
@@ -106,7 +116,10 @@ export function RepeatableText({
           <TextArea
             name={name}
             rows={rows}
-            defaultValue={value}
+            value={value}
+            onChange={(e) =>
+              setValues((v) => v.map((old, idx) => (idx === i ? e.target.value : old)))
+            }
             placeholder={placeholder}
             className="flex-1"
           />
@@ -141,6 +154,10 @@ export function RepeatablePairs({
 }) {
   const [rows, setRows] = useState(initial.length ? initial : [{ title: "", body: "" }]);
 
+  // Controlled for the same reason as RepeatableText above — see that comment.
+  const edit = (i: number, patch: Partial<{ title: string; body: string }>) =>
+    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+
   return (
     <div className="space-y-4">
       {rows.map((row, i) => (
@@ -149,13 +166,15 @@ export function RepeatablePairs({
             <div className="flex-1 space-y-3">
               <TextInput
                 name="reasonTitle"
-                defaultValue={row.title}
+                value={row.title}
+                onChange={(e) => edit(i, { title: e.target.value })}
                 placeholder="Reason headline"
               />
               <TextArea
                 name="reasonBody"
                 rows={2}
-                defaultValue={row.body}
+                value={row.body}
+                onChange={(e) => edit(i, { body: e.target.value })}
                 placeholder="One or two sentences of detail"
               />
             </div>
