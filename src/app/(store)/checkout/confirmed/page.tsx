@@ -9,6 +9,7 @@ import { isOrderId } from "@/lib/pay-window";
 import { ClearPendingPayment } from "@/components/checkout/ClearPendingPayment";
 import { ClearCart } from "./ClearCart";
 import { PaymentPoll } from "./PaymentPoll";
+import { TrackPurchase } from "./TrackPurchase";
 
 export const metadata: Metadata = {
   title: "Order received",
@@ -62,6 +63,14 @@ export default async function OrderConfirmedPage({
   return (
     <Container className="py-16">
       <ClearCart when={settled} />
+      {paid && order && (
+        <TrackPurchase
+          orderId={order.id}
+          orderRef={order.ref}
+          value={order.total}
+          itemCount={order.itemCount}
+        />
+      )}
       {/* The resume pointer goes the moment the order stops being resumable — including a failed
           one, which /checkout/pay would otherwise keep offering. Note the cart deliberately does
           NOT follow the same rule; see ClearCart. */}

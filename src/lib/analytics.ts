@@ -9,7 +9,12 @@
 export const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID;
 export const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
-type Fbq = (command: string, event: string, params?: Record<string, unknown>) => void;
+type Fbq = (
+  command: string,
+  event: string,
+  params?: Record<string, unknown>,
+  options?: { eventID?: string },
+) => void;
 type Gtag = (command: string, event: string, params?: Record<string, unknown>) => void;
 
 declare global {
@@ -72,6 +77,56 @@ export function trackAddToCart(item: AnalyticsItem): void {
     value,
     items: [gaItem(item)],
   });
+}
+
+/** Checkout page opened with a non-empty cart. `value` is the cart subtotal. */
+export function trackInitiateCheckout(items: AnalyticsItem[], value: number): void {
+  if (typeof window === "undefined") return;
+  window.fbq?.("track", "InitiateCheckout", {
+    content_ids: items.map((i) => i.id),
+    content_type: "product",
+    num_items: items.reduce((n, i) => n + (i.quantity ?? 1), 0),
+    value,
+    currency: "PHP",
+  });
+  window.gtag?.("event", "begin_checkout", {
+    currency: "PHP",
+    value,
+    items: items.map(gaItem),
+  });
+}
+
+/**
+ * Payment confirmed. Callers must fire this ONCE per order — see TrackPurchase, which guards
+ * against reloads. `eventID` is a second line of defence: Meta drops a repeat with the same id.
+ */
+export function trackPurchase(order: { ref: string; value: number; itemCount: number }): void {
+  if (typeof window === "undefined") return;
+  window.fbq?.(
+    "track",
+    "Purchase",
+    { value: order.value, currency: "PHP", num_items: order.itemCount },
+    { eventID: `purchase-${order.ref}` },
+  );
+  window.gtag?.("event", "purchase", {
+    transaction_id: order.ref,
+    currency: "PHP",
+    value: order.value,
+  });
+}
+
+/** Quote request submitted — the B2B conversion, since equipment rarely goes through the cart. */
+export function trackLead(): void {
+  if (typeof window === "undefined") return;
+  window.fbq?.("track", "Lead", { content_category: "quote" });
+  window.gtag?.("event", "generate_lead", { lead_source: "quote" });
+}
+
+/** Contact form submitted. */
+export function trackContact(): void {
+  if (typeof window === "undefined") return;
+  window.fbq?.("track", "Contact");
+  window.gtag?.("event", "contact");
 }
 
 function gaItem(item: AnalyticsItem) {

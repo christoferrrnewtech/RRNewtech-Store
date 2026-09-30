@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState, useCallback, useMemo, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
 import { FormMessage, Honeypot, SubmitButton } from "@/components/ui/FormControls";
 import { useCart } from "@/lib/cart";
+import { trackInitiateCheckout } from "@/lib/analytics";
 import { formatPHP } from "@/lib/format";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/constants";
 import { FLAT_SHIPPING_FEE, quoteShipping } from "@/lib/shipping";
@@ -152,11 +153,29 @@ export function CheckoutClient({
   /** Philippine provinces, rendered in by the server — see checkout/page.tsx. */
   provinces: string[];
 }) {
-  const { items, subtotal } = useCart();
+  const { items, subtotal, hydrated } = useCart();
   const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
   const shippingFee = quoteShipping(subtotal);
   const total = subtotal + shippingFee;
   const [state, action] = useActionState<ActionState, FormData>(placeOrderAction, {});
+
+  // InitiateCheckout, once per visit to this page. Waits for `hydrated` because the cart is empty
+  // until the provider loads it — firing before then would either skip the event or send ₱0.
+  const checkoutTracked = useRef(false);
+  useEffect(() => {
+    if (checkoutTracked.current || !hydrated || items.length === 0) return;
+    checkoutTracked.current = true;
+    trackInitiateCheckout(
+      items.map((i) => ({
+        id: i.sku,
+        name: i.name,
+        category: i.category,
+        price: i.price,
+        quantity: i.quantity,
+      })),
+      subtotal,
+    );
+  }, [hydrated, items, subtotal]);
 
   // Only what identifies a line. Names and prices are re-read from the catalog server-side; `href`
   // is how a brand line's brand is recovered, since a cart line stores the product id but not it.

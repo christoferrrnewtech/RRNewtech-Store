@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import Link from "next/link";
 import { LinkButton } from "@/components/ui/Button";
 import { FormMessage, Honeypot, SubmitButton } from "@/components/ui/FormControls";
 import { sendInquiryAction } from "@/app/(store)/actions";
 import type { ActionState } from "@/lib/form-data";
+import { trackContact } from "@/lib/analytics";
 
 /**
  * Contact / sales inquiry form. Submits to `sendInquiryAction`, which records the message in
@@ -28,6 +29,12 @@ export function ContactForm({
   customer?: { name: string; email: string; phone: string };
 }) {
   const [state, action] = useActionState<ActionState, FormData>(sendInquiryAction, {});
+
+  // Meta Contact / GA conversion. `state.ok` only changes on a successful submit, and the form is then
+  // replaced by the confirmation, so this fires once per message sent.
+  useEffect(() => {
+    if (state.ok) trackContact();
+  }, [state.ok]);
 
   const field =
     "w-full rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-muted-light focus:border-brand-500";
