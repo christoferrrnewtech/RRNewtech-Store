@@ -1,9 +1,11 @@
 import Script from "next/script";
 import { META_PIXEL_ID } from "@/lib/analytics";
+import { MetaPixelPageViews } from "./MetaPixelPageViews";
 
 /**
  * Meta (Facebook) Pixel loader. Renders nothing (zero network calls) when
  * NEXT_PUBLIC_META_PIXEL_ID is absent, keeping dev and the keyless build clean.
+ * The snippet tracks the first PageView; MetaPixelPageViews covers client-side navigations.
  * Ecommerce events (ViewContent, AddToCart) are fired from src/lib/analytics.ts.
  */
 export function MetaPixel() {
@@ -23,6 +25,7 @@ export function MetaPixel() {
         fbq('init', '${META_PIXEL_ID}');
         fbq('track', 'PageView');`}
       </Script>
+      <MetaPixelPageViews />
       <noscript>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

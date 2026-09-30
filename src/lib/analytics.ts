@@ -28,6 +28,15 @@ export type AnalyticsItem = {
   quantity?: number;
 };
 
+/**
+ * Client-side route change. Pixel only — GA4's enhanced measurement already records
+ * history-based page changes on its own, so sending one here would double-count.
+ */
+export function trackPageView(): void {
+  if (typeof window === "undefined") return;
+  window.fbq?.("track", "PageView");
+}
+
 /** Product detail page view. */
 export function trackViewItem(item: AnalyticsItem): void {
   if (typeof window === "undefined") return;

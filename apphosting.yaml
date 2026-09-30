@@ -39,10 +39,13 @@ env:
     value: https://rrnewtechdental.com
     availability: [BUILD, RUNTIME]
 
-  # --- Optional analytics (uncomment and fill when ready) ---
-  # - variable: NEXT_PUBLIC_META_PIXEL_ID
-  #   value: ""
-  #   availability: [BUILD, RUNTIME]
+  # --- Analytics ---
+  # Pixel IDs are public (they ship in every page's HTML), so this is plain config, not a secret.
+  # Baked in at BUILD time like every NEXT_PUBLIC_* var — changing it needs a rollout.
+  - variable: NEXT_PUBLIC_META_PIXEL_ID
+    value: "1311331890968438"
+    availability: [BUILD, RUNTIME]
+  # GA4 — uncomment and fill when ready.
   # - variable: NEXT_PUBLIC_GA_ID
   #   value: ""
   #   availability: [BUILD, RUNTIME]
