@@ -26,6 +26,7 @@ import { isCustomerCancellable, ORDER_STATUSES, type OrderStatus } from "@/lib/o
 import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/payment-status";
 import { PAY_WINDOW_MS } from "@/lib/pay-window";
 import { clearCustomerCart } from "@/lib/customer-cart";
+import { notifyOrder } from "@/lib/notifications";
 import type { CartItemSource } from "@/lib/cart-item";
 import type { OrderShipping } from "@/lib/order-shipping";
 
@@ -519,6 +520,16 @@ export async function applyOrderPayment(
     await clearCustomerCart(customerUid).catch((err) =>
       console.error("[orders] could not clear the cart for order", id, err),
     );
+  }
+
+  // Inventory hears about an order when it becomes paid, here, for the same reason the cart is
+  // retired here: it is the one place that sees `paid` on every path, and `changed` makes it fire
+  // exactly once however many of those paths race. Re-read after commit so the email shows the
+  // stamped paidAt and method. Non-fatal like the cart — `notifyOrder` never throws, and the read
+  // is caught so a Firestore blip can't turn a recorded payment into a 500.
+  if (changed && next.paymentStatus === "paid") {
+    const order = await getOrder(id).catch(() => undefined);
+    if (order) await notifyOrder(order);
   }
 
   return changed;

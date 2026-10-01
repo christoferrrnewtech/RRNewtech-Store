@@ -38,6 +38,7 @@ import {
 } from "@/lib/orders";
 import { reconcileOrderPayment, retireCheckoutSession } from "@/lib/payments";
 import { createInquiry, type InquiryProduct } from "@/lib/inquiries";
+import { notifyNewInquiry, notifyOrder } from "@/lib/notifications";
 import { type InquiryKind } from "@/lib/inquiry-status";
 import { getSessionCustomer } from "@/lib/customer-auth";
 import { rememberOrderAddress } from "@/lib/customer-addresses";
@@ -424,6 +425,10 @@ export async function placeOrderAction(
       // record the order and let the team arrange payment. There is nothing to resume, and a
       // pointer left over from a previous order must not survive into this one.
       await clearPendingPayment();
+      // No gateway means this order will never pass through `applyOrderPayment` on its own, which
+      // is where inventory is normally told — so tell them now, flagged as payment-to-arrange.
+      const placed = await getOrder(created.id);
+      if (placed) await notifyOrder(placed);
       destination = `/checkout/confirmed?ref=${encodeURIComponent(created.ref)}`;
     } else {
       const origin = await requestOrigin();
@@ -763,7 +768,7 @@ export async function sendInquiryAction(
     // visitor typed an address other than the one they registered with; see
     // `listInquiriesForCustomer`. A signed-out visitor still gets the guest path, unchanged.
     const session = await getSessionCustomer();
-    await createInquiry({
+    const inquiry = await createInquiry({
       name,
       email,
       phone,
@@ -773,6 +778,9 @@ export async function sendInquiryAction(
       product,
       userId: session?.uid,
     });
+    // After the write, and never fatal (`sendEmail` doesn't throw): the inquiry is safely stored
+    // and in the admin queue whether or not the email to sales goes out.
+    await notifyNewInquiry(inquiry);
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "Could not send your message. Please try again.",

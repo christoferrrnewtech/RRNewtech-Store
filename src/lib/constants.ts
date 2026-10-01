@@ -69,6 +69,16 @@ export const SITE = {
 } as const;
 
 /**
+ * Who gets told when something lands — see lib/notifications.ts. Split by team because the two are
+ * worked by different people: sales answers inquiries, inventory picks and packs paid orders.
+ * Arrays so a second inbox is a one-line change.
+ */
+export const NOTIFY = {
+  inquiries: ["vincentrnrnewtechdental@gmail.com"],
+  orders: ["marlonbadilla.rnrinventory@gmail.com"],
+} as const;
+
+/**
  * Free-shipping threshold, shown in the promo bar and cart AND actually charged against — see
  * `quoteShipping()` in lib/shipping.ts, which is the single place the fee is decided.
  */

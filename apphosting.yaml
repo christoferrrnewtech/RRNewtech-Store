@@ -9,6 +9,7 @@
 #   firebase apphosting:secrets:set ADMIN_SESSION_SECRET
 #   firebase apphosting:secrets:set PAYMONGO_SECRET_KEY
 #   firebase apphosting:secrets:set PAYMONGO_WEBHOOK_SECRET
+#   firebase apphosting:secrets:set RESEND_API_KEY
 # (each command prompts for the value and offers to grant access automatically).
 
 runConfig:
@@ -81,5 +82,16 @@ env:
 
   - variable: PAYMONGO_WEBHOOK_SECRET
     secret: PAYMONGO_WEBHOOK_SECRET
+    availability: [RUNTIME]
+
+  # --- Staff notification email (Resend) ---
+  # RUNTIME only, like PayMongo: nothing sends mail during a build. The sender must be on a domain
+  # verified in Resend, or every recipient but the account owner is refused (see .env.example).
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+    availability: [RUNTIME]
+
+  - variable: EMAIL_FROM
+    value: "R&R Newtech Dental <notifications@rrnewtechdental.com>"
     availability: [RUNTIME]
 

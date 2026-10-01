@@ -116,16 +116,17 @@ function toInquiry(id: string, value: Record<string, unknown>): Inquiry {
   };
 }
 
-export async function createInquiry(input: NewInquiry): Promise<{ id: string; ref: string }> {
-  const ref = makeRef("INQ");
-  const doc = await storeCollection(COLLECTIONS.inquiries).add({
+/** Returns the stored record whole, so the caller can notify sales without reading it back. */
+export async function createInquiry(input: NewInquiry): Promise<Inquiry> {
+  const record: Omit<Inquiry, "id"> = {
     ...input,
-    ref,
+    ref: makeRef("INQ"),
     createdAt: Date.now(),
-    status: "new" satisfies InquiryStatus,
+    status: "new",
     note: "",
-  });
-  return { id: doc.id, ref };
+  };
+  const doc = await storeCollection(COLLECTIONS.inquiries).add(record);
+  return { id: doc.id, ...record };
 }
 
 export async function getInquiry(id: string): Promise<Inquiry | undefined> {

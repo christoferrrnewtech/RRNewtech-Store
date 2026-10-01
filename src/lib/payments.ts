@@ -16,8 +16,8 @@
  * Both paths funnel into the same `applyOrderPayment` transaction, so they cannot race into an
  * inconsistent state — whichever arrives second is a no-op.
  *
- * This lives here rather than in `orders.ts` so that module stays pure Firestore and never depends
- * on network I/O.
+ * This lives here rather than in `orders.ts` so that module never depends on the gateway. (Its one
+ * outbound call is the best-effort staff email in `applyOrderPayment`, which can't throw.)
  */
 
 import "server-only";
