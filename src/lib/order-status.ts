@@ -7,6 +7,8 @@
  * build. Types alone would be erased; the arrays and labels are real runtime values.
  */
 
+import type { PaymentStatus } from "@/lib/payment-status";
+
 /**
  * Fulfillment stages. Distinct from InquiryStatus on purpose — an order gets packed and shipped,
  * a sales inquiry gets quoted. One shared vocabulary would leave half the options inapplicable.
@@ -30,3 +32,17 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   delivered: "Delivered",
   cancelled: "Cancelled",
 };
+
+/**
+ * Can the customer cancel this order themselves, from /account?
+ *
+ * Only while it is unpaid and untouched by staff. A paid order means a refund, and a confirmed
+ * one means someone has started on it; both go through sales rather than a button. Re-checked
+ * inside the cancelling transaction (`cancelUnpaidOrder`), so this is also the server's rule.
+ */
+export function isCustomerCancellable(order: {
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+}): boolean {
+  return order.status === "new" && order.paymentStatus !== "paid";
+}

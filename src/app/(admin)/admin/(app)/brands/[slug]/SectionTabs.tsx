@@ -61,13 +61,13 @@ export function SectionTabs({ slug }: { slug: string }) {
   return (
     <nav
       aria-label="Editor sections"
-      className="sticky top-0 z-10 -mx-1 mt-4 flex gap-1 overflow-x-auto border-b border-line bg-bg/90 px-1 backdrop-blur"
+      className="sticky top-0 z-20 -mx-4 mt-4 flex gap-1 overflow-x-auto border-b border-line bg-bg/95 px-4 backdrop-blur lg:-mx-8 lg:px-8"
     >
       {BRAND_EDITOR_SECTIONS.map((s) => {
         const isActive = s.id === active;
         const className = [
           // -mb-px drops the underline onto the rail's own border instead of floating above it.
-          "-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors",
+          "-mb-px whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-colors",
           isActive
             ? "border-brand-600 text-brand-700"
             : "border-transparent text-muted hover:border-line-strong hover:text-fg",

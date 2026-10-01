@@ -5,14 +5,21 @@ import { LinkButton } from "@/components/ui/Button";
 import { SubmitButton } from "@/components/ui/FormControls";
 import { ClearPendingPayment } from "@/components/checkout/ClearPendingPayment";
 import { PayWindowCountdown } from "@/components/checkout/PayWindowCountdown";
-import { continueToPaymentAction } from "@/app/(store)/actions";
+import { continueToPaymentAction, renewPaymentAction } from "@/app/(store)/actions";
 import { SITE } from "@/lib/constants";
 import { formatPHP } from "@/lib/format";
 import { applyOrderPayment, getOrder, type Order } from "@/lib/orders";
 import { reconcileOrderPayment } from "@/lib/payments";
 import { expireCheckoutSession, isPayMongoConfigured } from "@/lib/paymongo";
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
-import { isOrderId, isPayWindowOpen, PAY_COOKIE, PAY_WINDOW_MINUTES, parsePendingPayment } from "@/lib/pay-window";
+import {
+  canRenewPayment,
+  isOrderId,
+  isPayWindowOpen,
+  PAY_COOKIE,
+  PAY_WINDOW_MINUTES,
+  parsePendingPayment,
+} from "@/lib/pay-window";
 import { cookies } from "next/headers";
 
 export const metadata: Metadata = {
@@ -54,9 +61,9 @@ export const dynamic = "force-dynamic";
 export default async function PayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ o?: string }>;
+  searchParams: Promise<{ o?: string; renew?: string }>;
 }) {
-  const { o } = await searchParams;
+  const { o, renew } = await searchParams;
   const cookie = parsePendingPayment((await cookies()).get(PAY_COOKIE)?.value);
   const orderId = (isOrderId(o) && o) || cookie?.orderId || "";
 
@@ -71,6 +78,13 @@ export default async function PayPage({
   // showing a pay button for an order they've already paid would be the worst possible bug here.
   order = await reconcileOrderPayment(order);
   if (order.paymentStatus === "paid") redirect(confirmedHref(order));
+
+  // Cancelled by the customer from /account, or by staff. Either way there is nothing to pay.
+  if (order.status === "cancelled") return <Cancelled order={order} />;
+
+  // Set by renewPaymentAction when it couldn't go ahead; the page below still renders the order's
+  // real state, this only explains why the click didn't take them to PayMongo.
+  const renewNotice = RENEW_NOTICES[renew ?? ""];
 
   const lapsed =
     order.paymentStatus === "expired" || !isPayWindowOpen(order.checkoutExpiresAt);
@@ -96,15 +110,20 @@ export default async function PayPage({
       await expireCheckoutSession(order.checkoutSessionId).catch(() => false);
       await applyOrderPayment(order.id, { paymentStatus: "expired" }).catch(() => false);
     }
-    return <Expired order={order} />;
+    return <Expired order={order} notice={renewNotice} />;
   }
 
   // awaiting_payment with no session — buildSessionInput or the gateway failed. `paymentError`
   // holds PayMongo's wording, which paymongo.ts documents must never reach a customer.
-  if (!order.checkoutUrl) return <Unavailable order={order} />;
+  if (!order.checkoutUrl) return <Unavailable order={order} notice={renewNotice} />;
 
   return <Ready order={order} />;
 }
+
+const RENEW_NOTICES: Record<string, string | undefined> = {
+  busy: "A payment on this order is still being processed. Give it a few minutes, then try again.",
+  failed: "We couldn't create a new payment link just now. Please try again in a moment.",
+};
 
 function confirmedHref(order: Order): string {
   return `/checkout/confirmed?ref=${encodeURIComponent(order.ref)}&o=${encodeURIComponent(order.id)}`;
@@ -189,7 +208,37 @@ function NoPendingPayment() {
   );
 }
 
-function Expired({ order }: { order: Order }) {
+/**
+ * The window lapsed. Recently placed orders get a fresh link for the SAME order (see
+ * `renewPaymentAction`); older ones fall back to checking out again, which reprices.
+ */
+function Expired({ order, notice }: { order: Order; notice?: string }) {
+  if (canRenewPayment(order.createdAt)) {
+    return (
+      <Shell>
+        {/* The cart is deliberately NOT cleared — paying here or checking out again both need it. */}
+        <ClearPendingPayment />
+        <Badge />
+        <h1 className="mt-5 font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
+          Your payment link expired
+        </h1>
+        <RefPill orderRef={order.ref} />
+        <p className="mt-5 leading-relaxed text-muted">
+          Payment links stay valid for {PAY_WINDOW_MINUTES} minutes. Nothing was charged, and your
+          order is still here. Get a new link to pay for it at the same prices.
+        </p>
+        <RenewNotice notice={notice} />
+        <TotalLine order={order} />
+        <RenewForm order={order} />
+        <div className="mt-4">
+          <LinkButton href="/contact" variant="secondary">
+            Contact us
+          </LinkButton>
+        </div>
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
       {/* The cart is deliberately NOT cleared — they can check out again immediately. */}
@@ -215,7 +264,31 @@ function Expired({ order }: { order: Order }) {
   );
 }
 
-function Unavailable({ order }: { order: Order }) {
+function Unavailable({ order, notice }: { order: Order; notice?: string }) {
+  // The order exists but never got a session — the same button that renews an expired link can
+  // create its first one.
+  if (canRenewPayment(order.createdAt)) {
+    return (
+      <Shell>
+        <ClearPendingPayment />
+        <Badge tone="danger" />
+        <h1 className="mt-5 font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
+          We couldn&apos;t start your payment
+        </h1>
+        <RefPill orderRef={order.ref} />
+        <p className="mt-5 leading-relaxed text-muted">
+          Nothing was charged, and your order is saved. Try again to get a payment link for it.
+        </p>
+        <RenewNotice notice={notice} />
+        <TotalLine order={order} />
+        <RenewForm order={order} label="Try again" />
+        <p className="mt-4 text-sm text-muted">
+          Still stuck? Email {SITE.email} and quote your reference.
+        </p>
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
       <ClearPendingPayment />
@@ -238,6 +311,66 @@ function Unavailable({ order }: { order: Order }) {
         </LinkButton>
       </div>
     </Shell>
+  );
+}
+
+function Cancelled({ order }: { order: Order }) {
+  return (
+    <Shell>
+      <ClearPendingPayment />
+      <Badge tone="danger" />
+      <h1 className="mt-5 font-[family-name:var(--font-display)] text-2xl font-bold text-fg sm:text-3xl">
+        This order was cancelled
+      </h1>
+      <RefPill orderRef={order.ref} />
+      <p className="mt-5 leading-relaxed text-muted">
+        Nothing was charged, and there&apos;s nothing left to pay. If you still want these items,
+        your cart is saved, so you can check out again.
+      </p>
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <LinkButton href="/cart" size="lg">
+          Go to cart
+        </LinkButton>
+        <LinkButton href="/contact" variant="secondary" size="lg">
+          Contact us
+        </LinkButton>
+      </div>
+    </Shell>
+  );
+}
+
+function RenewNotice({ notice }: { notice?: string }) {
+  if (!notice) return null;
+  return (
+    <p className="mx-auto mt-4 max-w-md rounded-lg bg-danger/10 px-4 py-2.5 text-sm text-danger">
+      {notice}
+    </p>
+  );
+}
+
+/** Just the amount. The renewed link charges exactly what the order recorded. */
+function TotalLine({ order }: { order: Order }) {
+  return (
+    <p className="mt-6 text-sm text-muted">
+      Total due{" "}
+      <span className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
+        {formatPHP(order.total)}
+      </span>
+    </p>
+  );
+}
+
+function RenewForm({ order, label = "Get a new payment link" }: { order: Order; label?: string }) {
+  return (
+    <form action={renewPaymentAction} className="mt-6">
+      <input type="hidden" name="o" value={order.id} />
+      <SubmitButton size="lg" pendingLabel="Taking you to PayMongo…">
+        {label}
+      </SubmitButton>
+      <p className="mt-3 text-xs text-muted-light">
+        Opens a fresh {PAY_WINDOW_MINUTES}-minute payment window on PayMongo.
+      </p>
+    </form>
   );
 }
 

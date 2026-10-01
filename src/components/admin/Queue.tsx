@@ -63,6 +63,7 @@ export function StatusFilter({
   param = "status",
   preserve,
   allLabel = "All",
+  label,
 }: {
   basePath: string;
   active?: string;
@@ -70,20 +71,38 @@ export function StatusFilter({
   param?: string;
   preserve?: Record<string, string | undefined>;
   allLabel?: string;
+  /** Names the row when a page has more than one ("Payment", "Status"). */
+  label?: string;
 }) {
   const href = (value?: string) =>
     `${basePath}${queryString({ ...preserve, [param]: value })}`;
 
   return (
-    <div className="-mx-4 -my-1 mt-6 flex gap-2 overflow-x-auto px-4 py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
-      <Chip href={href(undefined)} active={!active}>
-        {allLabel}
-      </Chip>
-      {options.map((o) => (
-        <Chip key={o.value} href={href(o.value)} active={active === o.value}>
-          {o.label}
+    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+      {label && (
+        <span className="w-20 shrink-0 text-xs font-semibold uppercase tracking-wider text-muted-light">
+          {label}
+        </span>
+      )}
+      <div className="-mx-4 -my-1 flex min-w-0 gap-2 overflow-x-auto px-4 py-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
+        <Chip href={href(undefined)} active={!active}>
+          {allLabel}
         </Chip>
-      ))}
+        {options.map((o) => (
+          <Chip key={o.value} href={href(o.value)} active={active === o.value}>
+            {o.label}
+          </Chip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The card the filter rows sit in, above a queue. */
+export function FilterBar({ children }: { children: ReactNode }) {
+  return (
+    <div className="space-y-3 rounded-2xl border border-line bg-surface px-4 py-3.5 sm:px-5">
+      {children}
     </div>
   );
 }
@@ -93,10 +112,10 @@ function Chip({ href, active, children }: { href: string; active: boolean; child
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`shrink-0 whitespace-nowrap rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-[6px] border px-3.5 py-1.5 text-sm font-semibold transition-colors ${
         active
-          ? "border-ink bg-ink text-white"
-          : "border-line bg-surface text-fg hover:border-brand-600"
+          ? "border-brand-600 bg-brand-600 text-white"
+          : "border-line bg-surface text-muted hover:border-brand-300 hover:text-fg"
       }`}
     >
       {children}
@@ -107,7 +126,7 @@ function Chip({ href, active, children }: { href: string; active: boolean; child
 /** The house dashed-border empty panel. */
 export function EmptyQueue({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-6 rounded-xl border border-dashed border-line-strong bg-bg p-6 text-sm text-muted">
+    <p className="mt-6 rounded-2xl border border-dashed border-line-strong bg-surface px-6 py-12 text-center text-sm text-muted">
       {children}
     </p>
   );
@@ -124,8 +143,14 @@ export function QueueList({ children }: { children: ReactNode }) {
 export function QueueRow({ href, children }: { href: string; children: ReactNode }) {
   return (
     <li>
-      <Link href={href} className="flex items-center gap-4 px-5 py-4 hover:bg-elevated">
+      <Link href={href} className="group flex items-center gap-4 px-5 py-4 transition-colors hover:bg-elevated">
         {children}
+        <span
+          aria-hidden="true"
+          className="hidden shrink-0 text-muted-light transition-colors group-hover:text-brand-700 sm:block"
+        >
+          ›
+        </span>
       </Link>
     </li>
   );

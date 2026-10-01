@@ -8,7 +8,9 @@ import {
   updateUserBrandsAction,
 } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
-import { Field, FormMessage, SubmitButton, TextInput } from "@/components/admin/Form";
+import { Field, SaveBar, SubmitButton, TextInput } from "@/components/admin/Form";
+import { Panel } from "@/components/admin/Panel";
+import { Initials } from "@/components/admin/Initials";
 
 export type Teammate = { uid: string; name: string; email: string; brandSlugs: string[] };
 export type BrandOption = { slug: string; name: string; logo: string };
@@ -41,52 +43,60 @@ export function UsersManager({
   const current = users.find((u) => u.uid === selected);
 
   return (
-    <div className="mt-6 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-6">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
       {/* Left — teammate list */}
-      <div className="mb-6 lg:mb-0">
-        <button
-          type="button"
-          onClick={() => setSelected(ADD)}
-          className={[
-            "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors",
-            selected === ADD
-              ? "bg-brand-700 text-white"
-              : "bg-brand-600 text-white hover:bg-brand-700",
-          ].join(" ")}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          </svg>
-          Add teammate
-        </button>
+      <div className="self-start rounded-2xl border border-line bg-surface lg:sticky lg:top-6">
+        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <div>
+            <h2 className="text-sm font-semibold text-fg">Teammates</h2>
+            <p className="text-xs text-muted">{users.length} with brand access</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelected(ADD)}
+            disabled={selected === ADD}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
+            Add
+          </button>
+        </div>
 
         {users.length > 0 ? (
-          <ul className="mt-3 space-y-2">
+          <ul className="space-y-1 p-2">
             {users.map((u) => (
               <li key={u.uid}>
                 <button
                   type="button"
                   onClick={() => setSelected(u.uid)}
                   className={[
-                    "flex w-full items-center gap-3 rounded-xl border bg-surface p-2.5 text-left transition-colors",
+                    "flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors",
                     selected === u.uid
-                      ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
-                      : "border-line hover:border-line-strong",
+                      ? "bg-brand-50 ring-1 ring-brand-200"
+                      : "hover:bg-elevated/60",
                   ].join(" ")}
                 >
                   <Avatar name={u.name} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-fg">{u.name}</span>
-                    <span className="block truncate text-xs text-muted">{u.email}</span>
+                    <span
+                      className={`block truncate text-sm font-semibold ${
+                        selected === u.uid ? "text-brand-700" : "text-fg"
+                      }`}
+                    >
+                      {u.name}
+                    </span>
+                    <span className="block truncate text-xs text-muted">
+                      {u.brandSlugs.length} brand{u.brandSlugs.length === 1 ? "" : "s"} · {u.email}
+                    </span>
                   </span>
                 </button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-4 rounded-xl border border-dashed border-line-strong bg-bg p-4 text-sm text-muted">
-            No teammates yet. Add your first above.
-          </p>
+          <p className="px-4 py-8 text-center text-sm text-muted">No teammates yet.</p>
         )}
       </div>
 
@@ -102,35 +112,8 @@ export function UsersManager({
   );
 }
 
-/** Initials avatar with a deterministic color from the name. */
 function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "lg" }) {
-  const initials =
-    name
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((w) => w[0]?.toUpperCase() ?? "")
-      .join("") || "?";
-  const palette = [
-    "bg-brand-600",
-    "bg-emerald-600",
-    "bg-violet-600",
-    "bg-rose-600",
-    "bg-amber-600",
-    "bg-sky-600",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  const color = palette[hash % palette.length];
-  const dims = size === "lg" ? "h-12 w-12 text-base" : "h-9 w-9 text-xs";
-  return (
-    <span
-      className={`inline-flex ${dims} shrink-0 items-center justify-center rounded-full font-bold text-white ${color}`}
-      aria-hidden="true"
-    >
-      {initials}
-    </span>
-  );
+  return <Initials name={name} size={size === "lg" ? "lg" : "md"} hideOnPhone={false} />;
 }
 
 /** Selectable brand cards — logo on a white plate, brand-blue ring when granted. */
@@ -140,7 +123,7 @@ function BrandAccessGrid({ brands, selected }: { brands: BrandOption[]; selected
     return <p className="text-sm text-muted">No brands to assign yet.</p>;
   }
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
       {brands.map((b) => (
         <label
           key={b.slug}
@@ -153,7 +136,7 @@ function BrandAccessGrid({ brands, selected }: { brands: BrandOption[]; selected
             defaultChecked={set.has(b.slug)}
             className="peer absolute right-2 top-2 z-10 h-4 w-4"
           />
-          <div className="relative aspect-[16/10] bg-white">
+          <div className="relative aspect-[2/1] bg-white">
             <Image src={b.logo} alt="" fill sizes="160px" className="object-contain p-4" />
           </div>
           <div className="border-t border-line px-2.5 py-2">
@@ -180,31 +163,11 @@ function AddPanel({ brands }: { brands: BrandOption[] }) {
   const [password, setPassword] = useState("");
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
-      <div className="flex items-start gap-4">
-        <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19 8v6M22 11h-6"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-        <div>
-          <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-fg">
-            Add a marketing teammate
-          </h2>
-          <p className="mt-1 text-sm text-muted">
-            They can edit only the brand pages you grant below — nothing else. The account is created
-            in Firebase Authentication.
-          </p>
-        </div>
-      </div>
-
-      <form action={action} className="mt-6 space-y-5">
+    <Panel
+      title="Add a marketing teammate"
+      description="They can edit only the brand pages you grant below — nothing else."
+    >
+      <form action={action} className="space-y-5">
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Full name">
             <TextInput name="name" required placeholder="e.g. Maria Santos" />
@@ -236,14 +199,13 @@ function AddPanel({ brands }: { brands: BrandOption[] }) {
           </div>
         </Field>
 
-        <Field label="Brand access" hint="Tick the brands this person may edit.">
+        <Field label="Brand access" hint="Tick the brands this person may edit." group>
           <BrandAccessGrid brands={brands} selected={[]} />
         </Field>
 
-        <SubmitButton>Create account</SubmitButton>
-        <FormMessage state={state} />
+        <SaveBar state={state} label="Create account" pendingLabel="Creating…" />
       </form>
-    </div>
+    </Panel>
   );
 }
 
@@ -251,39 +213,47 @@ function EditPanel({ user, brands }: { user: Teammate; brands: BrandOption[] }) 
   const [state, action] = useActionState<ActionState, FormData>(updateUserBrandsAction, {});
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
-      <div className="flex items-center gap-4">
-        <Avatar name={user.name} size="lg" />
-        <div className="min-w-0">
-          <h2 className="truncate font-[family-name:var(--font-display)] text-xl font-bold text-fg">
-            {user.name}
-          </h2>
-          <p className="truncate text-sm text-muted">{user.email}</p>
+    <div className="space-y-6">
+      <Panel>
+        <div className="-mt-1 mb-6 flex items-center gap-4">
+          <Avatar name={user.name} size="lg" />
+          <div className="min-w-0">
+            <h2 className="truncate font-[family-name:var(--font-display)] text-xl font-bold text-fg">
+              {user.name}
+            </h2>
+            <p className="truncate text-sm text-muted">{user.email}</p>
+          </div>
+          <span className="ml-auto rounded-full bg-elevated px-2.5 py-1 text-xs font-semibold text-muted">
+            Marketing
+          </span>
         </div>
-        <span className="ml-auto rounded-full bg-elevated px-2.5 py-1 text-xs font-semibold text-muted">
-          Marketing
-        </span>
-      </div>
 
-      <form action={action} className="mt-6 space-y-4">
-        <input type="hidden" name="uid" value={user.uid} />
-        <Field label="Brands this person can edit">
-          <BrandAccessGrid brands={brands} selected={user.brandSlugs} />
-        </Field>
-        <SubmitButton variant="secondary">Save access</SubmitButton>
-        <FormMessage state={state} />
-      </form>
-
-      <div className="mt-8 border-t border-line pt-5">
-        <h3 className="text-sm font-semibold text-fg">Remove teammate</h3>
-        <p className="mt-1 text-sm text-muted">
-          Deletes {user.name}&rsquo;s account and sign-in access. This can&rsquo;t be undone.
-        </p>
-        <form action={deleteUserAction} className="mt-3">
+        <form action={action}>
           <input type="hidden" name="uid" value={user.uid} />
-          <SubmitButton variant="danger">Remove {user.name}</SubmitButton>
+          <Field label="Brands this person can edit" group>
+            <BrandAccessGrid brands={brands} selected={user.brandSlugs} />
+          </Field>
+          <SaveBar state={state} label="Save access" />
         </form>
-      </div>
+      </Panel>
+
+      <Panel
+        tone="danger"
+        title="Remove teammate"
+        description={`Deletes ${user.name}’s account and sign-in access. This can’t be undone.`}
+      >
+        <form
+          action={deleteUserAction}
+          onSubmit={(e) => {
+            if (!confirm(`Remove ${user.name}? Their account is deleted.`)) e.preventDefault();
+          }}
+        >
+          <input type="hidden" name="uid" value={user.uid} />
+          <SubmitButton variant="danger" size="sm" pendingLabel="Removing…">
+            Remove {user.name}
+          </SubmitButton>
+        </form>
+      </Panel>
     </div>
   );
 }

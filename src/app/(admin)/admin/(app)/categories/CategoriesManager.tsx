@@ -15,7 +15,7 @@ import {
 } from "@/app/(admin)/admin/actions";
 import Image from "next/image";
 import type { ActionState } from "@/lib/form-data";
-import { Field, FormMessage, SubmitButton, TextInput } from "@/components/admin/Form";
+import { FormMessage, ImageInput, SubmitButton, TextInput } from "@/components/admin/Form";
 import type { StoreCategory, Subcategory } from "@/lib/content";
 
 export function CategoriesManager({ categories }: { categories: StoreCategory[] }) {
@@ -52,28 +52,30 @@ export function CategoriesManager({ categories }: { categories: StoreCategory[] 
   const current = items.find((c) => c.slug === selected) ?? null;
 
   return (
-    <div className="mt-6 grid gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
       {/* Left — categories */}
-      <div className="rounded-2xl border border-line bg-surface p-5">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="rounded-2xl border border-line bg-surface">
+        <div className="space-y-3 border-b border-line p-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-base font-semibold text-fg">All categories</h2>
+            <span className="text-xs text-muted">{items.length} total</span>
+          </div>
           <TextInput
+            type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search category…"
-            className="min-w-0 flex-1"
+            placeholder="Find a category…"
+            aria-label="Find a category"
           />
-        </div>
-
-        <div className="mt-4">
           <NewNameForm
             key={`cat-${items.length}`}
             action={createCategoryAction}
             placeholder="New category name"
-            addLabel="New Category"
+            addLabel="Add"
           />
         </div>
 
-        <ul className="mt-4 divide-y divide-line">
+        <ul className="space-y-0.5 p-2">
           {filtered.map((c) => (
             <CategoryRow
               key={c.slug}
@@ -91,8 +93,8 @@ export function CategoriesManager({ categories }: { categories: StoreCategory[] 
         </ul>
       </div>
 
-      {/* Right — subcategories of the selected category */}
-      <div className="rounded-2xl border border-line bg-surface p-5">
+      {/* Right — the selected category. Sticky, so it stays in view down a long list. */}
+      <div className="self-start rounded-2xl border border-line bg-surface lg:sticky lg:top-6">
         {current ? (
           <SubcategoryPanel key={current.slug} category={current} />
         ) : (
@@ -129,7 +131,11 @@ function CategoryRow({
   }
 
   return (
-    <li className={`flex items-center gap-2 py-2 ${active ? "bg-brand-50" : ""} rounded-lg px-2`}>
+    <li
+      className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors ${
+        active ? "bg-brand-50 ring-1 ring-brand-200" : "hover:bg-elevated/60"
+      }`}
+    >
       {editing ? (
         <RenameForm
           initial={category.name}
@@ -142,16 +148,42 @@ function CategoryRow({
           <button
             type="button"
             onClick={onSelect}
-            className="min-w-0 flex-1 truncate text-left text-sm font-medium text-fg"
+            aria-current={active ? "true" : undefined}
+            className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
           >
-            {category.name}
-            <span className="ml-2 text-xs font-normal text-muted-light">
-              {category.subcategories.length} sub
+            {category.image ? (
+              <span className="relative h-7 w-10 shrink-0 overflow-hidden rounded bg-elevated">
+                <Image src={category.image} alt="" fill sizes="40px" className="object-cover" />
+              </span>
+            ) : (
+              <span className="h-7 w-10 shrink-0 rounded bg-gradient-to-br from-brand-600 to-brand-800" />
+            )}
+            <span
+              className={`min-w-0 flex-1 truncate text-sm ${
+                active ? "font-semibold text-brand-700" : "font-medium text-fg"
+              }`}
+            >
+              {category.name}
+            </span>
+            <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted">
+              {category.subcategories.length}
             </span>
           </button>
-          <ReorderArrows index={index} total={total} onMove={(d) => onMove(category.slug, d)} />
-          <IconButton label="Rename" onClick={() => setEditing(true)} kind="edit" />
-          <DeleteForm action={deleteCategoryAction} hidden={[{ name: "slug", value: category.slug }]} />
+          {/* Row tools stay visible on the active row and on touch screens; elsewhere they appear
+              on hover so 27 rows of icons don't drown the names. */}
+          <span
+            className={`flex items-center ${
+              active ? "" : "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+            }`}
+          >
+            <ReorderArrows index={index} total={total} onMove={(d) => onMove(category.slug, d)} />
+            <IconButton label={`Rename ${category.name}`} onClick={() => setEditing(true)} kind="edit" />
+            <DeleteForm
+              action={deleteCategoryAction}
+              hidden={[{ name: "slug", value: category.slug }]}
+              confirmText={`Delete “${category.name}” and its ${category.subcategories.length} subcategories? Products tagged with it lose their category.`}
+            />
+          </span>
         </>
       )}
     </li>
@@ -180,24 +212,33 @@ function SubcategoryPanel({ category }: { category: StoreCategory }) {
 
   return (
     <div>
-      <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
-        {category.name}
-      </h2>
-      <p className="text-sm text-muted">Landing-page tile and subcategories</p>
-
-      <CategoryImageForm key={category.slug} category={category} />
-
-      <div className="mt-4">
-        <NewNameForm
-          key={`sub-${category.slug}-${items.length}`}
-          action={createSubcategoryAction}
-          placeholder="New subcategory name"
-          addLabel="New Subcategory"
-          hidden={[{ name: "category", value: category.slug }]}
-        />
+      <div className="border-b border-line px-5 py-4 sm:px-6">
+        <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
+          {category.name}
+        </h2>
+        <p className="text-sm text-muted">
+          {items.length} subcategor{items.length === 1 ? "y" : "ies"} · /categories/{category.slug}
+        </p>
       </div>
 
-      <ul className="mt-4 divide-y divide-line">
+      <div className="space-y-6 p-5 sm:p-6">
+        <CategoryImageForm key={category.slug} category={category} />
+
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-700">
+            Subcategories
+          </h3>
+          <div className="mt-3">
+            <NewNameForm
+              key={`sub-${category.slug}-${items.length}`}
+              action={createSubcategoryAction}
+              placeholder="New subcategory name"
+              addLabel="Add"
+              hidden={[{ name: "category", value: category.slug }]}
+            />
+          </div>
+
+      <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
         {items.map((s, i) => (
           <SubcategoryRow
             key={s.slug}
@@ -212,6 +253,8 @@ function SubcategoryPanel({ category }: { category: StoreCategory }) {
           <li className="py-6 text-center text-sm text-muted">No subcategories yet.</li>
         )}
       </ul>
+        </div>
+      </div>
     </div>
   );
 }
@@ -224,36 +267,28 @@ function CategoryImageForm({ category }: { category: StoreCategory }) {
   const [state, action] = useActionState<ActionState, FormData>(setCategoryImageAction, {});
 
   return (
-    <form action={action} className="mt-5 rounded-xl border border-line bg-bg p-4">
+    <form action={action}>
       <input type="hidden" name="slug" value={category.slug} />
-
-      <div className="flex flex-wrap items-start gap-4">
-        <span className="relative aspect-[16/10] w-32 shrink-0 overflow-hidden rounded-lg bg-elevated">
-          {category.image ? (
-            <Image src={category.image} alt="" fill sizes="128px" className="object-cover" />
-          ) : (
-            <span className="flex h-full items-center justify-center text-xs text-muted-light">
-              No image
-            </span>
-          )}
-        </span>
-
-        <div className="min-w-[220px] flex-1 space-y-3">
-          <Field
-            label="Home tile image"
-            hint="Wide shot, ≈16:10 · up to 5 MB. Shown on the landing page’s “Shop by category” grid — the same photo the Shop by category screen sets."
-          >
-            <TextInput type="file" name="image" accept="image/*" />
-          </Field>
-          {category.image && (
-            <label className="flex items-center gap-2 text-sm text-muted">
-              <input type="checkbox" name="remove" value="1" />
-              Remove the current image
-            </label>
-          )}
-          <SubmitButton>Save image</SubmitButton>
-          <FormMessage state={state} />
-        </div>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-700">
+        Home tile image
+      </h3>
+      <p className="mt-1 text-sm text-muted">
+        The photo on the home page&apos;s “Shop by category” grid. Optional; without one the tile
+        is brand blue.
+      </p>
+      <div className="mt-3">
+        <ImageInput
+          name="image"
+          current={category.image}
+          removeName="remove"
+          hint="Wide shot, about 16:10 · up to 5 MB"
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <SubmitButton size="sm" variant="secondary">
+          Save image
+        </SubmitButton>
+        <FormMessage state={state} inline />
       </div>
     </form>
   );
@@ -280,7 +315,7 @@ function SubcategoryRow({
   }
 
   return (
-    <li className="flex items-center gap-2 rounded-lg px-2 py-2">
+    <li className="flex items-center gap-1 px-3 py-2">
       {editing ? (
         <RenameForm
           initial={sub.name}
@@ -302,6 +337,7 @@ function SubcategoryRow({
               { name: "category", value: categorySlug },
               { name: "slug", value: sub.slug },
             ]}
+            confirmText={`Delete the subcategory “${sub.name}”?`}
           />
         </>
       )}
@@ -327,10 +363,10 @@ function NewNameForm({
     <form action={formAction} className="space-y-2">
       <div className="flex gap-2">
         {hidden?.map((h) => <input key={h.name} type="hidden" name={h.name} value={h.value} />)}
-        <TextInput name="name" placeholder={placeholder} required className="flex-1" />
-        <SubmitButton>{addLabel}</SubmitButton>
+        <TextInput name="name" placeholder={placeholder} required className="flex-1 py-2" />
+        <SubmitButton size="sm">+ {addLabel}</SubmitButton>
       </div>
-      <FormMessage state={state} />
+      <FormMessage state={state} inline />
     </form>
   );
 }
@@ -350,8 +386,8 @@ function RenameForm({
   return (
     <form action={formAction} className="flex min-w-0 flex-1 items-center gap-2">
       {hidden.map((h) => <input key={h.name} type="hidden" name={h.name} value={h.value} />)}
-      <TextInput name="name" defaultValue={initial} required autoFocus className="min-w-0 flex-1" />
-      <SubmitButton>Save</SubmitButton>
+      <TextInput name="name" defaultValue={initial} required autoFocus className="min-w-0 flex-1 py-2" />
+      <SubmitButton size="sm">Save</SubmitButton>
       <button
         type="button"
         onClick={onCancel}
@@ -364,9 +400,23 @@ function RenameForm({
   );
 }
 
-function DeleteForm({ action, hidden }: { action: (form: FormData) => void; hidden: Hidden[] }) {
+/** Deletes on submit, after a confirm — a one-click trash can was too easy to hit by accident. */
+function DeleteForm({
+  action,
+  hidden,
+  confirmText,
+}: {
+  action: (form: FormData) => void;
+  hidden: Hidden[];
+  confirmText: string;
+}) {
   return (
-    <form action={action}>
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (!confirm(confirmText)) e.preventDefault();
+      }}
+    >
       {hidden.map((h) => <input key={h.name} type="hidden" name={h.name} value={h.value} />)}
       <IconButton label="Delete" kind="delete" type="submit" />
     </form>

@@ -13,9 +13,12 @@ import {
   QueueRow,
   StatusBadge,
   StatusFilter,
+  FilterBar,
   formatWhen,
 } from "@/components/admin/Queue";
 import { inquiryTone } from "./tone";
+import { PageHeader } from "@/components/admin/Panel";
+import { Initials } from "@/components/admin/Initials";
 
 export const metadata: Metadata = { title: "Inquiries" };
 
@@ -38,19 +41,18 @@ export default async function AdminInquiriesPage({
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">
-        Inquiries
-      </h1>
-      <p className="mt-2 text-muted">
-        Messages from the contact form, including &ldquo;Contact a sales agent&rdquo; requests on
-        products priced on request.
-      </p>
-
-      <StatusFilter
-        basePath="/admin/inquiries"
-        active={status}
-        options={INQUIRY_STATUSES.map((s) => ({ value: s, label: INQUIRY_STATUS_LABELS[s] }))}
+      <PageHeader
+        title="Inquiries"
+        description="Questions from the contact form, quote requests, and “Contact a sales agent” requests on products priced on request."
       />
+
+      <FilterBar>
+        <StatusFilter
+          basePath="/admin/inquiries"
+          active={status}
+          options={INQUIRY_STATUSES.map((s) => ({ value: s, label: INQUIRY_STATUS_LABELS[s] }))}
+        />
+      </FilterBar>
 
       {inquiries.length === 0 ? (
         <EmptyQueue>
@@ -62,6 +64,7 @@ export default async function AdminInquiriesPage({
         <QueueList>
           {inquiries.map((inquiry) => (
             <QueueRow key={inquiry.id} href={`/admin/inquiries/${inquiry.id}`}>
+              <Initials name={inquiry.name} />
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-baseline gap-x-2 font-semibold text-fg">
                   {inquiry.name}

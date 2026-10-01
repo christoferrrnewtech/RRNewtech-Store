@@ -31,10 +31,12 @@ import { cookies, headers } from "next/headers";
 import {
   createOrder,
   getOrder,
+  renewOrderCheckout,
   setOrderCheckoutSession,
   setOrderPaymentError,
   type OrderLine,
 } from "@/lib/orders";
+import { reconcileOrderPayment, retireCheckoutSession } from "@/lib/payments";
 import { createInquiry, type InquiryProduct } from "@/lib/inquiries";
 import { type InquiryKind } from "@/lib/inquiry-status";
 import { getSessionCustomer } from "@/lib/customer-auth";
@@ -46,6 +48,7 @@ import { parseDescription } from "@/lib/product-description";
 import { clampQuantity } from "@/lib/cart-item";
 import {
   createCheckoutSession,
+  expireCheckoutSession,
   isPayMongoConfigured,
   toCentavos,
   type PayMongoLineItem,
@@ -58,8 +61,10 @@ import {
 import { getBarangays, getCities, isKnownLocation } from "@/lib/locations";
 import { PAYMENT_METHOD_TYPES } from "@/lib/payment-methods";
 import {
+  canRenewPayment,
   isOrderId,
   isPayWindowOpen,
+  PAY_WINDOW_MS,
   parsePendingPayment,
   PAY_COOKIE,
   PAY_COOKIE_MAX_AGE,
@@ -491,12 +496,112 @@ export async function continueToPaymentAction(form: FormData): Promise<void> {
     if (
       order &&
       order.checkoutUrl &&
+      order.status !== "cancelled" &&
       order.paymentStatus !== "paid" &&
       order.paymentStatus !== "expired" &&
       isPayWindowOpen(order.checkoutExpiresAt)
     ) {
       destination = order.checkoutUrl;
     }
+  }
+
+  redirect(destination);
+}
+
+/**
+ * Give an order whose payment link lapsed a fresh one, and send the customer to it — the "Get a new
+ * payment link" button on `/checkout/pay`.
+ *
+ * The customer pays for THE SAME ORDER: same reference, same lines, same prices. The session is
+ * built from what the order stored, not from the catalog. `canRenewPayment` caps how long after
+ * ordering that is offered, so old prices can't be revived indefinitely.
+ *
+ * Order of operations, each step guarding the next:
+ *
+ *   1. Reconcile. The "expired" order may have been paid through a stale tab.
+ *   2. Retire the old session, conclusively — see `retireCheckoutSession`. The webhook refuses a
+ *      payment whose session isn't the order's current one, so swapping while the old link could
+ *      still charge would lose that payment. "busy" (a payment in flight) sends the customer back
+ *      with a "try again shortly" note rather than risking it.
+ *   3. Create the new session, then swap it in transactionally (`renewOrderCheckout`). Losing that
+ *      race to a second click or a payment expires the session we just made.
+ *
+ * Every outcome other than success lands on `/checkout/pay`, which renders whatever the order now
+ * says — paid, cancelled, still live — so this action never has to describe any of them itself.
+ * Same id-is-the-capability model as `continueToPaymentAction`: anyone holding the id can already
+ * reach this order's pay page, and renewing grants nothing beyond the chance to pay for it.
+ */
+export async function renewPaymentAction(form: FormData): Promise<void> {
+  const orderId = cappedText(form, "o", MAX_ORDER_ID);
+  if (!isOrderId(orderId) || !isPayMongoConfigured()) redirect("/checkout/pay");
+
+  const back = `/checkout/pay?o=${encodeURIComponent(orderId)}`;
+  // Assigned in the try, used after it — see placeOrderAction on why redirect() can't go inside.
+  let destination = back;
+
+  try {
+    const found = await getOrder(orderId);
+    const order = found && (await reconcileOrderPayment(found));
+
+    const live =
+      order &&
+      order.checkoutUrl &&
+      order.paymentStatus !== "expired" &&
+      isPayWindowOpen(order.checkoutExpiresAt);
+
+    if (
+      !order ||
+      order.paymentStatus === "paid" ||
+      order.status === "cancelled" ||
+      !canRenewPayment(order.createdAt)
+    ) {
+      // Nothing to renew; the pay page explains which.
+    } else if (live) {
+      // A stale "expired" page clicked after another tab already renewed it. Use that link.
+      destination = order.checkoutUrl;
+    } else {
+      const retired = await retireCheckoutSession(order);
+      if (retired === "busy") {
+        destination = `${back}&renew=busy`;
+      } else if (retired === "retired") {
+        const origin = await requestOrigin();
+        const session = await createCheckoutSession(
+          buildSessionInput({
+            // No blurbs: they are transient (see PricedLine) and the order doesn't keep them.
+            priced: order.lines.map((line) => ({ line, description: "" })),
+            shippingFee: order.shippingFee,
+            total: order.total,
+            customer: order.customer,
+            shipping: order.shipping,
+            created: order,
+            origin,
+          }),
+        );
+        const checkoutExpiresAt = Date.now() + PAY_WINDOW_MS;
+
+        const swapped = await renewOrderCheckout(order.id, order.checkoutSessionId, {
+          checkoutSessionId: session.id,
+          checkoutUrl: session.checkoutUrl,
+          checkoutExpiresAt,
+        });
+
+        if (swapped) {
+          await setPendingPayment({ orderId: order.id, ref: order.ref, exp: checkoutExpiresAt });
+          revalidatePath("/account");
+          revalidatePath("/admin/orders", "layout");
+          destination = session.checkoutUrl;
+        } else {
+          // Lost the race. Nobody will ever be sent to this session, so close it.
+          await expireCheckoutSession(session.id).catch(() => false);
+        }
+      }
+      // "paid": retireCheckoutSession has recorded it, and the pay page will forward to the
+      // confirmation.
+    }
+  } catch (err) {
+    console.error("[checkout] could not renew payment for order", orderId, err);
+    await setOrderPaymentError(orderId, String(err)).catch(() => {});
+    destination = `${back}&renew=failed`;
   }
 
   redirect(destination);

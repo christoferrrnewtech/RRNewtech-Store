@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { getAboutContent } from "@/lib/content";
+import { PageHeader } from "@/components/admin/Panel";
 import { AboutEditor } from "./AboutEditor";
 
 export const metadata: Metadata = { title: "About section" };
@@ -11,14 +12,15 @@ export default async function AdminAboutPage() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">
-        About section
-      </h1>
-      <p className="mt-2 text-muted">
-        The &ldquo;About&rdquo; band on the storefront home page — heading, paragraphs, the button, and
-        the photo. Changes appear immediately. This does not affect the separate{" "}
-        <span className="font-medium">/about</span> page.
-      </p>
+      <PageHeader
+        title="About section"
+        description={
+          <>
+            The &ldquo;About&rdquo; band on the home page. Changes appear immediately. The separate{" "}
+            <span className="font-medium text-fg">/about</span>{" "}page isn&apos;t affected.
+          </>
+        }
+      />
 
       <AboutEditor content={about} />
     </div>

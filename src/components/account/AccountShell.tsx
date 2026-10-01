@@ -9,7 +9,6 @@ import { Container } from "@/components/ui/Container";
 const WIDTHS = {
   narrow: "max-w-md",
   wide: "max-w-2xl",
-  full: "max-w-4xl",
 } as const;
 
 export function AccountShell({
@@ -21,11 +20,8 @@ export function AccountShell({
 }: {
   title: string;
   subtitle?: string;
-  /**
-   * `narrow` for the single-column forms, `wide` for the register form, `full` for the account
-   * dashboard, whose order rows and address cards need the room.
-   */
-  width?: "narrow" | "wide" | "full";
+  /** `narrow` for the single-column forms, `wide` for the register form. */
+  width?: "narrow" | "wide";
   children: ReactNode;
   footer?: ReactNode;
 }) {
@@ -39,12 +35,7 @@ export function AccountShell({
           {subtitle && <p className="mt-2 text-sm leading-relaxed text-muted">{subtitle}</p>}
         </div>
 
-        {/* The dashboard composes its own cards, so it opts out of the single framed panel. */}
-        {width === "full" ? (
-          <div className="mt-8">{children}</div>
-        ) : (
-          <div className="mt-8 rounded-2xl border border-line bg-surface p-6 sm:p-8">{children}</div>
-        )}
+        <div className="mt-8 rounded-2xl border border-line bg-surface p-6 sm:p-8">{children}</div>
 
         {footer && <div className="mt-6 text-center text-sm text-muted">{footer}</div>}
       </div>

@@ -17,9 +17,12 @@ import {
   QueueRow,
   StatusBadge,
   StatusFilter,
+  FilterBar,
   formatWhen,
 } from "@/components/admin/Queue";
 import { orderTone, paymentTone } from "./tone";
+import { PageHeader } from "@/components/admin/Panel";
+import { Initials } from "@/components/admin/Initials";
 
 export const metadata: Metadata = { title: "Orders" };
 
@@ -66,13 +69,14 @@ export default async function AdminOrdersPage({
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">Orders</h1>
-      <p className="mt-2 text-muted">
-        Orders placed through checkout. Paid orders are shown by default — confirm stock, then move
-        the order along. Unpaid ones are abandoned or failed checkouts.
-      </p>
+      <PageHeader
+        title="Orders"
+        description="Paid orders show by default: confirm stock, then move each one along. Unpaid ones are abandoned or failed checkouts."
+      />
 
+      <FilterBar>
       <StatusFilter
+        label="Payment"
         basePath="/admin/orders"
         param="payment"
         active={payment}
@@ -88,11 +92,13 @@ export default async function AdminOrdersPage({
       />
 
       <StatusFilter
+        label="Status"
         basePath="/admin/orders"
         active={status}
         preserve={{ payment: active.payment }}
         options={ORDER_STATUSES.map((s) => ({ value: s, label: ORDER_STATUS_LABELS[s] }))}
       />
+      </FilterBar>
 
       {orders.length === 0 ? (
         <EmptyQueue>
@@ -104,6 +110,7 @@ export default async function AdminOrdersPage({
         <QueueList>
           {orders.map((order) => (
             <QueueRow key={order.id} href={`/admin/orders/${order.id}`}>
+              <Initials name={`${order.customer.firstName} ${order.customer.lastName}`} />
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-baseline gap-x-2 font-semibold text-fg">
                   {order.customer.firstName} {order.customer.lastName}

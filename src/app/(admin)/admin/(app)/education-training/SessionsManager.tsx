@@ -7,16 +7,19 @@ import {
   reorderSessionsAction,
 } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
+import Link from "next/link";
 import {
   Field,
-  FormMessage,
+  ImageInput,
   RepeatableText,
+  SaveBar,
   SubmitButton,
   TextInput,
   TextArea,
   Select,
 } from "@/components/admin/Form";
-import type { Session } from "@/components/education/Sessions";
+import { FormSection, PageHeader, Panel } from "@/components/admin/Panel";
+import { sessionHref, type Session } from "@/components/education/Sessions";
 import type { LinkOption } from "@/lib/content";
 
 const ADD = "add" as const;
@@ -83,23 +86,29 @@ function ScheduleEditor({ initial }: { initial: { time: string; item: string }[]
     <div className="space-y-3">
       {rows.map((row, i) => (
         <div key={i} className="flex gap-2">
-          <TextInput
-            name="scheduleTime"
-            value={row.time}
-            onChange={(e) => update(i, { time: e.target.value })}
-            placeholder="8:00 AM"
-            className="w-32 shrink-0"
-          />
-          <TextInput
-            name="scheduleItem"
-            value={row.item}
-            onChange={(e) => update(i, { item: e.target.value })}
-            placeholder="Registration and coffee"
-          />
+          {/* Widths on wrappers: TextInput's own `w-full` would win over a width passed to it. */}
+          <div className="w-28 shrink-0 sm:w-32">
+            <TextInput
+              name="scheduleTime"
+              value={row.time}
+              onChange={(e) => update(i, { time: e.target.value })}
+              placeholder="8:00 AM"
+              aria-label={`Row ${i + 1} time`}
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <TextInput
+              name="scheduleItem"
+              value={row.item}
+              onChange={(e) => update(i, { item: e.target.value })}
+              placeholder="Registration and coffee"
+              aria-label={`Row ${i + 1} entry`}
+            />
+          </div>
           <button
             type="button"
             onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}
-            className="shrink-0 rounded-lg border border-line px-3 text-sm text-muted hover:bg-elevated"
+            className="shrink-0 rounded-lg border border-line px-3 text-sm text-muted hover:bg-elevated hover:text-danger"
             aria-label={`Remove row ${i + 1}`}
           >
             ✕
@@ -109,9 +118,9 @@ function ScheduleEditor({ initial }: { initial: { time: string; item: string }[]
       <button
         type="button"
         onClick={() => setRows((prev) => [...prev, { time: "", item: "" }])}
-        className="text-sm font-semibold text-brand-700 hover:underline"
+        className="text-sm font-semibold text-brand-700 hover:text-brand-800"
       >
-        Add row
+        + Add row
       </button>
     </div>
   );
@@ -178,32 +187,46 @@ export function SessionsManager({
   const today = todayInManila();
   const current = items.find((s) => s.id === selected);
 
-  return (
-    <div className="mt-6 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-6">
-      {/* Left — campaign list */}
-      <div className="mb-6 lg:mb-0">
-        <button
-          type="button"
-          onClick={() => setSelected(ADD)}
-          className={[
-            "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors",
-            selected === ADD
-              ? "bg-brand-700 text-white"
-              : "bg-brand-600 text-white hover:bg-brand-700",
-          ].join(" ")}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          </svg>
-          Add campaign
-        </button>
+  const upcoming = items.filter((s) => s.date >= today).length;
 
-        {items.length > 0 && (
+  return (
+    <div>
+      <PageHeader
+        title="Education & Training"
+        description={`${upcoming} upcoming · ${items.length - upcoming} past. Past campaigns stay here for reference but drop off the storefront automatically.`}
+        actions={
           <>
-            <p className="mt-4 text-xs text-muted">
-              Drag a campaign, or use the arrows, to set the order shown on the storefront.
-            </p>
-            <ul className="mt-2 space-y-2">
+            <Link
+              href="/education-training"
+              target="_blank"
+              className="inline-flex items-center rounded-lg border border-line bg-surface px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-elevated"
+            >
+              View page ↗
+            </Link>
+            <button
+              type="button"
+              onClick={() => setSelected(ADD)}
+              disabled={selected === ADD}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+              Add campaign
+            </button>
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+        {/* Left — campaign list */}
+        <div className="self-start rounded-2xl border border-line bg-surface lg:sticky lg:top-6">
+          <div className="border-b border-line px-4 py-3">
+            <h2 className="text-sm font-semibold text-fg">Campaigns</h2>
+            <p className="text-xs text-muted">Drag, or use the arrows, to set the storefront order.</p>
+          </div>
+          {items.length > 0 ? (
+            <ul className="space-y-1 p-2">
               {items.map((s, i) => (
                 <CampaignRow
                   key={s.id}
@@ -218,20 +241,35 @@ export function SessionsManager({
                 />
               ))}
             </ul>
-          </>
-        )}
-      </div>
+          ) : (
+            <p className="px-4 py-8 text-center text-sm text-muted">No campaigns yet.</p>
+          )}
+        </div>
 
-      {/* Right — editor */}
-      <div>
-        {selected === ADD || !current ? (
-          <SessionForm key="add" linkOptions={linkOptions} />
-        ) : (
-          <SessionForm key={current.id} session={current} linkOptions={linkOptions} />
-        )}
+        {/* Right — editor */}
+        <div className="min-w-0">
+          {selected === ADD || !current ? (
+            <SessionForm key="add" linkOptions={linkOptions} />
+          ) : (
+            <SessionForm key={current.id} session={current} linkOptions={linkOptions} />
+          )}
+        </div>
       </div>
     </div>
   );
+}
+
+const dateFmt = new Intl.DateTimeFormat("en-PH", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+/** "2027-04-30" → "Apr 30, 2027". Parsed as UTC so the day can't shift with the viewer's zone. */
+function formatCampaignDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return iso && !Number.isNaN(d.getTime()) ? dateFmt.format(d) : "No date";
 }
 
 /**
@@ -276,9 +314,10 @@ function CampaignRow({
         onDrop(e.dataTransfer.getData("text/plain"), session.id);
       }}
       className={[
-        "flex items-center gap-2 rounded-xl border bg-surface p-2 transition-colors",
-        over ? "border-brand-500 ring-2 ring-brand-500/30" : "border-line",
-        active ? "bg-brand-50 ring-1 ring-brand-600" : "hover:border-line-strong",
+        "group flex items-center gap-2 rounded-lg p-2 transition-colors",
+        over ? "bg-brand-50 ring-2 ring-brand-500/40" : "",
+        active ? "bg-brand-50 ring-1 ring-brand-200" : "hover:bg-elevated/60",
+        past && !active ? "opacity-70" : "",
       ].join(" ")}
     >
       <span className="cursor-grab text-muted-light active:cursor-grabbing" aria-hidden="true">
@@ -289,13 +328,23 @@ function CampaignRow({
         </svg>
       </span>
 
-      <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-sm font-semibold text-fg">
-          {session.title || "Untitled campaign"}
+      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+        <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md border border-line bg-gradient-to-br from-brand-600 to-brand-800">
+          {session.image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={session.image} alt="" className="h-full w-full object-cover" />
+          )}
         </span>
-        <span className="block text-xs text-muted">
-          {session.date || "No date"}
-          {session.venue ? ` · ${session.venue}` : ""}
+        <span className="min-w-0">
+          <span
+            className={`block truncate text-sm font-semibold ${active ? "text-brand-700" : "text-fg"}`}
+          >
+            {session.title || "Untitled campaign"}
+          </span>
+          <span className="block truncate text-xs text-muted">
+            {formatCampaignDate(session.date)}
+            {session.venue ? ` · ${session.venue}` : ""}
+          </span>
         </span>
       </button>
 
@@ -332,46 +381,12 @@ function CampaignRow({
 /** Below this the storefront card visibly upscales the photo. Advisory, not a hard limit. */
 const RECOMMENDED_EDGE = 600;
 
-/**
- * The photo currently attached, with its real pixel size read off the loaded element.
- *
- * The size readout is the point: a 46×46 upload was accepted silently and then stretched across a
- * 460px card, and nothing in the admin gave any hint why the result looked blurry.
- */
-function CurrentPhoto({ image }: { image?: string }) {
-  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
-  const small = dims !== null && Math.min(dims.w, dims.h) < RECOMMENDED_EDGE;
-
-  return (
-    <div>
-      <p className="text-sm font-semibold text-fg">Current photo</p>
-      <div className="mt-1.5 overflow-hidden rounded-xl border border-line bg-elevated">
-        {image ? (
-          /* Plain <img>: a remote Storage URL, and `naturalWidth` needs the real element. */
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={image}
-            alt="Current campaign photo"
-            onLoad={(e) =>
-              setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
-            }
-            className="aspect-[4/3] w-full object-cover"
-          />
-        ) : (
-          <div className="flex aspect-[4/3] items-center justify-center px-6 text-center text-sm text-muted">
-            No photo — the card will show a branded panel instead.
-          </div>
-        )}
-      </div>
-      {dims && (
-        <p className={["mt-2 text-xs", small ? "font-semibold text-danger" : "text-muted"].join(" ")}>
-          {dims.w} × {dims.h} px
-          {small && ` — too small, this will look blurry. Upload at least ${RECOMMENDED_EDGE}px wide.`}
-        </p>
-      )}
-    </div>
-  );
-}
+const TABS = [
+  { id: "card", label: "Card", hint: "What shows in the campaign list" },
+  { id: "page", label: "Session page", hint: "What “Learn more” opens" },
+  { id: "photo", label: "Photo", hint: "The card and page image" },
+] as const;
+type Tab = (typeof TABS)[number]["id"];
 
 /**
  * One form for both add and edit — the only difference is the hidden `id`, which is what
@@ -386,266 +401,324 @@ function SessionForm({
 }) {
   const [state, action] = useActionState<ActionState, FormData>(saveSessionAction, {});
   const editing = Boolean(session);
+  const [tab, setTab] = useState<Tab>("card");
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-6">
-      <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
-        {editing ? "Edit campaign" : "Add a campaign"}
-      </h2>
-      <p className="mt-1 text-sm text-muted">
-        Title and date are required. Everything else is optional — leave a field blank and it simply
-        doesn&apos;t show on the card.
-      </p>
-
-      <form action={action} className="mt-5 space-y-4">
-        {session && <input type="hidden" name="id" value={session.id} />}
-
-        <Field label="Title" hint="What the session is called, e.g. Intraoral Scanning Workshop.">
-          <TextInput name="title" defaultValue={session?.title ?? ""} required />
-        </Field>
-
-        <Field label="Description" hint="A short paragraph shown on the card.">
-          <TextArea name="summary" rows={4} defaultValue={session?.summary ?? ""} />
-        </Field>
-
-        <Field
-          label="Highlights"
-          hint="Short bullet lines on the card — what attendees get. Two to four works best; leave empty for none."
+    <div className="space-y-6">
+      <Panel
+        title={editing ? session?.title || "Untitled campaign" : "Add a campaign"}
+        description="Title and date are required. Anything left blank simply isn't shown."
+        actions={
+          session && (
+            <Link
+              href={sessionHref(session)}
+              target="_blank"
+              prefetch={false}
+              className="text-sm font-semibold text-brand-700 hover:text-brand-800"
+            >
+              View on site ↗
+            </Link>
+          )
+        }
+      >
+        <form
+          action={action}
+          // The tabs only HIDE fields — every one stays mounted and posts. But the browser can't
+          // point at a required field on a hidden tab, so an invalid one switches to its tab first.
+          onInvalidCapture={(e) => {
+            const owner = (e.target as HTMLElement).closest<HTMLElement>("[data-tab]");
+            const id = owner?.dataset.tab as Tab | undefined;
+            if (id && id !== tab) setTab(id);
+          }}
         >
-          <RepeatableText
-            name="highlight"
-            initial={session?.highlights ?? []}
-            rows={2}
-            placeholder="Certificate of completion accepted toward CE requirements"
-            addLabel="Add highlight"
-          />
-        </Field>
+          {session && <input type="hidden" name="id" value={session.id} />}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Date"
-            hint="Only the month and year are shown publicly — the day still sets the order and drops the campaign off the storefront once it passes."
+          <div
+            role="tablist"
+            aria-label="Campaign fields"
+            className="-mt-1 mb-6 grid grid-cols-3 gap-1 rounded-xl bg-elevated p-1"
           >
-            <TextInput type="date" name="date" defaultValue={session?.date ?? ""} required />
-          </Field>
-          <Field label="Time" hint="Free text, e.g. 9:00 AM – 12:00 PM.">
-            <TextInput name="time" defaultValue={session?.time ?? ""} placeholder="9:00 AM – 12:00 PM" />
-          </Field>
-        </div>
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.id}
+                aria-controls={`campaign-${t.id}`}
+                onClick={() => setTab(t.id)}
+                className={`rounded-lg px-3 py-2 text-left transition-colors ${
+                  tab === t.id ? "bg-surface shadow-sm" : "hover:bg-surface/60"
+                }`}
+              >
+                <span
+                  className={`block text-sm font-semibold ${
+                    tab === t.id ? "text-brand-700" : "text-fg"
+                  }`}
+                >
+                  {t.label}
+                </span>
+                <span className="hidden truncate text-xs text-muted sm:block">{t.hint}</span>
+              </button>
+            ))}
+          </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Venue" hint="Where it happens, e.g. Makati City or Online via Zoom.">
-            <TextInput name="venue" defaultValue={session?.venue ?? ""} placeholder="Makati City" />
-          </Field>
-          <Field label="Format">
-            <Select name="format" defaultValue={session?.format ?? "in-person"}>
-              <option value="in-person">In person</option>
-              <option value="online">Online</option>
-            </Select>
-          </Field>
-        </div>
+          <div id="campaign-card" role="tabpanel" data-tab="card" hidden={tab !== "card"} className="space-y-6">
+            <FormSection title="About">
+              <Field label="Title" hint="What the session is called, e.g. Intraoral Scanning Workshop.">
+                <TextInput name="title" defaultValue={session?.title ?? ""} required />
+              </Field>
+              <Field label="Description" hint="A short paragraph shown on the card.">
+                <TextArea name="summary" rows={4} defaultValue={session?.summary ?? ""} />
+              </Field>
+              <Field
+                label="Highlights"
+                hint="Short bullet lines — what attendees get. Two to four works best."
+                group
+              >
+                <RepeatableText
+                  name="highlight"
+                  initial={session?.highlights ?? []}
+                  rows={2}
+                  placeholder="Certificate of completion accepted toward CE requirements"
+                  addLabel="Add highlight"
+                />
+              </Field>
+            </FormSection>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Speaker" hint="Who runs it, e.g. Dr. Marco Cruz.">
-            <TextInput name="speaker" defaultValue={session?.speaker ?? ""} />
-          </Field>
-          <Field label="Partner brand" hint="Brand running it with us, e.g. Rundeer.">
-            <TextInput name="partnerBrand" defaultValue={session?.partnerBrand ?? ""} />
-          </Field>
-        </div>
+            <FormSection title="When & where">
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field
+                  label="Date"
+                  hint="Only month and year show publicly. The day sets the order, and when it drops off."
+                >
+                  <TextInput type="date" name="date" defaultValue={session?.date ?? ""} required />
+                </Field>
+                <Field label="Time" hint="Free text.">
+                  <TextInput
+                    name="time"
+                    defaultValue={session?.time ?? ""}
+                    placeholder="9:00 AM – 12:00 PM"
+                  />
+                </Field>
+                <Field label="Venue">
+                  <TextInput
+                    name="venue"
+                    defaultValue={session?.venue ?? ""}
+                    placeholder="Makati City, or Online via Zoom"
+                  />
+                </Field>
+                <Field label="Format">
+                  <Select name="format" defaultValue={session?.format ?? "in-person"}>
+                    <option value="in-person">In person</option>
+                    <option value="online">Online</option>
+                  </Select>
+                </Field>
+                <Field label="Speaker" hint="Who runs it.">
+                  <TextInput
+                    name="speaker"
+                    defaultValue={session?.speaker ?? ""}
+                    placeholder="Dr. Marco Cruz"
+                  />
+                </Field>
+                <Field label="Partner brand" hint="Brand running it with us.">
+                  <TextInput
+                    name="partnerBrand"
+                    defaultValue={session?.partnerBrand ?? ""}
+                    placeholder="Rundeer"
+                  />
+                </Field>
+              </div>
+            </FormSection>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Fee" hint='Shown as written — "Free" works.'>
-            <TextInput name="fee" defaultValue={session?.fee ?? ""} placeholder="Free" />
-          </Field>
-          <Field label="Seats left" hint="Blank = not tracked.">
-            <TextInput
-              type="number"
-              min="0"
-              name="seatsLeft"
-              defaultValue={session?.seatsLeft ?? ""}
-            />
-          </Field>
-          <Field label="Capacity" hint="Total seats.">
-            <TextInput
-              type="number"
-              min="0"
-              name="capacity"
-              defaultValue={session?.capacity ?? ""}
-            />
-          </Field>
-        </div>
+            <FormSection title="Seats & fee">
+              <div className="grid gap-5 sm:grid-cols-3">
+                <Field label="Fee" hint="Shown as written — “Free” works.">
+                  <TextInput name="fee" defaultValue={session?.fee ?? ""} placeholder="Free" />
+                </Field>
+                <Field label="Seats left" hint="Blank = not tracked.">
+                  <TextInput
+                    type="number"
+                    min="0"
+                    name="seatsLeft"
+                    defaultValue={session?.seatsLeft ?? ""}
+                  />
+                </Field>
+                <Field label="Capacity" hint="Total seats.">
+                  <TextInput
+                    type="number"
+                    min="0"
+                    name="capacity"
+                    defaultValue={session?.capacity ?? ""}
+                  />
+                </Field>
+              </div>
+            </FormSection>
 
-        {/* The two buttons on the card, each with its own wording and destination. */}
-        <div className="border-t border-line pt-5">
-          <h3 className="font-semibold text-fg">Card buttons</h3>
-          <p className="mt-1 text-sm text-muted">
-            The two buttons at the bottom of the campaign card. Start typing in a link box to pick
-            from your own pages, or paste any external address.
-          </p>
-        </div>
+            {/* The two buttons on the card, each with its own wording and destination. */}
+            <FormSection
+              title="Card buttons"
+              description="Start typing in a link box to pick one of your own pages, or paste any address."
+            >
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field label="Button 1 text" hint="Blank shows “Learn more”.">
+                  <TextInput
+                    name="detailsLabel"
+                    defaultValue={session?.detailsLabel ?? ""}
+                    placeholder="Learn more"
+                  />
+                </Field>
+                <Field label="Button 1 link" hint="Blank opens this session's own page.">
+                  <LinkField
+                    name="detailsHref"
+                    defaultValue={session?.detailsHref ?? ""}
+                    options={linkOptions}
+                    placeholder="This session's page"
+                  />
+                </Field>
+                <Field label="Button 2 text" hint="Blank shows “Reserve a seat”.">
+                  <TextInput
+                    name="registerLabel"
+                    defaultValue={session?.registerLabel ?? ""}
+                    placeholder="Reserve a seat"
+                  />
+                </Field>
+                <Field label="Button 2 link" hint="Blank sends people to /contact.">
+                  <LinkField
+                    name="registerHref"
+                    defaultValue={session?.registerHref ?? ""}
+                    options={linkOptions}
+                    placeholder="/contact"
+                  />
+                </Field>
+              </div>
+            </FormSection>
+          </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Button 1 text" hint="Blank shows &ldquo;Learn more&rdquo;.">
-            <TextInput
-              name="detailsLabel"
-              defaultValue={session?.detailsLabel ?? ""}
-              placeholder="Learn more"
-            />
-          </Field>
-          <Field
-            label="Button 1 link"
-            hint="Blank opens this session's own page on the site."
-          >
-            <LinkField
-              name="detailsHref"
-              defaultValue={session?.detailsHref ?? ""}
-              options={linkOptions}
-              placeholder="This session's page"
-            />
-          </Field>
-        </div>
+          {/* ---- Everything here fills the session's own page (the Learn more destination). ---- */}
+          <div id="campaign-page" role="tabpanel" data-tab="page" hidden={tab !== "page"} className="space-y-6">
+            <p className="rounded-lg bg-brand-50/60 px-4 py-3 text-sm text-muted">
+              Every field here is optional. A section left blank is left off the page entirely
+              rather than shown empty.
+            </p>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Button 2 text" hint="Blank shows &ldquo;Reserve a seat&rdquo;.">
-            <TextInput
-              name="registerLabel"
-              defaultValue={session?.registerLabel ?? ""}
-              placeholder="Reserve a seat"
-            />
-          </Field>
-          <Field label="Button 2 link" hint="Blank sends people to /contact.">
-            <LinkField
-              name="registerHref"
-              defaultValue={session?.registerHref ?? ""}
-              options={linkOptions}
-              placeholder="/contact"
-            />
-          </Field>
-        </div>
+            <FormSection title="Overview">
+              <Field
+                label="About this session"
+                hint="The long description. Blank falls back to the card description."
+              >
+                <TextArea name="about" rows={6} defaultValue={session?.about ?? ""} />
+              </Field>
+              <Field label="Who should attend" hint="One paragraph describing the right audience.">
+                <TextArea
+                  name="audience"
+                  rows={3}
+                  defaultValue={session?.audience ?? ""}
+                  placeholder="General dentists and specialists who want to add soft-tissue laser procedures — no prior experience required."
+                />
+              </Field>
+              <Field label="Format note" hint="How the day runs, in words.">
+                <TextInput
+                  name="formatNote"
+                  defaultValue={session?.formatNote ?? ""}
+                  placeholder="Lecture in the morning, hands-on workshop in the afternoon"
+                />
+              </Field>
+            </FormSection>
 
-        {/* ---- Everything below fills the session's own page (the Learn more destination). ---- */}
-        <div className="border-t border-line pt-5">
-          <h3 className="font-semibold text-fg">Session page</h3>
-          <p className="mt-1 text-sm text-muted">
-            What Learn more opens. Every field is optional — a section you leave blank is left off
-            the page entirely rather than shown empty.
-          </p>
-        </div>
+            <FormSection title="Schedule" description="The running order. Blank rows are dropped; a row without a time is fine.">
+              <ScheduleEditor initial={session?.schedule ?? []} />
+            </FormSection>
 
-        <Field
-          label="About this session"
-          hint="The long description. Blank falls back to the short card description above."
-        >
-          <TextArea name="about" rows={6} defaultValue={session?.about ?? ""} />
-        </Field>
+            <FormSection title="What's included">
+              <Field label="Items" hint="What a seat actually buys — one per box." group>
+                <RepeatableText
+                  name="included"
+                  initial={session?.included ?? []}
+                  rows={2}
+                  placeholder="All training materials and use of the units"
+                  addLabel="Add item"
+                />
+              </Field>
+              <Field label="Certificate note" hint="Highlighted under the items.">
+                <TextInput
+                  name="certificateNote"
+                  defaultValue={session?.certificateNote ?? ""}
+                  placeholder="Certificate of completion issued by ..."
+                />
+              </Field>
+            </FormSection>
 
-        <Field label="Who should attend" hint="One paragraph describing the right audience.">
-          <TextArea
-            name="audience"
-            rows={3}
-            defaultValue={session?.audience ?? ""}
-            placeholder="General dentists and specialists who want to add soft-tissue laser procedures — no prior experience required."
+            <FormSection title="Pricing & dates">
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field label="Pricing note" hint="Under the fee, e.g. early-bird terms.">
+                  <TextInput
+                    name="feeNote"
+                    defaultValue={session?.feeNote ?? ""}
+                    placeholder="Early-bird rates for groups of two or more"
+                  />
+                </Field>
+                <Field label="Date note" hint="Replaces the date shown, when the day isn't set.">
+                  <TextInput
+                    name="dateNote"
+                    defaultValue={session?.dateNote ?? ""}
+                    placeholder="April 2027 (exact day to be announced)"
+                  />
+                </Field>
+              </div>
+              <Field label="Payment terms" hint="One term per box. Shown in its own box." group>
+                <RepeatableText
+                  name="payment"
+                  initial={session?.payment ?? []}
+                  rows={2}
+                  placeholder="50% down payment to reserve your seat"
+                  addLabel="Add term"
+                />
+              </Field>
+            </FormSection>
+          </div>
+
+          <div id="campaign-photo" role="tabpanel" data-tab="photo" hidden={tab !== "photo"}>
+            <FormSection
+              title="Photo"
+              description="Optional. Without one, the card shows a branded panel. Saved as WebP."
+            >
+              <div className="max-w-md">
+                <ImageInput
+                  name="image"
+                  current={session?.image}
+                  stacked
+                  aspect="aspect-[4/3]"
+                  removeName="removeImage"
+                  removeLabel="Remove the current photo"
+                  minEdge={RECOMMENDED_EDGE}
+                  hint="Any image · up to 5 MB · at least 200px on the short side"
+                />
+              </div>
+            </FormSection>
+          </div>
+
+          <SaveBar
+            state={state}
+            label={editing ? "Save campaign" : "Add campaign"}
+            pendingLabel={editing ? "Saving…" : "Adding…"}
           />
-        </Field>
-
-        <Field
-          label="Schedule"
-          hint="The running order. Leave a row blank to drop it; a row with only an entry and no time is fine."
-        >
-          <ScheduleEditor initial={session?.schedule ?? []} />
-        </Field>
-
-        <Field label="What&apos;s included" hint="What a seat actually buys — one item per box.">
-          <RepeatableText
-            name="included"
-            initial={session?.included ?? []}
-            rows={2}
-            placeholder="All training materials and use of the units"
-            addLabel="Add item"
-          />
-        </Field>
-
-        <Field
-          label="Certificate note"
-          hint="Optional. Highlighted under What's included."
-        >
-          <TextInput
-            name="certificateNote"
-            defaultValue={session?.certificateNote ?? ""}
-            placeholder="Certificate of completion issued by ..."
-          />
-        </Field>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Pricing note"
-            hint="Sits under the fee in the registration box, e.g. early-bird terms."
-          >
-            <TextInput
-              name="feeNote"
-              defaultValue={session?.feeNote ?? ""}
-              placeholder="Early-bird rates for groups of two or more"
-            />
-          </Field>
-          <Field
-            label="Date note"
-            hint="Optional override for the date shown on the page, when the exact day isn't set."
-          >
-            <TextInput
-              name="dateNote"
-              defaultValue={session?.dateNote ?? ""}
-              placeholder="April 2027 (exact day to be announced)"
-            />
-          </Field>
-        </div>
-
-        <Field
-          label="Format note"
-          hint="How the day runs, in words."
-        >
-          <TextInput
-            name="formatNote"
-            defaultValue={session?.formatNote ?? ""}
-            placeholder="Lecture in the morning, hands-on workshop in the afternoon"
-          />
-        </Field>
-
-        <Field label="Payment terms" hint="One term per box. Shown in its own box on the page.">
-          <RepeatableText
-            name="payment"
-            initial={session?.payment ?? []}
-            rows={2}
-            placeholder="50% down payment to reserve your seat"
-            addLabel="Add term"
-          />
-        </Field>
-
-        <CurrentPhoto image={session?.image} />
-
-        <Field
-          label={editing ? "Replace photo" : "Photo"}
-          hint="Any image file · up to 5 MB, at least 200px on its shorter side. Saved as WebP. Optional — without one the card shows a branded panel."
-        >
-          <TextInput type="file" name="image" accept="image/*" />
-        </Field>
-
-        {session?.image && (
-          <label className="flex items-center gap-2 text-sm text-muted">
-            <input type="checkbox" name="removeImage" value="1" />
-            Remove the current photo
-          </label>
-        )}
-
-        <SubmitButton>{editing ? "Save campaign" : "Add campaign"}</SubmitButton>
-        <FormMessage state={state} />
-      </form>
+        </form>
+      </Panel>
 
       {session && (
-        <form action={deleteSessionAction} className="mt-6 border-t border-line pt-4">
-          <input type="hidden" name="id" value={session.id} />
-          <SubmitButton variant="danger">Delete this campaign</SubmitButton>
-        </form>
+        <Panel tone="danger" title="Delete this campaign" description="It's removed from the storefront and from this list.">
+          <form
+            action={deleteSessionAction}
+            onSubmit={(e) => {
+              if (!confirm(`Delete “${session.title}”? This can't be undone.`)) e.preventDefault();
+            }}
+          >
+            <input type="hidden" name="id" value={session.id} />
+            <SubmitButton variant="danger" size="sm" pendingLabel="Deleting…">
+              Delete campaign
+            </SubmitButton>
+          </form>
+        </Panel>
       )}
     </div>
   );

@@ -9,7 +9,15 @@ import {
   updateBannerAction,
 } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
-import { Field, FormMessage, SubmitButton, TextArea, TextInput } from "@/components/admin/Form";
+import {
+  Field,
+  ImageInput,
+  SaveBar,
+  SubmitButton,
+  TextArea,
+  TextInput,
+} from "@/components/admin/Form";
+import { FormSection, PageHeader, Panel } from "@/components/admin/Panel";
 import type { Banner } from "@/lib/content";
 
 const ADD = "add" as const;
@@ -64,27 +72,38 @@ export function BannerManager({ banners }: { banners: Banner[] }) {
   const current = items.find((b) => b.id === selected);
 
   return (
-    <div className="mt-6 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-6">
-      {/* Left — reorderable slide list */}
-      <div className="mb-6 lg:mb-0">
-        <button
-          type="button"
-          onClick={() => setSelected(ADD)}
-          className={[
-            "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors",
-            selected === ADD
-              ? "bg-brand-700 text-white"
-              : "bg-brand-600 text-white hover:bg-brand-700",
-          ].join(" ")}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          </svg>
-          Add banner
-        </button>
+    <div>
+      <PageHeader
+        title="Home banner"
+        description={
+          items.length > 1
+            ? `${items.length} slides rotate as a carousel at the top of the storefront. Changes appear immediately.`
+            : "The image at the top of the storefront. Add a second slide and they rotate as a carousel."
+        }
+        actions={
+          <button
+            type="button"
+            onClick={() => setSelected(ADD)}
+            disabled={selected === ADD}
+            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
+            Add slide
+          </button>
+        }
+      />
 
-        {items.length > 0 && (
-          <ul className="mt-3 space-y-2">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+      {/* Left — reorderable slide list */}
+      <div className="self-start rounded-2xl border border-line bg-surface lg:sticky lg:top-6">
+        <div className="border-b border-line px-4 py-3">
+          <h2 className="text-sm font-semibold text-fg">Slides</h2>
+          <p className="text-xs text-muted">Drag to change the order they play in.</p>
+        </div>
+        {items.length > 0 ? (
+          <ul className="space-y-1 p-2">
             {items.map((b, i) => (
               <SlideRow
                 key={b.id}
@@ -98,17 +117,20 @@ export function BannerManager({ banners }: { banners: Banner[] }) {
               />
             ))}
           </ul>
+        ) : (
+          <p className="px-4 py-8 text-center text-sm text-muted">No slides yet.</p>
         )}
       </div>
 
       {/* Right — editor */}
-      <div>
+      <div className="min-w-0">
         {selected === ADD || !current ? (
           <AddPanel />
         ) : (
           <EditPanel key={current.id} banner={current} index={items.indexOf(current)} />
         )}
       </div>
+    </div>
     </div>
   );
 }
@@ -147,9 +169,9 @@ function SlideRow({
         onDrop(e.dataTransfer.getData("text/plain"), banner.id);
       }}
       className={[
-        "flex items-center gap-2 rounded-xl border bg-surface p-2 transition-colors",
-        over ? "border-brand-500 ring-2 ring-brand-500/30" : "border-line",
-        active ? "bg-brand-50 ring-1 ring-brand-600" : "hover:border-line-strong",
+        "group flex items-center gap-2 rounded-lg p-2 transition-colors",
+        over ? "bg-brand-50 ring-2 ring-brand-500/40" : "",
+        active ? "bg-brand-50 ring-1 ring-brand-200" : "hover:bg-elevated/60",
       ].join(" ")}
     >
       <span className="cursor-grab text-muted-light active:cursor-grabbing" aria-hidden="true">
@@ -161,14 +183,17 @@ function SlideRow({
       </span>
 
       <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-        <span className="relative aspect-[1489/551] w-16 shrink-0 overflow-hidden rounded-md bg-elevated">
-          <Image src={banner.image} alt="" fill sizes="64px" className="object-cover" />
+        <span className="relative aspect-[1489/551] w-20 shrink-0 overflow-hidden rounded-md border border-line bg-elevated">
+          <Image src={banner.image} alt="" fill sizes="80px" className="object-cover" />
         </span>
         <span className="min-w-0">
-          <span className="block text-sm font-semibold text-fg">Slide {index + 1}</span>
+          <span
+            className={`block text-sm font-semibold ${active ? "text-brand-700" : "text-fg"}`}
+          >
+            Slide {index + 1}
+          </span>
           <span className="block truncate text-xs text-muted">
-            {banner.alt || "No alt text"}
-            {banner.href ? " · linked" : ""}
+            {banner.heading || banner.alt || "No alt text"}
           </span>
         </span>
       </button>
@@ -197,45 +222,43 @@ function SlideRow({
   );
 }
 
-/** Editor for the selected slide: live preview, image/alt/link fields, and a separate remove. */
+/** Editor for the selected slide: preview + image, basics, overlay copy, and a separate remove. */
 function EditPanel({ banner, index }: { banner: Banner; index: number }) {
   const [state, action] = useActionState<ActionState, FormData>(updateBannerAction, {});
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-6">
-      <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
-        Slide {index + 1}
-      </h2>
+    <div className="space-y-6">
+      <Panel title={`Slide ${index + 1}`} description="Changes appear on the storefront as soon as you save.">
+        <form action={action} className="space-y-6">
+          <input type="hidden" name="id" value={banner.id} />
+          <FormSection title="Image">
+            <ImageInput
+              name="image"
+              current={banner.image}
+              stacked
+              aspect="aspect-[1489/551]"
+              hint="About 2.7:1 fits best · PNG, JPG or WebP · up to 5 MB"
+            />
+          </FormSection>
+          <BasicsFields banner={banner} />
+          <OverlayFields banner={banner} />
+          <SaveBar state={state} label="Save slide" />
+        </form>
+      </Panel>
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-line">
-        <div className="relative aspect-[1489/551] bg-elevated">
-          <Image src={banner.image} alt={banner.alt} fill sizes="720px" className="object-cover" />
-        </div>
-      </div>
-
-      <form action={action} className="mt-5 space-y-4">
-        <input type="hidden" name="id" value={banner.id} />
-        <Field label="Replace image" hint="PNG, JPG or WebP · up to 5 MB. Leave empty to keep the current image.">
-          <TextInput type="file" name="image" accept="image/*" />
-        </Field>
-        <Field label="Alt text" hint="Describes the image for screen readers and search.">
-          <TextInput name="alt" defaultValue={banner.alt} required />
-        </Field>
-        <Field
-          label="Links to"
-          hint="Where clicking the slide goes, e.g. /brands. Empty = no link. Ignored once the slide has its own buttons below."
+      <Panel tone="danger" title="Remove this slide" description="It disappears from the storefront straight away.">
+        <form
+          action={deleteBannerAction}
+          onSubmit={(e) => {
+            if (!confirm(`Remove slide ${index + 1}? This can't be undone.`)) e.preventDefault();
+          }}
         >
-          <TextInput name="href" defaultValue={banner.href} placeholder="/brands" />
-        </Field>
-        <OverlayFields banner={banner} />
-        <SubmitButton>Save slide</SubmitButton>
-        <FormMessage state={state} />
-      </form>
-
-      <form action={deleteBannerAction} className="mt-6 border-t border-line pt-4">
-        <input type="hidden" name="id" value={banner.id} />
-        <SubmitButton variant="danger">Remove this slide</SubmitButton>
-      </form>
+          <input type="hidden" name="id" value={banner.id} />
+          <SubmitButton variant="danger" size="sm" pendingLabel="Removing…">
+            Remove slide {index + 1}
+          </SubmitButton>
+        </form>
+      </Panel>
     </div>
   );
 }
@@ -244,36 +267,37 @@ function AddPanel() {
   const [state, action] = useActionState<ActionState, FormData>(addBannerAction, {});
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-6">
-      <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-fg">
-        Add a banner
-      </h2>
-      <p className="mt-1 text-sm text-muted">
-        Upload a wide image (≈2.7:1 fits best). It appears at the top of the storefront right away.
-      </p>
-
-      <div className="mt-4 flex aspect-[1489/551] items-center justify-center rounded-xl border border-dashed border-line-strong bg-elevated text-sm text-muted">
-        Image preview
-      </div>
-
-      <form action={action} className="mt-5 space-y-4">
-        <Field label="Image" hint="PNG, JPG or WebP · up to 5 MB.">
-          <TextInput type="file" name="image" accept="image/*" required />
-        </Field>
-        <Field label="Alt text" hint="Describes the image for screen readers and search.">
-          <TextInput name="alt" required />
-        </Field>
-        <Field
-          label="Links to"
-          hint="Where clicking the slide goes, e.g. /brands. Empty = no link. Ignored once the slide has its own buttons below."
-        >
-          <TextInput name="href" placeholder="/brands" />
-        </Field>
+    <Panel title="Add a slide" description="It appears at the top of the storefront right away.">
+      <form action={action} className="space-y-6">
+        <FormSection title="Image">
+          <ImageInput
+            name="image"
+            required
+            stacked
+            aspect="aspect-[1489/551]"
+            hint="About 2.7:1 fits best · PNG, JPG or WebP · up to 5 MB"
+          />
+        </FormSection>
+        <BasicsFields />
         <OverlayFields />
-        <SubmitButton>Add banner</SubmitButton>
-        <FormMessage state={state} />
+        <SaveBar state={state} label="Add slide" pendingLabel="Adding…" />
       </form>
-    </div>
+    </Panel>
+  );
+}
+
+function BasicsFields({ banner }: { banner?: Banner }) {
+  return (
+    <FormSection title="Basics">
+      <div className="grid gap-5 md:grid-cols-2">
+        <Field label="Alt text" hint="Describes the image for screen readers and search.">
+          <TextInput name="alt" defaultValue={banner?.alt} required />
+        </Field>
+        <Field label="Links to" hint="Where a click on the slide goes. Ignored once it has buttons.">
+          <TextInput name="href" defaultValue={banner?.href} placeholder="/brands" />
+        </Field>
+      </div>
+    </FormSection>
   );
 }
 
@@ -284,52 +308,53 @@ function AddPanel() {
  */
 function OverlayFields({ banner }: { banner?: Banner }) {
   return (
-    <fieldset className="space-y-4 border-t border-line pt-4">
-      <legend className="sr-only">Overlay copy</legend>
-      <div>
-        <h3 className="text-sm font-bold text-fg">Overlay copy</h3>
-        <p className="mt-1 text-xs text-muted">
-          Text drawn over the image, so it stays sharp and readable on a phone. Leave everything
-          blank for an image-only slide. Keep the heading short — it&rsquo;s set very large.
-        </p>
-      </div>
-
-      <Field label="Eyebrow" hint="Small uppercase line above the heading.">
-        <TextInput
-          name="eyebrow"
-          defaultValue={banner?.eyebrow}
-          placeholder="Authorized dental distributor · Philippines"
-        />
-      </Field>
-      <Field label="Heading">
-        <TextInput
-          name="heading"
-          defaultValue={banner?.heading}
-          placeholder="Everything your operatory runs on."
-        />
-      </Field>
-      <Field label="Body" hint="One or two sentences.">
-        <TextArea name="body" rows={3} defaultValue={banner?.body} />
-      </Field>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Button label" hint="Both fields needed for the button to appear.">
-          <TextInput name="ctaLabel" defaultValue={banner?.ctaLabel} placeholder="Shop the catalog" />
-        </Field>
-        <Field label="Button links to">
-          <TextInput name="ctaHref" defaultValue={banner?.ctaHref} placeholder="/shop" />
-        </Field>
-        <Field label="Second button label" hint="Outlined button beside the first.">
+    <>
+      <FormSection
+        title="Overlay copy"
+        description="Text drawn over the image, so it stays sharp on a phone. Leave it all blank for an image-only slide."
+      >
+        <Field label="Eyebrow" hint="Small uppercase line above the heading.">
           <TextInput
-            name="ctaAltLabel"
-            defaultValue={banner?.ctaAltLabel}
-            placeholder="Request a quote"
+            name="eyebrow"
+            defaultValue={banner?.eyebrow}
+            placeholder="Authorized dental distributor · Philippines"
           />
         </Field>
-        <Field label="Second button links to">
-          <TextInput name="ctaAltHref" defaultValue={banner?.ctaAltHref} placeholder="/contact" />
+        <Field label="Heading" hint="Keep it short — it's set very large.">
+          <TextInput
+            name="heading"
+            defaultValue={banner?.heading}
+            placeholder="Everything your operatory runs on."
+          />
         </Field>
-      </div>
-    </fieldset>
+        <Field label="Body" hint="One or two sentences.">
+          <TextArea name="body" rows={3} defaultValue={banner?.body} />
+        </Field>
+      </FormSection>
+
+      <FormSection
+        title="Buttons"
+        description="Each button needs both a label and a link to appear. The second one is outlined, beside the main one."
+      >
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field label="Main button label">
+            <TextInput name="ctaLabel" defaultValue={banner?.ctaLabel} placeholder="Shop the catalog" />
+          </Field>
+          <Field label="Main button links to">
+            <TextInput name="ctaHref" defaultValue={banner?.ctaHref} placeholder="/shop" />
+          </Field>
+          <Field label="Second button label">
+            <TextInput
+              name="ctaAltLabel"
+              defaultValue={banner?.ctaAltLabel}
+              placeholder="Request a quote"
+            />
+          </Field>
+          <Field label="Second button links to">
+            <TextInput name="ctaAltHref" defaultValue={banner?.ctaAltHref} placeholder="/contact" />
+          </Field>
+        </div>
+      </FormSection>
+    </>
   );
 }

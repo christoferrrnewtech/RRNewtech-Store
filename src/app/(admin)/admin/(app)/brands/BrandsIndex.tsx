@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { PageHeader, Panel } from "@/components/admin/Panel";
 import { BrandRail, type RailBrand } from "./BrandRail";
 import { NewBrandForm } from "./NewBrandForm";
 
 /**
- * Brands manage page. Header carries "Add a brand" (admins) which toggles the inline create panel;
- * below is the storefront-order list (reordering lives here now that the sidebar owns quick-nav).
- * Marketing users get a read-only list of the brands assigned to them.
+ * Brands manage page. The header carries "Add a brand" (admins), which opens the create panel
+ * inline; below is every brand in storefront order, reorderable by admins. Marketing users get a
+ * read-only list of the brands assigned to them.
  */
 export function BrandsIndex({
   brands,
@@ -17,54 +18,56 @@ export function BrandsIndex({
   canManage: boolean;
 }) {
   const [showCreate, setShowCreate] = useState(false);
+  const published = brands.filter((b) => b.status === "published").length;
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">Brands</h1>
-          <p className="mt-1 text-muted">
-            {canManage
-              ? "Add a new brand, or drag to reorder how they appear on the storefront. New brands start as drafts."
-              : "The brands assigned to you. Edits go live once the brand is published."}
-          </p>
-        </div>
-
-        {canManage && (
-          <button
-            type="button"
-            onClick={() => setShowCreate((v) => !v)}
-            aria-expanded={showCreate}
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d={showCreate ? "M6 6l12 12M18 6L6 18" : "M12 5v14M5 12h14"}
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-            </svg>
-            {showCreate ? "Close" : "Add a brand"}
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Brands"
+        description={
+          canManage
+            ? `${published} published · ${brands.length - published} draft. The order below is the order shoppers see them in.`
+            : "The brands assigned to you. Edits go live once the brand is published."
+        }
+        actions={
+          canManage && (
+            <button
+              type="button"
+              onClick={() => setShowCreate((v) => !v)}
+              aria-expanded={showCreate}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                showCreate
+                  ? "border border-line bg-surface text-fg hover:bg-elevated"
+                  : "bg-brand-600 text-white hover:bg-brand-700"
+              }`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d={showCreate ? "M6 6l12 12M18 6L6 18" : "M12 5v14M5 12h14"}
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+              {showCreate ? "Cancel" : "Add a brand"}
+            </button>
+          )
+        }
+      />
 
       {canManage && showCreate && (
-        <div className="mt-6">
+        <div className="mb-6">
           <NewBrandForm />
         </div>
       )}
 
-      <div className="mt-8">
-        {canManage && brands.length > 0 && (
-          <h2 className="mb-3 text-sm font-semibold text-fg">
-            Storefront order
-            <span className="ml-2 font-normal text-muted">— drag or use the arrows</span>
-          </h2>
-        )}
-        <BrandRail brands={brands} canCreate={false} canReorder={canManage} />
-      </div>
+      <Panel
+        title={canManage ? "Storefront order" : "Your brands"}
+        description={canManage ? "Drag a row, or use the arrows, to change the order." : undefined}
+        padded={false}
+      >
+        <BrandRail brands={brands} canReorder={canManage} />
+      </Panel>
     </div>
   );
 }

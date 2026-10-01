@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useState, useTransition } from "react";
 import { reorderBrandsAction } from "@/app/(admin)/admin/actions";
+import { StatusPill } from "@/components/admin/StatusPill";
 
 export type RailBrand = {
   slug: string;
@@ -15,20 +15,16 @@ export type RailBrand = {
 };
 
 /**
- * Left rail for the Brands admin — a prominent "Add a brand" button on top, then the brand list.
- * Selecting a brand navigates to /admin/brands/[slug]; the surrounding layout keeps this rail
- * mounted. Admins can drag / arrow-reorder to set the storefront display order.
+ * The brand list on /admin/brands, in storefront order. Each row opens the brand's editor; admins
+ * can drag or arrow-reorder to set the order shoppers see.
  */
 export function BrandRail({
   brands,
-  canCreate,
   canReorder,
 }: {
   brands: RailBrand[];
-  canCreate: boolean;
   canReorder: boolean;
 }) {
-  const pathname = usePathname();
   const [items, setItems] = useState<RailBrand[]>(brands);
   const [, startTransition] = useTransition();
 
@@ -38,8 +34,6 @@ export function BrandRail({
     setPrev(brands);
     setItems(brands);
   }
-
-  const onAdd = pathname === "/admin/brands";
 
   function commitOrder(next: RailBrand[]) {
     setItems(next);
@@ -68,31 +62,14 @@ export function BrandRail({
 
   return (
     <div>
-      {canCreate && (
-        <Link
-          href="/admin/brands"
-          aria-current={onAdd ? "page" : undefined}
-          className={[
-            "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors",
-            onAdd ? "bg-brand-700 text-white" : "bg-brand-600 text-white hover:bg-brand-700",
-          ].join(" ")}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          </svg>
-          Add a brand
-        </Link>
-      )}
-
       {items.length > 0 ? (
-        <ul className={canCreate ? "mt-3 space-y-2" : "space-y-2"}>
+        <ul className="divide-y divide-line">
           {items.map((b, i) => (
             <BrandRow
               key={b.slug}
               brand={b}
               index={i}
               total={items.length}
-              active={pathname === `/admin/brands/${b.slug}`}
               canReorder={canReorder}
               onMove={move}
               onDrop={drop}
@@ -100,8 +77,8 @@ export function BrandRail({
           ))}
         </ul>
       ) : (
-        <p className="mt-4 rounded-xl border border-dashed border-line-strong bg-bg p-4 text-sm text-muted">
-          No brands assigned to you yet.
+        <p className="px-6 py-10 text-center text-sm text-muted">
+          No brands assigned to you yet. Ask an admin to give you access.
         </p>
       )}
     </div>
@@ -112,7 +89,6 @@ function BrandRow({
   brand,
   index,
   total,
-  active,
   canReorder,
   onMove,
   onDrop,
@@ -120,7 +96,6 @@ function BrandRow({
   brand: RailBrand;
   index: number;
   total: number;
-  active: boolean;
   canReorder: boolean;
   onMove: (slug: string, dir: -1 | 1) => void;
   onDrop: (dragSlug: string, targetSlug: string) => void;
@@ -152,14 +127,15 @@ function BrandRow({
             }
           : undefined
       }
-      className={[
-        "flex items-center gap-2 rounded-xl border bg-surface p-2 transition-colors",
-        over ? "border-brand-500 ring-2 ring-brand-500/30" : "border-line",
-        active ? "bg-brand-50 ring-1 ring-brand-600" : "hover:border-line-strong",
-      ].join(" ")}
+      className={`group flex items-center gap-3 px-4 py-3 transition-colors sm:px-5 ${
+        over ? "bg-brand-50 ring-2 ring-inset ring-brand-500/40" : "hover:bg-elevated/60"
+      }`}
     >
       {canReorder && (
-        <span className="cursor-grab text-muted-light active:cursor-grabbing" aria-hidden="true">
+        <span
+          className="hidden cursor-grab text-muted-light active:cursor-grabbing sm:block"
+          aria-hidden="true"
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" />
             <circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" />
@@ -167,24 +143,45 @@ function BrandRow({
           </svg>
         </span>
       )}
+      <span className="hidden w-5 shrink-0 text-right text-xs font-semibold tabular-nums text-muted-light sm:block">
+        {index + 1}
+      </span>
 
-      <Link href={`/admin/brands/${brand.slug}`} className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-line bg-white">
-          <Image src={brand.logo} alt="" fill sizes="40px" className="object-contain p-1" />
+      <Link href={`/admin/brands/${brand.slug}`} className="flex min-w-0 flex-1 items-center gap-3">
+        <span className="relative h-11 w-16 shrink-0 overflow-hidden rounded-lg border border-line bg-white">
+          {brand.logo && (
+            <Image src={brand.logo} alt="" fill sizes="64px" className="object-contain p-1.5" />
+          )}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${published ? "bg-success" : "bg-muted-light"}`}
-              title={published ? "Published" : "Draft"}
-            />
-            <span className="truncate text-sm font-semibold text-fg">{brand.name}</span>
+          <span className="block truncate font-semibold text-fg group-hover:text-brand-700">
+            {brand.name}
           </span>
           <span className="mt-0.5 block truncate text-xs text-muted">
-            {published ? "Published" : "Draft"} · {brand.count} product{brand.count === 1 ? "" : "s"}
+            {brand.count} product{brand.count === 1 ? "" : "s"}
           </span>
         </span>
       </Link>
+
+      <StatusPill status={brand.status} />
+
+      <div className="hidden items-center gap-1 md:flex">
+        <Link
+          href={`/admin/brands/${brand.slug}`}
+          className="rounded-lg px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-50"
+        >
+          Edit
+        </Link>
+        {published && (
+          <Link
+            href={`/brands/${brand.slug}`}
+            target="_blank"
+            className="rounded-lg px-3 py-1.5 text-sm font-semibold text-muted hover:bg-elevated hover:text-fg"
+          >
+            View ↗
+          </Link>
+        )}
+      </div>
 
       {canReorder && (
         <span className="flex flex-col">
@@ -192,8 +189,8 @@ function BrandRow({
             type="button"
             onClick={() => onMove(brand.slug, -1)}
             disabled={index === 0}
-            aria-label="Move up"
-            className="px-1 text-muted hover:text-brand-700 disabled:opacity-30"
+            aria-label={`Move ${brand.name} up`}
+            className="rounded px-1.5 text-muted hover:bg-elevated hover:text-brand-700 disabled:opacity-30"
           >
             ↑
           </button>
@@ -201,8 +198,8 @@ function BrandRow({
             type="button"
             onClick={() => onMove(brand.slug, 1)}
             disabled={index === total - 1}
-            aria-label="Move down"
-            className="px-1 text-muted hover:text-brand-700 disabled:opacity-30"
+            aria-label={`Move ${brand.name} down`}
+            className="rounded px-1.5 text-muted hover:bg-elevated hover:text-brand-700 disabled:opacity-30"
           >
             ↓
           </button>

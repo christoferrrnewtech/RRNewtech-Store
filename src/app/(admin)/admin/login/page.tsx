@@ -12,10 +12,15 @@ export default async function AdminLoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-16">
       <div className="w-full max-w-sm">
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">
-          R&amp;R Admin
-        </h1>
-        <p className="mt-1 text-sm text-muted">Sign in to manage brands and site content.</p>
+        <div className="text-center">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-lg font-extrabold text-white">
+            R
+          </span>
+          <h1 className="mt-4 font-[family-name:var(--font-display)] text-2xl font-bold text-fg">
+            R&amp;R Admin
+          </h1>
+          <p className="mt-1 text-sm text-muted">Sign in to manage orders, brands and site content.</p>
+        </div>
         <LoginForm />
       </div>
     </div>

@@ -4,7 +4,8 @@ import Image from "next/image";
 import { useActionState, useState } from "react";
 import { saveBrandProductsAction, } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
-import { FormMessage, SubmitButton, TextArea, TextInput } from "@/components/admin/Form";
+import { shrinkImages, uploadBytes, UPLOAD_BUDGET_BYTES } from "@/lib/shrink-images";
+import { FormMessage, ImageInput, SubmitButton, TextArea, TextInput } from "@/components/admin/Form";
 import type { Brand, BrandProduct, StoreCategory } from "@/lib/content";
 import { formatPHP } from "@/lib/format";
 import { Section } from "./Section";
@@ -16,7 +17,25 @@ export function ProductsEditor({
   brand: Brand;
   categories: StoreCategory[];
 }) {
-  const [state, action] = useActionState<ActionState, FormData>(saveBrandProductsAction, {});
+  // Photos are shrunk in the browser first: a row's main image plus several extra photos easily
+  // tops the 6 MB Server Action body limit, and an over-limit request crashes the page rather than
+  // returning an error. Running it inside the action keeps the Save button pending throughout.
+  const [state, action] = useActionState<ActionState, FormData>(async (prev, form) => {
+    const small = await shrinkImages(form);
+    const bytes = uploadBytes(small);
+    if (bytes > UPLOAD_BUDGET_BYTES) {
+      return {
+        error:
+          `These photos add up to ${(bytes / 1024 / 1024).toFixed(1)} MB, more than one save can ` +
+          `upload. Save a few at a time.`,
+      };
+    }
+    try {
+      return await saveBrandProductsAction(prev, small);
+    } catch {
+      return { error: "Could not save — the upload may be too large. Try saving fewer photos at once." };
+    }
+  }, {});
   const [dirty, setDirty] = useState(false);
 
   return (
@@ -35,9 +54,9 @@ export function ProductsEditor({
           initial={brand.products}
           categories={categories}
           dirty={dirty}
+          state={state}
           onDirty={() => setDirty(true)}
         />
-        <FormMessage state={state} />
       </form>
     </Section>
   );
@@ -62,17 +81,29 @@ function ProductRows({
   initial,
   categories,
   dirty,
+  state,
   onDirty,
 }: {
   initial: BrandProduct[];
   categories: StoreCategory[];
   dirty: boolean;
+  state: ActionState;
   /** Reordering is React state, so it never fires the form's onInput — tell the parent by hand. */
   onDirty: () => void;
 }) {
   const [rows, setRows] = useState<Row[]>(
     initial.map((p) => ({ ...p, key: p.id || crypto.randomUUID() })),
   );
+  // Narrows what's SHOWN, never what's posted: filtered-out rows get the `hidden` attribute and
+  // stay in the form, because the action rebuilds the product list from every row by index.
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const categoryName = (slug?: string) => categories.find((c) => c.slug === slug)?.name ?? "";
+  const matches = (row: Row) =>
+    !needle ||
+    row.name.toLowerCase().includes(needle) ||
+    categoryName(row.category).toLowerCase().includes(needle);
+  const shown = rows.filter(matches).length;
 
   function commit(next: Row[]) {
     setRows(next);
@@ -163,9 +194,43 @@ function ProductRows({
 
   return (
     <div className="space-y-3">
+      {rows.length > 5 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-0 flex-1 sm:max-w-sm">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-light"
+            >
+              <path d="m21 21-4.3-4.3M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            {/* No `name`, so it never posts; stopPropagation so typing here isn't an "edit". */}
+            <TextInput
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onInput={(e) => e.stopPropagation()}
+              placeholder="Find a product by name or category"
+              aria-label="Find a product"
+              className="pl-9"
+            />
+          </div>
+          {needle && (
+            <span className="text-sm text-muted">
+              {shown} of {rows.length} shown
+            </span>
+          )}
+        </div>
+      )}
+
       {rows.map((row, index) => (
         <ProductRow
           key={row.key}
+          hidden={!matches(row)}
+          categoryName={categoryName(row.category)}
           row={row}
           index={index}
           total={rows.length}
@@ -182,9 +247,18 @@ function ProductRows({
         />
       ))}
 
+      {needle && shown === 0 && (
+        <p className="rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-sm text-muted">
+          No products match “{query.trim()}”.
+        </p>
+      )}
+
       <button
         type="button"
-        onClick={add}
+        onClick={() => {
+          setQuery("");
+          add();
+        }}
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong bg-surface px-4 py-3 text-sm font-semibold text-brand-700 hover:border-brand-400 hover:bg-brand-50"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -194,12 +268,16 @@ function ProductRows({
       </button>
 
       {/* Inside the form on purpose — a submit button outside it stops submitting. */}
-      <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-6 flex flex-wrap items-center gap-3 border-t border-line bg-surface/95 px-6 py-3 backdrop-blur">
-        <SubmitButton />
+      <div className="sticky bottom-0 z-10 -mx-5 -mb-5 mt-6 flex flex-wrap items-center gap-3 rounded-b-2xl border-t border-line bg-surface/95 px-5 py-3 backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6">
+        <SubmitButton>Save products</SubmitButton>
         <span className="text-xs text-muted">
           {rows.length} product{rows.length === 1 ? "" : "s"}
         </span>
-        {dirty && <span className="text-xs font-medium text-warn">Unsaved changes</span>}
+        {dirty ? (
+          <span className="text-xs font-medium text-warn">Unsaved changes</span>
+        ) : (
+          <FormMessage state={state} inline />
+        )}
       </div>
     </div>
   );
@@ -244,6 +322,8 @@ function ReorderButton({
 
 /** One product: a collapsed summary line that expands to the full editor. */
 function ProductRow({
+  hidden,
+  categoryName,
   row,
   index,
   total,
@@ -258,6 +338,9 @@ function ProductRow({
   moveToTop,
   reorder,
 }: {
+  /** Filtered out by the search box — still rendered, so it still posts. */
+  hidden: boolean;
+  categoryName: string;
   row: Row;
   index: number;
   total: number;
@@ -290,6 +373,7 @@ function ProductRow({
 
   return (
     <details
+      hidden={hidden}
       open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
       draggable={dragEnabled}
@@ -308,8 +392,8 @@ function ProductRow({
         setOver(false);
         reorder(e.dataTransfer.getData("text/plain"), row.key);
       }}
-      className={`group rounded-xl border bg-bg ${
-        over ? "border-brand-500 ring-2 ring-brand-500/30" : "border-line"
+      className={`group rounded-xl border bg-surface transition-colors open:border-brand-200 open:shadow-sm ${
+        over ? "border-brand-500 ring-2 ring-brand-500/30" : "border-line hover:border-line-strong"
       }`}
     >
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
@@ -370,22 +454,32 @@ function ProductRow({
             <span className="m-auto text-[9px] leading-none text-muted-light">No img</span>
           )}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
-          {name.trim() || (
-            <span className="font-normal text-muted-light">
-              Untitled — add a name to keep this product
-            </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-fg">
+            {name.trim() || (
+              <span className="font-normal text-muted-light">
+                Untitled — add a name to keep this product
+              </span>
+            )}
+          </span>
+          {categoryName && (
+            <span className="block truncate text-xs text-muted">{categoryName}</span>
           )}
         </span>
-        <span className="shrink-0 text-sm font-semibold tabular-nums text-muted">
-          {row.contactSales ? "On request" : price > 0 ? formatPHP(price) : "—"}
+        {!row.inStock && (
+          <span className="hidden shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[11px] font-semibold text-muted sm:inline">
+            Out of stock
+          </span>
+        )}
+        <span className="shrink-0 text-sm font-semibold tabular-nums text-fg">
+          {row.contactSales ? (
+            <span className="font-medium text-muted">On request</span>
+          ) : price > 0 ? (
+            formatPHP(price)
+          ) : (
+            <span className="text-muted-light">No price</span>
+          )}
         </span>
-        <span
-          title={row.inStock ? "In stock" : "Out of stock"}
-          className={`h-2 w-2 shrink-0 rounded-full ${
-            row.inStock ? "bg-success" : "bg-muted-light"
-          }`}
-        />
         <svg
           width="16"
           height="16"
@@ -411,26 +505,16 @@ function ProductRow({
         <input type="hidden" name="productInStock" value={row.inStock ? "1" : "0"} />
         <input type="hidden" name="productContactSales" value={row.contactSales ? "1" : "0"} />
 
-        <div className="flex gap-4">
-          <div className="w-28 shrink-0">
-            <div className="relative aspect-square overflow-hidden rounded-lg border border-line bg-white">
-              {row.image ? (
-                <Image src={row.image} alt="" fill sizes="112px" className="object-contain p-2" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-center text-[11px] text-muted-light">
-                  No image
-                </div>
-              )}
-            </div>
-            <input
-              type="file"
-              name="productImageFile"
-              accept="image/*"
-              className="mt-2 block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs file:font-medium file:text-fg"
-            />
-          </div>
+        <div className="space-y-4">
+          {/* One `productImageFile` per row, posted even when empty, so files stay row-aligned. */}
+          <ImageInput
+            name="productImageFile"
+            shape="square"
+            current={row.image}
+            hint="Main photo · shown on cards and the product page"
+          />
 
-          <div className="min-w-0 flex-1 space-y-3">
+          <div className="min-w-0 space-y-3">
             {/* No `required`: the action treats a blank name as "row removed", and a required
                 control inside a collapsed row blocks submit with an unfocusable-control error. */}
             <TextInput
@@ -508,7 +592,7 @@ function ProductRow({
               </label>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <label className="flex items-center gap-2 text-sm text-fg">
                   <input type="checkbox" checked={row.inStock} onChange={() => toggleStock(row.key)} />
@@ -536,7 +620,7 @@ function ProductRow({
 
         {/* Collapsible extra content for the product's detail page. Kept in the DOM even when
             collapsed so its fields stay row-aligned with the other `product*` arrays on save. */}
-        <details className="mt-3 rounded-lg border border-line bg-surface px-3 py-2">
+        <details className="mt-4 rounded-lg border border-line bg-bg/60 px-3 py-2">
           <summary className="cursor-pointer text-sm font-medium text-muted hover:text-fg">
             More details — description, photos &amp; highlights (shown on the product page)
           </summary>
@@ -588,13 +672,14 @@ function ProductRow({
                   ))}
                 </ul>
               )}
-              <input
-                type="file"
-                name={`productGalleryFiles_${row.id}`}
-                accept="image/*"
-                multiple
-                className="mt-2 block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-elevated file:px-2 file:py-1 file:text-xs file:font-medium file:text-fg"
-              />
+              <div className="mt-2">
+                <ImageInput
+                  name={`productGalleryFiles_${row.id}`}
+                  multiple
+                  shape="square"
+                  hint="Add more photos for the product page"
+                />
+              </div>
             </div>
           </div>
         </details>

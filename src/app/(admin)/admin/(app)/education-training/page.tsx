@@ -16,15 +16,6 @@ export default async function AdminEducationTrainingPage() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">
-        Education &amp; Training
-      </h1>
-      <p className="mt-2 text-muted">
-        Seminars, workshops and demos listed on the storefront&apos;s Education &amp; Training page.
-        Changes appear immediately. Campaigns dated before today stay here for reference but drop
-        off the storefront automatically.
-      </p>
-
       <SessionsManager sessions={sessions} linkOptions={linkOptions} />
     </div>
   );

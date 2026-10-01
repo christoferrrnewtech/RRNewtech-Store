@@ -11,6 +11,10 @@
  * abandoned checkout never loses what the customer typed and every payment is reconcilable
  * against a real record. `applyOrderPayment` is the only thing that moves it to paid.
  *
+ * The customer can act on their own unpaid order in exactly two ways, both from /account and the
+ * pay page: `renewOrderCheckout` swaps a dead payment link for a fresh one, and
+ * `cancelUnpaidOrder` withdraws the order.
+ *
  * The confirmation page reads an order by document id (see checkout/confirmed/page.tsx); nothing
  * else on the storefront renders orders, so writes never revalidate a public path.
  */
@@ -18,7 +22,7 @@
 import "server-only";
 import { COLLECTIONS, getDb, storeCollection } from "@/lib/firebase";
 import { makeRef } from "@/lib/reference";
-import { ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
+import { isCustomerCancellable, ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { PAYMENT_STATUSES, type PaymentStatus } from "@/lib/payment-status";
 import { PAY_WINDOW_MS } from "@/lib/pay-window";
 import { clearCustomerCart } from "@/lib/customer-cart";
@@ -99,8 +103,9 @@ export type Order = {
   /** The hosted payment page. Staff can re-send it to a customer while the order is unpaid. */
   checkoutUrl: string;
   /**
-   * Epoch ms after which the session is treated as dead and the customer must place a new order
-   * (which reprices against the catalog). Stamped at creation, never extended.
+   * Epoch ms after which the session is treated as dead. Stamped at creation, and re-stamped only
+   * by `renewOrderCheckout`, alongside the NEW session it belongs to — a window is never extended
+   * on a session that already exists.
    *
    * Stored on the ORDER rather than only in the resume cookie because that cookie is
    * client-controlled and disposable — a customer who cleared cookies would otherwise own a
@@ -455,8 +460,10 @@ export async function setOrderPaymentError(id: string, message: string): Promise
  *
  * Returns true only when something actually changed, so callers know whether to revalidate.
  *
- * This and nothing else may write `paymentStatus`. The admin's manual "mark as paid" goes through
- * here too, precisely so it obeys the same rules.
+ * This and nothing else may move `paymentStatus` FORWARD. The admin's manual "mark as paid" goes
+ * through here too, precisely so it obeys the same rules. The one other writer is
+ * `renewOrderCheckout`, which moves an expired or failed order back to `awaiting_payment` — and
+ * only together with a brand-new session, never on its own.
  *
  * IT ALSO RETIRES THE CART, and that placement is the point. "The customer paid" is the only event
  * that should empty a cart, and it is an event the SERVER learns about — from the webhook, from
@@ -515,4 +522,83 @@ export async function applyOrderPayment(
   }
 
   return changed;
+}
+
+/**
+ * Point an unpaid order at a NEW PayMongo session, opening a fresh payment window.
+ *
+ * Lets a customer pay for the order they already placed after its link lapsed, instead of
+ * checking out again. Prices are the order's own, as they were when it was placed — the caller
+ * builds the session from the stored lines, not from the catalog.
+ *
+ * THE CALLER MUST HAVE KILLED THE OLD SESSION FIRST. The webhook refuses a payment whose session id
+ * isn't the order's current one (see resolveOrder in the webhook route), so a late payment through
+ * the old link after this swap would be taken by PayMongo and never recorded here.
+ *
+ * Transactional, and refused (returns false) when:
+ *   - the order was paid meanwhile — `paid` stays terminal;
+ *   - it was cancelled meanwhile;
+ *   - its session is no longer `previousSessionId` — a second click renewed it first, and the
+ *     caller should expire the session it just created rather than orphan the winner's.
+ */
+export async function renewOrderCheckout(
+  id: string,
+  previousSessionId: string,
+  next: { checkoutSessionId: string; checkoutUrl: string; checkoutExpiresAt: number },
+): Promise<boolean> {
+  const ref = storeCollection(COLLECTIONS.orders).doc(id);
+
+  return getDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return false;
+
+    const data = snap.data() ?? {};
+    if (toPaymentStatus(data.paymentStatus) === "paid") return false;
+    if (toOrderStatus(data.status) === "cancelled") return false;
+    if (str(data.checkoutSessionId) !== previousSessionId) return false;
+
+    tx.update(ref, {
+      paymentStatus: "awaiting_payment" satisfies PaymentStatus,
+      checkoutSessionId: next.checkoutSessionId,
+      checkoutUrl: next.checkoutUrl,
+      checkoutExpiresAt: next.checkoutExpiresAt,
+      paidAt: 0,
+      paymentMethod: "",
+      paymentError: "",
+    });
+    return true;
+  });
+}
+
+/**
+ * Cancel an order on the customer's say-so. Returns false when it is no longer cancellable.
+ *
+ * Re-checks `isCustomerCancellable` inside the transaction, so a payment or a staff status change
+ * landing between the customer's click and this write wins. As with renewal, the caller kills the
+ * PayMongo session first.
+ *
+ * An unpaid payment state is closed off as `expired` in the same write. Leaving it at
+ * `awaiting_payment` would keep the order in the admin's "Awaiting payment" queue, and show the
+ * customer a cancelled order that still seems to want their money.
+ */
+export async function cancelUnpaidOrder(id: string): Promise<boolean> {
+  const ref = storeCollection(COLLECTIONS.orders).doc(id);
+
+  return getDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return false;
+
+    const data = snap.data() ?? {};
+    const current = {
+      status: toOrderStatus(data.status),
+      paymentStatus: toPaymentStatus(data.paymentStatus),
+    };
+    if (!isCustomerCancellable(current)) return false;
+
+    tx.update(ref, {
+      status: "cancelled" satisfies OrderStatus,
+      paymentStatus: "expired" satisfies PaymentStatus,
+    });
+    return true;
+  });
 }

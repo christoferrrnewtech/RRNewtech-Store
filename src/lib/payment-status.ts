@@ -12,7 +12,9 @@
 
 /**
  * Every transition goes through `applyOrderPayment` in orders.ts — that is the invariant, and it
- * holds no matter how many callers there are. Today they are: the PayMongo webhook, the
+ * holds no matter how many callers there are. The single exception runs the other way:
+ * `renewOrderCheckout` puts an expired or failed order back to `awaiting_payment`, and only
+ * together with the new PayMongo session that makes it payable again. Today they are: the PayMongo webhook, the
  * reconcile-on-read path, `/checkout/pay`'s lazy expiry, and the admin's manual "mark as paid".
  * Nothing writes this field directly.
  */

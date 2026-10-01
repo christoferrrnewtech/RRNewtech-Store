@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { requireAdmin } from "@/lib/auth";
 import { getCategories, getCategoriesWithCounts } from "@/lib/content";
 import { HOME_CATEGORY_LIMIT } from "@/components/home/CategoryGrid";
+import Link from "next/link";
+import { PageHeader } from "@/components/admin/Panel";
 import { TilesManager } from "./TilesManager";
 
 export const metadata: Metadata = { title: "Shop by category" };
@@ -27,14 +29,19 @@ export default async function AdminShopByCategoryPage() {
 
   return (
     <div>
-      <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-fg">
-        Shop by category
-      </h1>
-      <p className="mt-2 max-w-2xl text-muted">
-        The tile grid on the landing page. Add a photo to any tile here — without one it falls back
-        to a plain blue panel. Which categories appear, and in what order, follows their product
-        counts, so it isn&apos;t set by hand.
-      </p>
+      <PageHeader
+        title="Shop by category"
+        description="The tile grid on the home page. Give each tile a photo here. Which categories appear, and in what order, follows how many products they hold."
+        actions={
+          <Link
+            href="/"
+            target="_blank"
+            className="inline-flex items-center rounded-lg border border-line bg-surface px-4 py-2 text-sm font-semibold text-fg transition-colors hover:bg-elevated"
+          >
+            View home page ↗
+          </Link>
+        }
+      />
 
       <TilesManager
         shown={categories.slice(0, HOME_CATEGORY_LIMIT)}

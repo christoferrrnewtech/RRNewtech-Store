@@ -109,6 +109,20 @@ export function isPayWindowOpen(checkoutExpiresAt: number, now: number = Date.no
   return checkoutExpiresAt > now;
 }
 
+/**
+ * How long after it was placed an order can still get a fresh payment link.
+ *
+ * A renewed link charges the order's ORIGINAL prices, which is the point — the customer pays for
+ * what they ordered — but it also means a link renewed months later would sell at prices the
+ * catalog has long since left behind. Past this, the customer checks out again, which reprices.
+ */
+export const RENEW_WINDOW_DAYS = 7;
+export const RENEW_WINDOW_MS = RENEW_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+export function canRenewPayment(createdAt: number, now: number = Date.now()): boolean {
+  return Number.isFinite(createdAt) && createdAt > 0 && now - createdAt < RENEW_WINDOW_MS;
+}
+
 /** Whole minutes remaining, rounded up so "1 minute left" never renders as "0". */
 export function minutesLeft(exp: number, now: number = Date.now()): number {
   if (!Number.isFinite(exp)) return 0;

@@ -22,7 +22,12 @@
 
 import "server-only";
 import { applyOrderPayment, getOrder, type Order } from "@/lib/orders";
-import { getCheckoutSession, isPayMongoConfigured } from "@/lib/paymongo";
+import {
+  expireCheckoutSession,
+  getCheckoutSession,
+  isPayMongoConfigured,
+  isSessionPaid,
+} from "@/lib/paymongo";
 
 /**
  * Bring an order's payment state up to date with the gateway, and return the fresh order.
@@ -70,4 +75,44 @@ export async function reconcileOrderPayment(order: Order): Promise<Order> {
   }
 
   return order;
+}
+
+/**
+ * Make sure an order's current PayMongo session can no longer take money. Before renewing the
+ * link, and before a customer cancels.
+ *
+ *   "retired" — the session is dead (or never existed). Safe to replace or cancel.
+ *   "paid"    — it had already collected the money. The order is now marked paid; stop.
+ *   "busy"    — still live and PayMongo wouldn't expire it, which it refuses while a payment is in
+ *               flight. Neither replacing nor cancelling is safe; ask the customer to wait.
+ *
+ * Unlike the best-effort expiry staff cancellation uses, this one must be CONCLUSIVE. Renewing over
+ * a session that later gets paid would lose the payment — the webhook refuses a session that isn't
+ * the order's current one — and cancelling over it would leave a paid, cancelled order to refund.
+ *
+ * Gateway outages THROW, deliberately: "we couldn't tell" must not be read as "retired".
+ */
+export async function retireCheckoutSession(
+  order: Order,
+): Promise<"retired" | "paid" | "busy"> {
+  if (!order.checkoutSessionId) return "retired";
+
+  // Success means PayMongo accepted the expiry, which it refuses for a session with a paid or
+  // in-flight payment — so there is nothing left that could charge.
+  if (await expireCheckoutSession(order.checkoutSessionId)) return "retired";
+
+  // Refused: find out why.
+  const session = await getCheckoutSession(order.checkoutSessionId);
+  if (!session) return "retired";
+
+  if (isSessionPaid(session)) {
+    await applyOrderPayment(order.id, {
+      paymentStatus: "paid",
+      paidAt: session.paidAt,
+      paymentMethod: session.paymentMethod,
+    });
+    return "paid";
+  }
+
+  return session.status === "expired" ? "retired" : "busy";
 }

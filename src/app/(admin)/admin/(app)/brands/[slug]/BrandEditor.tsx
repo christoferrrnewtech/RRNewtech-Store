@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   deleteBrandAction,
   saveBrandAboutAction,
@@ -17,13 +17,16 @@ import {
 import type { ActionState } from "@/lib/form-data";
 import {
   Field,
-  FormMessage,
+  ImageInput,
   RepeatablePairs,
   RepeatableText,
+  SaveBar,
+  Select,
   SubmitButton,
   TextArea,
   TextInput,
 } from "@/components/admin/Form";
+import { Panel } from "@/components/admin/Panel";
 import type { Brand } from "@/lib/content";
 import { BRAND_GROUPS } from "@/lib/constants";
 import { Section } from "./Section";
@@ -43,7 +46,7 @@ export function BrandEditor({
   canDelete: boolean;
 }) {
   return (
-    <div className="mt-8 space-y-6">
+    <div className="mt-6 space-y-6">
       <StatusSection brand={brand} />
       {/* Both are small image uploads — paired so the whole image step fits one screen. */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -58,17 +61,23 @@ export function BrandEditor({
       <CtaSection brand={brand} />
 
       {canDelete && (
-        <section className="rounded-2xl border border-danger/30 bg-surface p-6">
-          <h2 className="font-semibold text-fg">Delete this brand</h2>
-          <p className="mt-1 text-sm text-muted">
-            Removes {brand.name} from the storefront and from every marketing account&rsquo;s
-            access. Uploaded images stay on disk. This can&rsquo;t be undone.
-          </p>
-          <form action={deleteBrandAction} className="mt-4">
+        <Panel
+          tone="danger"
+          title="Delete this brand"
+          description={`Removes ${brand.name} from the storefront and from every marketing account’s access. Uploaded images stay on disk. This can’t be undone.`}
+        >
+          <form
+            action={deleteBrandAction}
+            onSubmit={(e) => {
+              if (!confirm(`Delete ${brand.name}? This can't be undone.`)) e.preventDefault();
+            }}
+          >
             <input type="hidden" name="slug" value={brand.slug} />
-            <SubmitButton variant="danger">Delete {brand.name}</SubmitButton>
+            <SubmitButton variant="danger" pendingLabel="Deleting…">
+              Delete {brand.name}
+            </SubmitButton>
           </form>
-        </section>
+        </Panel>
       )}
     </div>
   );
@@ -79,40 +88,39 @@ function StatusSection({ brand }: { brand: Brand }) {
   return (
     <Section
       id="sec-visibility"
-      step="—"
       title="Visibility"
-      hint="Drafts are hidden everywhere on the storefront and the page returns 404."
+      hint="Drafts are hidden everywhere on the storefront, and their page returns 404."
     >
-      <form action={action} className="flex flex-wrap items-end gap-4">
+      <form action={action}>
         <input type="hidden" name="slug" value={brand.slug} />
-        <Field label="Status">
-          <select
-            name="status"
-            defaultValue={brand.status}
-            className="rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-          >
-            <option value="draft">Draft — hidden</option>
-            <option value="published">Published — live</option>
-          </select>
-        </Field>
-        <label className="flex items-center gap-2 py-2.5 text-sm text-fg">
-          <input
-            type="checkbox"
-            name="featuredOnHome"
-            value="1"
-            defaultChecked={brand.featuredOnHome !== false}
-            className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500/20"
-          />
-          Feature this brand on the homepage
-        </label>
-        <SubmitButton>Update status</SubmitButton>
+        <div className="grid gap-5 md:grid-cols-[16rem_minmax(0,1fr)]">
+          <Field label="Status">
+            <Select name="status" defaultValue={brand.status}>
+              <option value="draft">Draft (hidden)</option>
+              <option value="published">Published (live)</option>
+            </Select>
+          </Field>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-bg/60 p-4 has-[:checked]:border-brand-300 has-[:checked]:bg-brand-50/50">
+            <input
+              type="checkbox"
+              name="featuredOnHome"
+              value="1"
+              defaultChecked={brand.featuredOnHome !== false}
+              className="mt-0.5 h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-500/20"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-fg">
+                Feature this brand on the homepage
+              </span>
+              <span className="mt-0.5 block text-sm text-muted">
+                Gives it its own product shelf in the homepage “By Brand” view, once it&apos;s
+                published and has a product. Its brand page stays live either way.
+              </span>
+            </span>
+          </label>
+        </div>
+        <SaveBar state={state} label="Update visibility" />
       </form>
-      <p className="mt-2 text-sm text-muted">
-        When featured, this brand gets its own product shelf on the homepage “By Brand” view (a
-        published brand with at least one product). Uncheck to keep it out of the homepage shelves —
-        its brand page stays live.
-      </p>
-      <FormMessage state={state} />
     </Section>
   );
 }
@@ -121,25 +129,16 @@ function HeroSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandHeroAction, {});
   return (
     <Section id="sec-hero" step="1" title="Hero banner" hint="Wide image across the top of the brand page. Optional.">
-      {brand.heroImage && (
-        <div className="relative mb-4 h-28 w-full max-w-sm overflow-hidden rounded-xl border border-line bg-elevated">
-          <Image src={brand.heroImage} alt="" fill sizes="384px" className="object-cover" />
-        </div>
-      )}
-      <form action={action} className="space-y-4">
+      <form action={action}>
         <input type="hidden" name="slug" value={brand.slug} />
-        <Field label="Upload image" hint="PNG, JPG or WebP · up to 5 MB. Use 1489 × 551 (or any 2.7:1 crop) — that's the band's exact shape, so nothing gets cut off.">
-          <TextInput type="file" name="heroImage" accept="image/*" />
-        </Field>
-        <div className="flex items-center gap-4">
-          <SubmitButton />
-          {brand.heroImage && (
-            <label className="flex items-center gap-2 text-sm text-muted">
-              <input type="checkbox" name="remove" value="1" /> Remove current hero
-            </label>
-          )}
-        </div>
-        <FormMessage state={state} />
+        <ImageInput
+          name="heroImage"
+          current={brand.heroImage}
+          removeName="remove"
+          removeLabel="Remove the current hero"
+          hint="1489 × 551 (2.7:1) fits the band exactly · up to 5 MB"
+        />
+        <SaveBar state={state} />
       </form>
     </Section>
   );
@@ -149,16 +148,16 @@ function LogoSection({ brand }: { brand: Brand }) {
   const [state, action] = useActionState<ActionState, FormData>(saveBrandLogoAction, {});
   return (
     <Section id="sec-logo" step="2" title="Brand logo" hint="Shown on the brand card, the brand page and product cards.">
-      <div className="relative mb-4 h-28 w-full max-w-sm overflow-hidden rounded-xl border border-line bg-white">
-        <Image src={brand.logo} alt={brand.name} fill sizes="384px" className="object-contain p-4" />
-      </div>
-      <form action={action} className="space-y-4">
+      <form action={action}>
         <input type="hidden" name="slug" value={brand.slug} />
-        <Field label="Replace logo" hint="PNG, JPG or WebP · up to 5 MB.">
-          <TextInput type="file" name="logo" accept="image/*" required />
-        </Field>
-        <SubmitButton>Upload logo</SubmitButton>
-        <FormMessage state={state} />
+        <ImageInput
+          name="logo"
+          shape="logo"
+          current={brand.logo}
+          required
+          hint="PNG, JPG or WebP · up to 5 MB"
+        />
+        <SaveBar state={state} label="Upload logo" pendingLabel="Uploading…" />
       </form>
     </Section>
   );
@@ -170,29 +169,27 @@ function AboutSection({ brand }: { brand: Brand }) {
     <Section id="sec-about" step="3" title="About the brand" hint="The name, headline and body copy for this brand.">
       <form action={action} className="space-y-5">
         <input type="hidden" name="slug" value={brand.slug} />
-        <Field label="Brand name">
-          <TextInput name="name" defaultValue={brand.name} required />
-        </Field>
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field label="Brand name">
+            <TextInput name="name" defaultValue={brand.name} required />
+          </Field>
+          <Field label="Group" hint="The tag on the brand card, and the Shop-by-Brand filter.">
+            <Select name="group" defaultValue={brand.group}>
+              {BRAND_GROUPS.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
         <Field label="Tagline" hint="One line on the brand card and hero — the reason a clinic cares.">
           <TextInput name="tagline" defaultValue={brand.tagline} />
-        </Field>
-        <Field label="Group" hint="Drives the category tag on the brand card and the Shop-by-Brand filters.">
-          <select
-            name="group"
-            defaultValue={brand.group}
-            className="rounded-lg border border-line bg-surface px-3.5 py-2.5 text-sm text-fg outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-          >
-            {BRAND_GROUPS.map((g) => (
-              <option key={g.key} value={g.key}>
-                {g.label}
-              </option>
-            ))}
-          </select>
         </Field>
         <Field label="Short blurb" hint="1–2 sentences under the hero. Also used as the page description in search results.">
           <TextArea name="blurb" rows={2} defaultValue={brand.blurb} />
         </Field>
-        <Field label="Body paragraphs">
+        <Field label="Body paragraphs" group>
           <RepeatableText
             name="about"
             initial={brand.about}
@@ -200,8 +197,7 @@ function AboutSection({ brand }: { brand: Brand }) {
             placeholder="Tell the story of this brand…"
           />
         </Field>
-        <SubmitButton />
-        <FormMessage state={state} />
+        <SaveBar state={state} />
       </form>
     </Section>
   );
@@ -225,8 +221,7 @@ function VideoSection({ brand }: { brand: Brand }) {
             placeholder="https://www.youtube.com/watch?v=…"
           />
         </Field>
-        <SubmitButton />
-        <FormMessage state={state} />
+        <SaveBar state={state} />
       </form>
     </Section>
   );
@@ -240,38 +235,65 @@ function GallerySection({ brand }: { brand: Brand }) {
         <input type="hidden" name="slug" value={brand.slug} />
 
         {brand.gallery.length > 0 && (
-          <ul className="space-y-3">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {brand.gallery.map((img) => (
-              <li key={img.src} className="flex items-center gap-3 rounded-xl border border-line bg-bg p-3">
-                <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-elevated">
-                  <Image src={img.src} alt="" fill sizes="96px" className="object-cover" />
-                </div>
-                {/* Unchecking "keep" blanks the src, which removes the row on save. */}
-                <input type="hidden" name="gallerySrc" value={img.src} />
-                <TextInput
-                  name="galleryCaption"
-                  defaultValue={img.caption ?? ""}
-                  placeholder="Caption (optional)"
-                  className="flex-1"
-                />
-              </li>
+              <GalleryItem key={img.src} src={img.src} caption={img.caption ?? ""} />
             ))}
           </ul>
         )}
 
-        <Field label="Add images" hint="Select one or more. PNG, JPG or WebP · up to 5 MB each.">
-          <TextInput
-            type="file"
-            name="newImages"
-            accept="image/*"
-            multiple
-          />
+        <Field label="Add images" hint="Select one or more. PNG, JPG or WebP · up to 5 MB each." group>
+          <ImageInput name="newImages" multiple hint="New images are added after the ones above." />
         </Field>
 
-        <SubmitButton />
-        <FormMessage state={state} />
+        <SaveBar state={state} label="Save gallery" />
       </form>
     </Section>
+  );
+}
+
+/**
+ * One saved gallery image: thumbnail, caption, and a remove toggle.
+ *
+ * Removal posts a BLANK `gallerySrc`, which `saveBrandGalleryAction` drops — the row still posts so
+ * the src and caption lists stay aligned by index. Nothing is removed until the gallery is saved.
+ */
+function GalleryItem({ src, caption }: { src: string; caption: string }) {
+  const [removed, setRemoved] = useState(false);
+  return (
+    <li
+      className={`overflow-hidden rounded-xl border bg-bg/60 transition-opacity ${
+        removed ? "border-danger/40 opacity-60" : "border-line"
+      }`}
+    >
+      <div className="relative aspect-[16/10] bg-elevated">
+        <Image src={src} alt="" fill sizes="(min-width: 1280px) 260px, 45vw" className="object-cover" />
+        {removed && (
+          <span className="absolute inset-0 flex items-center justify-center bg-surface/70 text-sm font-semibold text-danger">
+            Removed on save
+          </span>
+        )}
+      </div>
+      <input type="hidden" name="gallerySrc" value={removed ? "" : src} />
+      <div className="flex items-center gap-2 p-2.5">
+        <TextInput
+          name="galleryCaption"
+          defaultValue={caption}
+          placeholder="Caption (optional)"
+          aria-label="Caption"
+          className="flex-1 py-2"
+        />
+        <button
+          type="button"
+          onClick={() => setRemoved((r) => !r)}
+          className={`shrink-0 rounded-lg px-2.5 py-2 text-xs font-semibold ${
+            removed ? "text-fg hover:bg-elevated" : "text-muted hover:bg-danger/5 hover:text-danger"
+          }`}
+        >
+          {removed ? "Undo" : "Remove"}
+        </button>
+      </div>
+    </li>
   );
 }
 
@@ -288,12 +310,36 @@ function ProductsLink({ brand }: { brand: Brand }) {
       title="Products"
       hint="The products shown on this brand's page — edited on their own page, since there can be a lot of them."
     >
-      <Link
-        href={`/admin/brands/${brand.slug}/products`}
-        className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
-      >
-        Edit {count} product{count === 1 ? "" : "s"} →
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-bg/60 p-4">
+        <div className="flex items-center gap-3">
+          {/* A peek at what's there, so the card says more than a number. */}
+          <div className="flex -space-x-2">
+            {brand.products
+              .filter((p) => p.image)
+              .slice(0, 4)
+              .map((p) => (
+                <span
+                  key={p.id}
+                  className="relative h-10 w-10 overflow-hidden rounded-lg border-2 border-surface bg-white"
+                >
+                  <Image src={p.image} alt="" fill sizes="40px" className="object-contain p-0.5" />
+                </span>
+              ))}
+          </div>
+          <p className="text-sm text-muted">
+            <span className="font-semibold text-fg">
+              {count} product{count === 1 ? "" : "s"}
+            </span>{" "}
+            on this brand&apos;s page
+          </p>
+        </div>
+        <Link
+          href={`/admin/brands/${brand.slug}/products`}
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+        >
+          Manage products →
+        </Link>
+      </div>
     </Section>
   );
 }
@@ -310,8 +356,7 @@ function ReasonsSection({ brand }: { brand: Brand }) {
       <form action={action} className="space-y-5">
         <input type="hidden" name="slug" value={brand.slug} />
         <RepeatablePairs initial={brand.whyChoose} addLabel="Add reason" />
-        <SubmitButton />
-        <FormMessage state={state} />
+        <SaveBar state={state} />
       </form>
     </Section>
   );
@@ -344,8 +389,7 @@ function CtaSection({ brand }: { brand: Brand }) {
         <Field label="Website button label">
           <TextInput name="buttonLabel" defaultValue={brand.cta.buttonLabel} />
         </Field>
-        <SubmitButton />
-        <FormMessage state={state} />
+        <SaveBar state={state} />
       </form>
     </Section>
   );
