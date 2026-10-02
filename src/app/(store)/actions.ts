@@ -39,6 +39,8 @@ import {
 import { reconcileOrderPayment, retireCheckoutSession } from "@/lib/payments";
 import { createInquiry, type InquiryProduct } from "@/lib/inquiries";
 import { notifyNewInquiry, notifyOrder } from "@/lib/notifications";
+// HUBSPOT-DISABLED — on hold; see docs/hubspot-integration.md to turn it back on.
+// import { syncInquiryToHubSpot } from "@/lib/hubspot";
 import { type InquiryKind } from "@/lib/inquiry-status";
 import { getSessionCustomer } from "@/lib/customer-auth";
 import { rememberOrderAddress } from "@/lib/customer-addresses";
@@ -738,11 +740,30 @@ async function resolveProduct(
   };
 }
 
+/**
+ * Where a sent inquiry lands. A real page rather than a swapped-in confirmation, so Google Ads and
+ * Meta can count the conversion by URL. `ref` is what TrackInquiry keys its one-per-inquiry guard
+ * on; `type=product` marks a /contact message sent from a product's "Ask about this product".
+ */
+function inquirySentPath(kind: InquiryKind, ref?: string, fromProduct = false): string {
+  const params = new URLSearchParams();
+  if (ref) params.set("ref", ref);
+  if (kind === "message" && fromProduct) params.set("type", "product");
+  const query = params.size ? `?${params}` : "";
+  return `${kind === "quote" ? "/request-quote" : "/contact"}/thank-you${query}`;
+}
+
 export async function sendInquiryAction(
   _prev: ActionState,
   form: FormData,
 ): Promise<ActionState> {
-  if (isBot(form)) return { ok: "Thanks — we'll get back to you shortly." };
+  // Which form this came from. Matched against the vocabulary rather than stored as posted — a
+  // hand-crafted POST must not be able to invent a kind the admin can't render.
+  const kind: InquiryKind = text(form, "kind") === "quote" ? "quote" : "message";
+
+  // A bot gets the same thank-you page a person does, so the honeypot doesn't give itself away —
+  // but no `ref`, so TrackInquiry fires no conversion for it.
+  if (isBot(form)) redirect(inquirySentPath(kind));
 
   const name = cappedText(form, "name", MAX_NAME);
   // Lower-cased for the same reason as an order's — see placeOrderAction.
@@ -753,14 +774,12 @@ export async function sendInquiryAction(
   const clinic = cappedText(form, "clinic", MAX_NAME);
   const message = cappedText(form, "message", MAX_MESSAGE);
 
-  // Which form this came from. Matched against the vocabulary rather than stored as posted — a
-  // hand-crafted POST must not be able to invent a kind the admin can't render.
-  const kind: InquiryKind = text(form, "kind") === "quote" ? "quote" : "message";
-
   if (!name) return { error: "Enter your name." };
   if (!looksLikeEmail(email)) return { error: "Enter a valid email address." };
   if (!message) return { error: "Add a message so we know how to help." };
 
+  // Assigned inside the try, used after it — see placeOrderAction on why redirect() can't go inside.
+  let destination: string;
   try {
     const product = await resolveProduct(text(form, "brand"), text(form, "product"));
     // Stamped from the session cookie, never from the form — the client cannot claim a uid, and a
@@ -778,9 +797,12 @@ export async function sendInquiryAction(
       product,
       userId: session?.uid,
     });
-    // After the write, and never fatal (`sendEmail` doesn't throw): the inquiry is safely stored
-    // and in the admin queue whether or not the email to sales goes out.
+    // After the write, and never fatal (neither throws): the inquiry is safely stored and in the
+    // admin queue whether or not the email to sales goes out or HubSpot accepts the contact.
+    // HUBSPOT-DISABLED — on hold; swap the two lines below to turn the sync back on.
     await notifyNewInquiry(inquiry);
+    // await Promise.all([notifyNewInquiry(inquiry), syncInquiryToHubSpot(inquiry)]);
+    destination = inquirySentPath(kind, inquiry.ref, Boolean(product));
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "Could not send your message. Please try again.",
@@ -788,5 +810,5 @@ export async function sendInquiryAction(
   }
 
   revalidatePath("/admin/inquiries");
-  return { ok: "Thanks — we'll get back to you shortly." };
+  redirect(destination);
 }

@@ -95,3 +95,12 @@ env:
     value: "R&R Newtech Dental <notifications@rrnewtechdental.com>"
     availability: [RUNTIME]
 
+  # --- HubSpot CRM (inquiries → contacts / leads) ---
+  # HUBSPOT-DISABLED — on hold; see docs/hubspot-integration.md to turn it back on.
+  # RUNTIME only, like Resend. The secret must exist BEFORE this file is rolled out — a rollout that
+  # references a missing secret fails. Create it with the production HubSpot account's key:
+  #   firebase apphosting:secrets:set HUBSPOT_ACCESS_TOKEN
+  # - variable: HUBSPOT_ACCESS_TOKEN
+  #   secret: HUBSPOT_ACCESS_TOKEN
+  #   availability: [RUNTIME]
+

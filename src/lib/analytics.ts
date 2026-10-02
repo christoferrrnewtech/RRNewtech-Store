@@ -115,18 +115,25 @@ export function trackPurchase(order: { ref: string; value: number; itemCount: nu
   });
 }
 
-/** Quote request submitted — the B2B conversion, since equipment rarely goes through the cart. */
-export function trackLead(): void {
+/**
+ * Quote request submitted — the B2B conversion, since equipment rarely goes through the cart.
+ * Fired from /request-quote/thank-you; `ref` is the inquiry reference, used as the Pixel eventID so
+ * Meta drops a repeat if the page is reloaded past TrackInquiry's guard.
+ */
+export function trackLead(ref: string): void {
   if (typeof window === "undefined") return;
-  window.fbq?.("track", "Lead", { content_category: "quote" });
+  window.fbq?.("track", "Lead", { content_category: "quote" }, { eventID: `lead-${ref}` });
   window.gtag?.("event", "generate_lead", { lead_source: "quote" });
 }
 
-/** Contact form submitted. */
-export function trackContact(): void {
+/**
+ * Contact form submitted, from /contact/thank-you. `source` separates a general message from an
+ * "Ask about this product" inquiry, which is the one worth bidding on. `ref` as in trackLead.
+ */
+export function trackContact(ref: string, source: "contact" | "product"): void {
   if (typeof window === "undefined") return;
-  window.fbq?.("track", "Contact");
-  window.gtag?.("event", "contact");
+  window.fbq?.("track", "Contact", { content_category: source }, { eventID: `contact-${ref}` });
+  window.gtag?.("event", "contact", { contact_source: source });
 }
 
 function gaItem(item: AnalyticsItem) {
