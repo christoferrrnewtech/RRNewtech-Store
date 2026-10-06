@@ -1,10 +1,11 @@
-# HubSpot integration (on hold)
+# HubSpot integration
 
-**Status:** built and type-checked, then switched off before it was tested or deployed, because the
-boss put it on hold. Nothing sends data to HubSpot right now. Inquiries still save to Firestore and
-still send the staff email, the same as before.
+**Status:** Step 1 is done: the code is switched back on. Production still doesn't sync, because
+`HUBSPOT_ACCESS_TOKEN` isn't in Firebase yet and `apphosting.yaml` still has the secret commented
+out. With no token set, the sync is skipped and logged. Inquiries still save to Firestore and still
+send the staff email. Next: Step 2 (local test), then Step 3 (go live).
 
-Every disabled spot is marked `HUBSPOT-DISABLED`. To list them all:
+The one remaining disabled spot (`apphosting.yaml`) is marked `HUBSPOT-DISABLED`. To find it:
 
 ```bash
 grep -rn "HUBSPOT-DISABLED" . --exclude-dir=node_modules --exclude-dir=.next

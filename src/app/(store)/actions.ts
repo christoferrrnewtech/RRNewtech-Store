@@ -39,8 +39,7 @@ import {
 import { reconcileOrderPayment, retireCheckoutSession } from "@/lib/payments";
 import { createInquiry, type InquiryProduct } from "@/lib/inquiries";
 import { notifyNewInquiry, notifyOrder } from "@/lib/notifications";
-// HUBSPOT-DISABLED — on hold; see docs/hubspot-integration.md to turn it back on.
-// import { syncInquiryToHubSpot } from "@/lib/hubspot";
+import { syncInquiryToHubSpot } from "@/lib/hubspot";
 import { type InquiryKind } from "@/lib/inquiry-status";
 import { getSessionCustomer } from "@/lib/customer-auth";
 import { rememberOrderAddress } from "@/lib/customer-addresses";
@@ -799,9 +798,7 @@ export async function sendInquiryAction(
     });
     // After the write, and never fatal (neither throws): the inquiry is safely stored and in the
     // admin queue whether or not the email to sales goes out or HubSpot accepts the contact.
-    // HUBSPOT-DISABLED — on hold; swap the two lines below to turn the sync back on.
-    await notifyNewInquiry(inquiry);
-    // await Promise.all([notifyNewInquiry(inquiry), syncInquiryToHubSpot(inquiry)]);
+    await Promise.all([notifyNewInquiry(inquiry), syncInquiryToHubSpot(inquiry)]);
     destination = inquirySentPath(kind, inquiry.ref, Boolean(product));
   } catch (err) {
     return {

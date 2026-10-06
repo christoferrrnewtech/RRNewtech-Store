@@ -1,10 +1,6 @@
 /**
  * HubSpot CRM sync for inquiries — SERVER ONLY.
  *
- * HUBSPOT-DISABLED — on hold. Nothing imports this file right now (the call in
- * src/app/(store)/actions.ts is commented out), so it never runs. Kept whole so turning it back on
- * is uncommenting, not rewriting — see docs/hubspot-integration.md.
- *
  * Every inquiry upserts a HubSpot contact keyed on email, so a repeat enquirer updates one record
  * instead of piling up duplicates. The form decides how far along they are:
  *
