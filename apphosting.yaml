@@ -20,11 +20,11 @@ env:
   # --- Non-secret Firebase config ---
   - variable: FIREBASE_PROJECT_ID
     value: rnr-dental-clinics
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
 
   - variable: FIREBASE_STORAGE_BUCKET
     value: rnr-dental-clinics.firebasestorage.app
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
 
   # Public site URL for canonical links / sitemap / OG tags — and for the PayMongo success and
   # cancel URLs, and the address Firebase sends account-verification links back to.
@@ -38,14 +38,14 @@ env:
   # The apex is deliberate: www.rrnewtechdental.com is not currently mapped to this backend.
   - variable: NEXT_PUBLIC_SITE_URL
     value: https://rrnewtechdental.com
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
 
   # --- Analytics ---
   # Pixel IDs are public (they ship in every page's HTML), so this is plain config, not a secret.
   # Baked in at BUILD time like every NEXT_PUBLIC_* var — changing it needs a rollout.
   - variable: NEXT_PUBLIC_META_PIXEL_ID
     value: "1311331890968438"
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
   # GA4 — uncomment and fill when ready.
   # - variable: NEXT_PUBLIC_GA_ID
   #   value: ""
@@ -54,19 +54,19 @@ env:
   # --- Secrets (stored in Secret Manager, referenced by name) ---
   - variable: FIREBASE_CLIENT_EMAIL
     secret: FIREBASE_CLIENT_EMAIL
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
 
   - variable: FIREBASE_PRIVATE_KEY
     secret: FIREBASE_PRIVATE_KEY
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
 
   - variable: FIREBASE_WEB_API_KEY
     secret: FIREBASE_WEB_API_KEY
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
 
   - variable: ADMIN_SESSION_SECRET
     secret: ADMIN_SESSION_SECRET
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
 
   # --- PayMongo (checkout) ---
   # RUNTIME only, unlike the FIREBASE_* secrets above: nothing at build time touches PayMongo
@@ -78,23 +78,24 @@ env:
   # secrets — swapping to live keys means creating a live webhook too.
   - variable: PAYMONGO_SECRET_KEY
     secret: PAYMONGO_SECRET_KEY
-    availability: [RUNTIME]
+    availability: [ RUNTIME ]
 
   - variable: PAYMONGO_WEBHOOK_SECRET
     secret: PAYMONGO_WEBHOOK_SECRET
-    availability: [RUNTIME]
+    availability: [ RUNTIME ]
 
   # --- Staff notification email (Resend) ---
   # RUNTIME only, like PayMongo: nothing sends mail during a build. The sender must be on a domain
   # verified in Resend, or every recipient but the account owner is refused (see .env.example).
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
-    availability: [RUNTIME]
+    availability: [ RUNTIME ]
 
   - variable: EMAIL_FROM
     value: "R&R Newtech Dental <notifications@rrnewtechdental.com>"
-    availability: [RUNTIME]
-
+    availability: [ RUNTIME ]
+  - variable: HUBSPOT_ACCESS_TOKEN
+    secret: HUBSPOT_ACCESS_TOKEN
   # --- HubSpot CRM (inquiries → contacts / leads) ---
   # HUBSPOT-DISABLED — on hold; see docs/hubspot-integration.md to turn it back on.
   # RUNTIME only, like Resend. The secret must exist BEFORE this file is rolled out — a rollout that
