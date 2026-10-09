@@ -10,18 +10,15 @@ import { ProductJsonLd } from "@/components/analytics/ProductJsonLd";
 import { ProductDescription } from "@/components/product/ProductDescription";
 import { CATEGORY_MAP, productImageUrl } from "@/lib/products";
 import { catalogCartItem } from "@/lib/cart-item";
-import { getAllProducts, getProductBySlug, getRelatedProducts } from "@/lib/catalog";
+import { getProductBySlug, getRelatedProducts } from "@/lib/catalog";
 import { productBrandLogo } from "@/lib/content";
 import { discountPercent, formatPHP } from "@/lib/format";
 
-// Pre-render every product page at build time (ISR-ready, fully indexable HTML). Falls back to
-// on-demand rendering if Firestore isn't reachable at build (e.g. before credentials are set).
+// No build-time prerender: an empty list still caches each page on its first visit (ISR, see the
+// layout's `revalidate`), but a freshly started App Hosting instance would otherwise serve the copy
+// baked at deploy time — that is how an updated product image kept showing the old one.
 export async function generateStaticParams() {
-  try {
-    return (await getAllProducts()).map((p) => ({ slug: p.slug }));
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 export async function generateMetadata({

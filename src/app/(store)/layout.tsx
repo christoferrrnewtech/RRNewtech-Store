@@ -18,6 +18,16 @@ import { SECTIONS } from "@/lib/constants";
  * Firestore round trip for the menus above. That is precisely why `PendingPaymentBanner` reads its
  * cookie client-side; see `pay-window.ts`.
  */
+
+/**
+ * Every cached storefront page expires after 60s. The lowest `revalidate` in a route wins, so this
+ * one line covers every page below it. Admin saves call `revalidatePath()`, but on App Hosting that
+ * only clears the cache of the one instance that handled the save — other instances (and any that
+ * cold-start later) kept serving the old page for a year (`s-maxage=31536000`). With a time limit,
+ * every instance and the CDN pick up an edit within about a minute regardless.
+ */
+export const revalidate = 60;
+
 export default async function StoreLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {

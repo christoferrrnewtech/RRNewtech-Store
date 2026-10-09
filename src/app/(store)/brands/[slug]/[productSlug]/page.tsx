@@ -8,7 +8,7 @@ import { BrandProductCard } from "@/components/shop/BrandProductCard";
 import { BrandProductGallery, type GalleryImg } from "@/components/shop/BrandProductGallery";
 import { ProductPurchase } from "@/components/product/ProductPurchase";
 import { ProductDescription } from "@/components/product/ProductDescription";
-import { getBrandBySlug, getBrands, type Brand, type BrandProduct } from "@/lib/content";
+import { getBrandBySlug, type Brand, type BrandProduct } from "@/lib/content";
 import { brandProductHref, contactSalesHref } from "@/lib/products";
 import { brandCartItem } from "@/lib/cart-item";
 import { discountPercent, formatPHP } from "@/lib/format";
@@ -22,16 +22,11 @@ function findProduct(brand: Brand, productSlug: string): BrandProduct | undefine
   );
 }
 
-// Pre-render every published brand product at build time (indexable HTML). Falls back to on-demand
-// rendering if Firestore isn't reachable at build.
+// No build-time prerender: an empty list still caches each page on its first visit (ISR, see the
+// layout's `revalidate`), but a freshly started App Hosting instance would otherwise serve the copy
+// baked at deploy time — that is how an updated product image kept showing the old one.
 export async function generateStaticParams() {
-  try {
-    return (await getBrands()).flatMap((b) =>
-      b.products.map((p) => ({ slug: b.slug, productSlug: p.slug ?? p.id })),
-    );
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 export async function generateMetadata({

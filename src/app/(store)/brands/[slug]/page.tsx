@@ -5,18 +5,15 @@ import { notFound } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
 import { BrandProducts } from "@/components/shop/BrandProducts";
-import { getBrandBySlug, getBrands, getCategories, youtubeEmbedId } from "@/lib/content";
+import { getBrandBySlug, getCategories, youtubeEmbedId } from "@/lib/content";
 import { brandProductFacets } from "@/lib/brand-facets";
 import { SITE } from "@/lib/constants";
 
-// Pre-render every published brand page at build time (indexable HTML). Falls back to on-demand
-// rendering if Firestore isn't reachable at build (e.g. before credentials are configured).
+// No build-time prerender: an empty list still caches each page on its first visit (ISR, see the
+// layout's `revalidate`), but a freshly started App Hosting instance would otherwise serve the copy
+// baked at deploy time — that is how an updated product image kept showing the old one.
 export async function generateStaticParams() {
-  try {
-    return (await getBrands()).map((b) => ({ slug: b.slug }));
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 export async function generateMetadata({
