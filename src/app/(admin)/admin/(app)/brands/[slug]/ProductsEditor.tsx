@@ -64,6 +64,9 @@ export function ProductsEditor({
 
 type Row = BrandProduct & { key: string };
 
+/** dataTransfer type for an extra-photo drag, so the enclosing product row can ignore it. */
+const PHOTO_DRAG = "application/x-product-photo";
+
 /**
  * Repeatable product editor. Every row posts one value under each `product*` field name (kept
  * aligned by row order) plus one `productImageFile` input, so the server action can zip them.
@@ -190,6 +193,24 @@ function ProductRows({
           : row,
       ),
     );
+    onDirty();
+  }
+
+  /** Extra-photo order is the product page's order (after the main image), saved via the JSON. */
+  function moveGalleryImage(key: string, from: number, to: number) {
+    setRows((r) =>
+      r.map((row) => {
+        if (row.key !== key) return row;
+        const gallery = [...(row.gallery ?? [])];
+        if (from === to || from < 0 || to < 0 || from >= gallery.length || to >= gallery.length) {
+          return row;
+        }
+        const [moved] = gallery.splice(from, 1);
+        gallery.splice(to, 0, moved);
+        return { ...row, gallery };
+      }),
+    );
+    onDirty();
   }
 
   return (
@@ -241,6 +262,7 @@ function ProductRows({
           toggleContactSales={toggleContactSales}
           remove={remove}
           removeGalleryImage={removeGalleryImage}
+          moveGalleryImage={moveGalleryImage}
           move={move}
           moveToTop={moveToTop}
           reorder={reorder}
@@ -334,6 +356,7 @@ function ProductRow({
   toggleContactSales,
   remove,
   removeGalleryImage,
+  moveGalleryImage,
   move,
   moveToTop,
   reorder,
@@ -351,6 +374,7 @@ function ProductRow({
   toggleContactSales: (key: string) => void;
   remove: (key: string) => void;
   removeGalleryImage: (key: string, src: string) => void;
+  moveGalleryImage: (key: string, from: number, to: number) => void;
   move: (key: string, dir: -1 | 1) => void;
   moveToTop: (key: string) => void;
   reorder: (dragKey: string, targetKey: string) => void;
@@ -366,6 +390,9 @@ function ProductRow({
   // drag-selecting text inside them into a row drag.
   const [dragEnabled, setDragEnabled] = useState(false);
   const [over, setOver] = useState(false);
+  const [photoDrag, setPhotoDrag] = useState<number | null>(null);
+  const [photoOver, setPhotoOver] = useState<number | null>(null);
+  const gallery = row.gallery ?? [];
 
   const subs = categories.find((c) => c.slug === row.category)?.subcategories ?? [];
   const catValue = categories.some((c) => c.slug === row.category) ? (row.category as string) : "";
@@ -383,6 +410,7 @@ function ProductRow({
       }}
       onDragEnd={() => setDragEnabled(false)}
       onDragOver={(e) => {
+        if (e.dataTransfer.types.includes(PHOTO_DRAG)) return;
         e.preventDefault();
         setOver(true);
       }}
@@ -650,27 +678,98 @@ function ProductRow({
               <input
                 type="hidden"
                 name="productGalleryJson"
-                value={JSON.stringify(row.gallery ?? [])}
+                value={JSON.stringify(gallery)}
               />
-              {(row.gallery ?? []).length > 0 && (
-                <ul className="mt-2 flex flex-wrap gap-2">
-                  {(row.gallery ?? []).map((img) => (
-                    <li
-                      key={img.src}
-                      className="relative h-16 w-16 overflow-hidden rounded-lg border border-line bg-elevated"
-                    >
-                      <Image src={img.src} alt="" fill sizes="64px" className="object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => removeGalleryImage(row.key, img.src)}
-                        aria-label="Remove photo"
-                        className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/60 text-xs text-white hover:bg-ink"
+              {gallery.length > 0 && (
+                <>
+                  <p className="mt-1 text-xs text-muted-light">
+                    Shown on the product page in this order, after the main image. Drag a photo or
+                    use the arrows to reorder. New photos are added at the end.
+                  </p>
+                  <ul className="mt-2 flex flex-wrap gap-2">
+                    {gallery.map((img, i) => (
+                      <li
+                        key={img.src}
+                        draggable
+                        // Stop each event at the photo: the product row is a drop target too, and
+                        // its handlers would otherwise read this as a product reorder.
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          e.dataTransfer.setData(PHOTO_DRAG, String(i));
+                          e.dataTransfer.effectAllowed = "move";
+                          setPhotoDrag(i);
+                        }}
+                        onDragEnd={(e) => {
+                          e.stopPropagation();
+                          setPhotoDrag(null);
+                          setPhotoOver(null);
+                        }}
+                        onDragOver={(e) => {
+                          if (photoDrag === null) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setPhotoOver(i);
+                        }}
+                        onDragLeave={() => setPhotoOver((o) => (o === i ? null : o))}
+                        onDrop={(e) => {
+                          if (photoDrag === null) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          moveGalleryImage(row.key, photoDrag, i);
+                          setPhotoDrag(null);
+                          setPhotoOver(null);
+                        }}
+                        className={`flex cursor-grab flex-col items-center gap-1 active:cursor-grabbing ${
+                          photoDrag === i ? "opacity-40" : ""
+                        }`}
                       >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        <span
+                          className={`relative h-16 w-16 overflow-hidden rounded-lg border bg-elevated ${
+                            photoOver === i && photoDrag !== i
+                              ? "border-brand-500 ring-2 ring-brand-500/30"
+                              : "border-line"
+                          }`}
+                        >
+                          <Image
+                            src={img.src}
+                            alt=""
+                            fill
+                            sizes="64px"
+                            draggable={false}
+                            className="object-cover"
+                          />
+                          <span className="absolute bottom-0.5 left-0.5 rounded-full bg-ink/60 px-1.5 text-[10px] font-semibold leading-4 text-white">
+                            {i + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeGalleryImage(row.key, img.src)}
+                            aria-label="Remove photo"
+                            className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/60 text-xs text-white hover:bg-ink"
+                          >
+                            ×
+                          </button>
+                        </span>
+                        <span className="flex">
+                          <ReorderButton
+                            label="Move photo earlier"
+                            disabled={i === 0}
+                            onClick={() => moveGalleryImage(row.key, i, i - 1)}
+                          >
+                            ←
+                          </ReorderButton>
+                          <ReorderButton
+                            label="Move photo later"
+                            disabled={i === gallery.length - 1}
+                            onClick={() => moveGalleryImage(row.key, i, i + 1)}
+                          >
+                            →
+                          </ReorderButton>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
               <div className="mt-2">
                 <ImageInput
