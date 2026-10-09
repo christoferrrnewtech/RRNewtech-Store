@@ -31,7 +31,7 @@ const COPY: Record<AuthPromptReason, { title: string; body: string }> = {
 };
 
 export function SignInPrompt() {
-  const { authPrompt, closeAuthPrompt } = useCart();
+  const { authPrompt, closeAuthPrompt, continueToSignIn } = useCart();
   const authPromptOpen = authPrompt !== null;
 
   // Lock body scroll while open, and close on Escape — same treatment as CartDrawer.
@@ -104,12 +104,14 @@ export function SignInPrompt() {
           <div className="mt-6 flex flex-col gap-2.5">
             <Link
               href="/account/login"
+              onClick={continueToSignIn}
               className="rounded-lg bg-brand-600 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-700"
             >
               Sign in
             </Link>
             <Link
               href="/account/register"
+              onClick={continueToSignIn}
               className="rounded-lg border border-line bg-surface px-5 py-3 text-sm font-semibold text-fg hover:bg-elevated"
             >
               Create an account

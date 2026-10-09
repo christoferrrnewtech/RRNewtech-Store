@@ -189,6 +189,8 @@ type CartContextValue = {
   /** Which action the visitor was blocked from, or null when no prompt is showing. */
   authPrompt: AuthPromptReason | null;
   closeAuthPrompt: () => void;
+  /** Hides the prompt as the visitor heads to sign in or register, keeping any parked item. */
+  continueToSignIn: () => void;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -433,6 +435,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
     writePendingAdd(null);
   }, []);
 
+  // Following one of the prompt's links is the opposite decision, so the parked item stays put for
+  // the claim below to pick up once they come back signed in.
+  const continueToSignIn = useCallback(() => setAuthPrompt(null), []);
+
   // Claim a parked item once the visitor comes back signed in. Runs after the cart has hydrated so
   // the replayed line merges with the stored cart instead of racing it.
   useEffect(() => {
@@ -505,6 +511,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     clear,
     authPrompt,
     closeAuthPrompt,
+    continueToSignIn,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
