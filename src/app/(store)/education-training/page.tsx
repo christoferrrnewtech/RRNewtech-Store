@@ -8,14 +8,6 @@ import { NAV_ICONS } from "@/components/layout/NavIcons";
 import { getSessions } from "@/lib/content";
 import { SITE, type NavIconKey } from "@/lib/constants";
 
-/**
- * Rebuild hourly. Admin saves already push a fresh page through `revalidateStorefront()`, but a
- * campaign expires by the calendar rather than by an edit — without this, the last build's cutoff
- * date would keep a finished seminar on the page until someone happened to save something.
- * Still statically rendered; this only bounds how stale the cutoff can get.
- */
-export const revalidate = 3600;
-
 export const metadata: Metadata = {
   title: "Education & Training",
   description:

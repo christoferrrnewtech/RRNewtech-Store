@@ -18,11 +18,6 @@ function bound(raw?: string): number | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
-// Pre-render a page per admin-managed category; new ones render on demand (dynamicParams default).
-export async function generateStaticParams() {
-  return (await getCategories().catch(() => [])).map((c) => ({ slug: c.slug }));
-}
-
 export async function generateMetadata({
   params,
 }: {

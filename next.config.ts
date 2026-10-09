@@ -8,11 +8,6 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "6mb" },
   },
-  // How long an expired storefront page (see `revalidate` in the store layout) may still be served
-  // while a fresh one renders in the background. The default is a year, which on a low-traffic
-  // product page meant every visitor saw whatever the previous visitor triggered. Past 5 minutes,
-  // the next visitor waits for a fresh render instead.
-  expireTime: 300,
   // `src/lib/locations.ts` reads data/ph-locations.json with a path built at RUNTIME, which Next's
   // file tracing cannot see — so without this the file is left out of the deployed bundle and the
   // checkout address dropdowns come up empty in production while working perfectly in dev.

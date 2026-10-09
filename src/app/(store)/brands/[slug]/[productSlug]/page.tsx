@@ -22,13 +22,6 @@ function findProduct(brand: Brand, productSlug: string): BrandProduct | undefine
   );
 }
 
-// No build-time prerender: an empty list still caches each page on its first visit (ISR, see the
-// layout's `revalidate`), but a freshly started App Hosting instance would otherwise serve the copy
-// baked at deploy time — that is how an updated product image kept showing the old one.
-export async function generateStaticParams() {
-  return [];
-}
-
 export async function generateMetadata({
   params,
 }: {

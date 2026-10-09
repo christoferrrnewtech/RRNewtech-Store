@@ -12,21 +12,15 @@ import { SECTIONS } from "@/lib/constants";
  * Storefront chrome. Brands are read here (server) and passed into the client header, since the
  * content store touches the filesystem and can't be imported from a client component.
  *
- * NOTE FOR ANYONE ADDING TO THIS FILE: do not call `cookies()` or `headers()` here. A layout sits
- * in every route's tree, so one dynamic API call opts the ENTIRE storefront out of static
- * generation — ~130 prerendered product and brand pages would each become an origin hit with a
- * Firestore round trip for the menus above. That is precisely why `PendingPaymentBanner` reads its
- * cookie client-side; see `pay-window.ts`.
+ * Every storefront page renders fresh from Firestore on each request — nothing is prerendered at
+ * build or cached between visits. Caching was tried and dropped: on App Hosting, `revalidatePath()`
+ * after an admin save only clears the one instance that handled it, so other (and cold-started)
+ * instances kept serving pages with old product images; even time-based `revalidate` hands the
+ * first visitor after expiry the stale copy. Fresh renders are the only way a first-time visitor
+ * is guaranteed the current images. The menus' Firestore reads are request-cached (`cache()`), so
+ * a page costs a handful of document reads.
  */
-
-/**
- * Every cached storefront page expires after 60s. The lowest `revalidate` in a route wins, so this
- * one line covers every page below it. Admin saves call `revalidatePath()`, but on App Hosting that
- * only clears the cache of the one instance that handled the save — other instances (and any that
- * cold-start later) kept serving the old page for a year (`s-maxage=31536000`). With a time limit,
- * every instance and the CDN pick up an edit within about a minute regardless.
- */
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export default async function StoreLayout({
   children,

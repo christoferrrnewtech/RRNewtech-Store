@@ -5,19 +5,10 @@ import { Container } from "@/components/ui/Container";
 import { Badge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { NAV_ICONS } from "@/components/layout/NavIcons";
-import { sessionSlug } from "@/components/education/Sessions";
-import { getSessionBySlug, getSessions, todayInManila } from "@/lib/content";
+import { getSessionBySlug, todayInManila } from "@/lib/content";
 import { formatSessionDate } from "@/lib/format";
 import { safeHref, externalLinkProps } from "@/lib/links";
 import { SITE } from "@/lib/constants";
-
-/** Matches the listing: an expired session still resolves, so only the cutoff needs refreshing. */
-export const revalidate = 3600;
-
-export async function generateStaticParams() {
-  const sessions = await getSessions().catch(() => []);
-  return sessions.map((s) => ({ slug: sessionSlug(s) }));
-}
 
 export async function generateMetadata({
   params,
