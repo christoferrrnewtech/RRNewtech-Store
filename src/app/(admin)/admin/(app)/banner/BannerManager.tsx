@@ -1,7 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useActionState, useState, useTransition } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from "react";
 import {
   addBannerAction,
   deleteBannerAction,
@@ -10,14 +17,25 @@ import {
 } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
 import {
+  ColorInput,
   Field,
   ImageInput,
   SaveBar,
+  Select,
   SubmitButton,
   TextArea,
   TextInput,
 } from "@/components/admin/Form";
 import { FormSection, PageHeader, Panel } from "@/components/admin/Panel";
+import { HeroSlide } from "@/components/home/HeroSlide";
+import {
+  BANNER_STYLE_DEFAULTS,
+  TEXT_SIZE_LABELS,
+  TEXT_SIZES,
+  bannerStyleFromForm,
+  type ButtonColors,
+  type TextSize,
+} from "@/lib/banner-style";
 import type { Banner } from "@/lib/content";
 
 const ADD = "add" as const;
@@ -225,12 +243,14 @@ function SlideRow({
 /** Editor for the selected slide: preview + image, basics, overlay copy, and a separate remove. */
 function EditPanel({ banner, index }: { banner: Banner; index: number }) {
   const [state, action] = useActionState<ActionState, FormData>(updateBannerAction, {});
+  const [draft, onFormChange] = useDraftBanner(banner);
 
   return (
     <div className="space-y-6">
       <Panel title={`Slide ${index + 1}`} description="Changes appear on the storefront as soon as you save.">
-        <form action={action} className="space-y-6">
+        <form action={action} onChange={onFormChange} className="space-y-6">
           <input type="hidden" name="id" value={banner.id} />
+          <SlidePreview banner={draft} />
           <FormSection title="Image">
             <ImageInput
               name="image"
@@ -263,12 +283,23 @@ function EditPanel({ banner, index }: { banner: Banner; index: number }) {
   );
 }
 
+const NEW_BANNER: Banner = {
+  id: "new",
+  image: "",
+  alt: "",
+  href: "",
+  order: 0,
+  style: BANNER_STYLE_DEFAULTS,
+};
+
 function AddPanel() {
   const [state, action] = useActionState<ActionState, FormData>(addBannerAction, {});
+  const [draft, onFormChange] = useDraftBanner(NEW_BANNER);
 
   return (
     <Panel title="Add a slide" description="It appears at the top of the storefront right away.">
-      <form action={action} className="space-y-6">
+      <form action={action} onChange={onFormChange} className="space-y-6">
+        <SlidePreview banner={draft} />
         <FormSection title="Image">
           <ImageInput
             name="image"
@@ -302,11 +333,155 @@ function BasicsFields({ banner }: { banner?: Banner }) {
 }
 
 /**
- * The copy laid over the slide. Optional throughout: anything left blank simply isn't drawn, so a
- * slide with all of these empty renders as a plain full-bleed image, exactly as banners behaved
- * before this existed.
+ * The slide as the editor currently has it, unsaved changes included. Re-read from the form on
+ * every edit rather than mirroring each field in state, so the inputs stay uncontrolled.
+ */
+function useDraftBanner(base: Banner) {
+  const [draft, setDraft] = useState(base);
+  // The picked file's blob URL, reused while the same file stays picked and revoked when it changes.
+  const picked = useRef<{ file: File; url: string } | null>(null);
+
+  useEffect(
+    () => () => {
+      if (picked.current) URL.revokeObjectURL(picked.current.url);
+    },
+    [],
+  );
+
+  function onFormChange(e: FormEvent<HTMLFormElement>) {
+    const form = e.currentTarget;
+    // Wait a frame: a hex typed into a ColorInput reaches its swatch (the field that posts) through
+    // state, which hasn't rendered yet when this event fires.
+    requestAnimationFrame(() => {
+      const data = new FormData(form);
+      const str = (key: string) => {
+        const v = data.get(key);
+        return typeof v === "string" && v.trim() ? v.trim() : undefined;
+      };
+
+      let image = base.image;
+      const file = data.get("image");
+      if (file instanceof File && file.size > 0) {
+        if (picked.current?.file !== file) {
+          if (picked.current) URL.revokeObjectURL(picked.current.url);
+          picked.current = { file, url: URL.createObjectURL(file) };
+        }
+        image = picked.current.url;
+      }
+
+      setDraft({
+        ...base,
+        image,
+        eyebrow: str("eyebrow"),
+        heading: str("heading"),
+        body: str("body"),
+        ctaLabel: str("ctaLabel"),
+        ctaHref: str("ctaHref"),
+        ctaAltLabel: str("ctaAltLabel"),
+        ctaAltHref: str("ctaAltHref"),
+        style: bannerStyleFromForm(data),
+      });
+    });
+  }
+
+  return [draft, onFormChange] as const;
+}
+
+/** Desktop width the preview is laid out at, then scaled down to fit the panel. */
+const PREVIEW_WIDTH = 1440;
+
+/**
+ * The real storefront slide, drawn at desktop width and shrunk to fit. Clicks are swallowed so a
+ * stray click on a button doesn't navigate away from unsaved edits — but hover still works, which
+ * is how the buttons' highlight color gets checked.
+ */
+function SlidePreview({ banner }: { banner: Banner }) {
+  const frame = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.5);
+
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setScale(entry.contentRect.width / PREVIEW_WIDTH),
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wider text-brand-700">Preview</p>
+      <p className="mt-1 text-sm text-muted">
+        Updates as you edit. Hover the buttons to see their highlight color.
+      </p>
+      <div
+        ref={frame}
+        onClickCapture={(e) => e.preventDefault()}
+        className="mt-3 overflow-hidden rounded-xl border border-line"
+      >
+        <div style={{ width: PREVIEW_WIDTH, zoom: scale }}>
+          <HeroSlide banner={banner} headingLevel="h2" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SizeSelect({ name, defaultValue }: { name: string; defaultValue: TextSize }) {
+  return (
+    <Select name={name} defaultValue={defaultValue}>
+      {TEXT_SIZES.map((size) => (
+        <option key={size} value={size}>
+          {TEXT_SIZE_LABELS[size]}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+/** Text, button, and highlight colors for one hero button. */
+function ButtonColorFields({
+  prefix,
+  label,
+  colors,
+}: {
+  /** Form field prefix: "cta" or "ctaAlt". */
+  prefix: string;
+  label: string;
+  colors: ButtonColors;
+}) {
+  return (
+    <div className="grid gap-5 sm:grid-cols-3">
+      <Field label="Text color" group>
+        <ColorInput name={`${prefix}Text`} defaultValue={colors.text} label={`${label} text color`} />
+      </Field>
+      <Field label="Button color" group>
+        <ColorInput
+          name={`${prefix}Bg`}
+          defaultValue={colors.background}
+          label={`${label} button color`}
+        />
+      </Field>
+      <Field label="Highlight color" tip="The button color while the mouse is over it." group>
+        <ColorInput
+          name={`${prefix}Hover`}
+          defaultValue={colors.hover}
+          label={`${label} highlight color`}
+        />
+      </Field>
+    </div>
+  );
+}
+
+/**
+ * The copy laid over the slide, with its colors and sizes. The copy is optional throughout:
+ * anything left blank simply isn't drawn, so a slide with all of it empty renders as a plain
+ * full-bleed image, exactly as banners behaved before this existed.
  */
 function OverlayFields({ banner }: { banner?: Banner }) {
+  const style = banner?.style ?? BANNER_STYLE_DEFAULTS;
+
   return (
     <>
       <FormSection
@@ -320,6 +495,12 @@ function OverlayFields({ banner }: { banner?: Banner }) {
             placeholder="Authorized dental distributor · Philippines"
           />
         </Field>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Eyebrow color" group>
+            <ColorInput name="eyebrowColor" defaultValue={style.eyebrowColor} label="Eyebrow color" />
+          </Field>
+        </div>
+
         <Field label="Heading" hint="Keep it short — it's set very large.">
           <TextInput
             name="heading"
@@ -327,33 +508,60 @@ function OverlayFields({ banner }: { banner?: Banner }) {
             placeholder="Everything your operatory runs on."
           />
         </Field>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Heading color" group>
+            <ColorInput name="headingColor" defaultValue={style.headingColor} label="Heading color" />
+          </Field>
+          <Field label="Heading size">
+            <SizeSelect name="headingSize" defaultValue={style.headingSize} />
+          </Field>
+        </div>
+
         <Field label="Body" hint="One or two sentences.">
           <TextArea name="body" rows={3} defaultValue={banner?.body} />
         </Field>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Body color" group>
+            <ColorInput name="bodyColor" defaultValue={style.bodyColor} label="Body color" />
+          </Field>
+          <Field label="Body size">
+            <SizeSelect name="bodySize" defaultValue={style.bodySize} />
+          </Field>
+        </div>
       </FormSection>
 
       <FormSection
-        title="Buttons"
-        description="Each button needs both a label and a link to appear. The second one is outlined, beside the main one."
+        title="Main button"
+        description="Needs both a label and a link to appear."
       >
         <div className="grid gap-5 md:grid-cols-2">
-          <Field label="Main button label">
+          <Field label="Label">
             <TextInput name="ctaLabel" defaultValue={banner?.ctaLabel} placeholder="Shop the catalog" />
           </Field>
-          <Field label="Main button links to">
+          <Field label="Links to">
             <TextInput name="ctaHref" defaultValue={banner?.ctaHref} placeholder="/shop" />
           </Field>
-          <Field label="Second button label">
+        </div>
+        <ButtonColorFields prefix="cta" label="Main button" colors={style.cta} />
+      </FormSection>
+
+      <FormSection
+        title="Second button"
+        description="Sits beside the main one. Needs both a label and a link to appear."
+      >
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field label="Label">
             <TextInput
               name="ctaAltLabel"
               defaultValue={banner?.ctaAltLabel}
               placeholder="Request a quote"
             />
           </Field>
-          <Field label="Second button links to">
+          <Field label="Links to">
             <TextInput name="ctaAltHref" defaultValue={banner?.ctaAltHref} placeholder="/contact" />
           </Field>
         </div>
+        <ButtonColorFields prefix="ctaAlt" label="Second button" colors={style.ctaAlt} />
       </FormSection>
     </>
   );

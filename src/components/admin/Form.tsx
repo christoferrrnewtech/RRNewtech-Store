@@ -299,11 +299,15 @@ export function ImageInput({
 export function Field({
   label,
   hint,
+  tip,
   group = false,
   children,
 }: {
   label: string;
   hint?: string;
+  /** Like `hint`, but tucked behind an (i) beside the label — keeps the control in line with its
+   *  neighbours in a row of fields. */
+  tip?: string;
   group?: boolean;
   children: ReactNode;
 }) {
@@ -311,9 +315,36 @@ export function Field({
   return (
     <Tag className="block">
       <span className="text-sm font-semibold text-fg">{label}</span>
+      {tip && <InfoTip text={tip} />}
       {hint && <span className="mt-0.5 block text-xs text-muted">{hint}</span>}
       <div className="mt-1.5">{children}</div>
     </Tag>
+  );
+}
+
+/** An (i) that shows `text` on hover or keyboard focus. */
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="group/tip relative ml-1.5 inline-flex align-[-2px]">
+      <span
+        tabIndex={0}
+        aria-label={text}
+        className="cursor-help rounded-full text-muted-light outline-none hover:text-brand-600 focus-visible:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500/30"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.5" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M12 11v5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="12" cy="7.75" r="1.25" fill="currentColor" />
+        </svg>
+      </span>
+      <span
+        role="tooltip"
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max max-w-56 -translate-x-1/2 rounded-md bg-fg px-2.5 py-1.5 text-xs font-normal text-white opacity-0 shadow-lg transition-opacity group-hover/tip:opacity-100 group-focus-within/tip:opacity-100"
+      >
+        {text}
+      </span>
+    </span>
   );
 }
 
@@ -330,6 +361,56 @@ export function TextArea(props: React.ComponentProps<"textarea">) {
 
 export function Select(props: React.ComponentProps<"select">) {
   return <select {...props} className={`${inputClass} ${props.className ?? ""}`} />;
+}
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * A color swatch plus a hex box, kept in step. Only the swatch carries `name`, so the form always
+ * posts a valid `#rrggbb` — a half-typed hex in the box just doesn't take until it's complete.
+ */
+export function ColorInput({
+  name,
+  defaultValue,
+  label,
+}: {
+  name: string;
+  defaultValue: string;
+  /** Accessible name for both controls, e.g. "Heading color". */
+  label: string;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  const [draft, setDraft] = useState(defaultValue);
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="color"
+        name={name}
+        value={value}
+        aria-label={label}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setDraft(e.target.value);
+        }}
+        className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-line bg-surface p-1"
+      />
+      <input
+        type="text"
+        value={draft}
+        aria-label={`${label} (hex)`}
+        spellCheck={false}
+        maxLength={7}
+        onChange={(e) => {
+          const next = e.target.value.trim();
+          setDraft(next);
+          if (HEX_COLOR.test(next)) setValue(next.toLowerCase());
+        }}
+        onBlur={() => setDraft(value)}
+        className={`${inputClass} font-mono uppercase`}
+      />
+    </div>
+  );
 }
 
 /**

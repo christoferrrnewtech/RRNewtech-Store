@@ -23,6 +23,7 @@ import { getDb, storeDoc, DOCS } from "@/lib/firebase";
 import { sessionSlug, type Session } from "@/components/education/Sessions";
 import { type Product, CATEGORIES, brandSlug, brandProductSlugify } from "@/lib/products";
 import { SITE, type BrandGroup } from "@/lib/constants";
+import { toBannerStyle, type BannerStyle } from "@/lib/banner-style";
 
 export type BrandStatus = "draft" | "published";
 
@@ -122,6 +123,8 @@ export type Banner = {
   /** Secondary call to action, outlined. */
   ctaAltLabel?: string;
   ctaAltHref?: string;
+  /** Colors and sizes for the overlay copy and buttons. Always complete — gaps take the defaults. */
+  style: BannerStyle;
 };
 
 /**
@@ -224,6 +227,7 @@ function toBanner(id: string, v: Record<string, unknown>): Banner {
     ctaHref: opt(v.ctaHref),
     ctaAltLabel: opt(v.ctaAltLabel),
     ctaAltHref: opt(v.ctaAltHref),
+    style: toBannerStyle(v.style),
   };
 }
 

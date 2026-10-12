@@ -1,5 +1,6 @@
 import { getBanners, type Banner } from "@/lib/content";
 import { HERO_FALLBACK } from "@/lib/constants";
+import { BANNER_STYLE_DEFAULTS } from "@/lib/banner-style";
 import { HeroSlide } from "@/components/home/HeroSlide";
 import { BannerCarousel } from "@/components/shop/BannerCarousel";
 
@@ -21,6 +22,7 @@ export async function StoreHero() {
       alt: "",
       href: "",
       order: 0,
+      style: BANNER_STYLE_DEFAULTS,
       ...HERO_FALLBACK,
     };
     return <HeroSlide banner={fallback} priority />;

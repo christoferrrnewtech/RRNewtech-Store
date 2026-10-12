@@ -34,7 +34,7 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
     <section
       aria-roledescription="carousel"
       aria-label="Promotions"
-      className="relative w-full overflow-hidden bg-brand-900"
+      className="relative w-full overflow-hidden bg-brand-50"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
@@ -72,7 +72,7 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
               aria-current={i === index}
               className={[
                 "h-1 w-8 transition-colors",
-                i === index ? "bg-white" : "bg-white/35 hover:bg-white/60",
+                i === index ? "bg-brand-600" : "bg-brand-600/30 hover:bg-brand-600/60",
               ].join(" ")}
             />
           ))}

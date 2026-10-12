@@ -54,6 +54,7 @@ import {
   type BrandProduct,
   type GalleryImage,
 } from "@/lib/content";
+import { bannerStyleFromForm } from "@/lib/banner-style";
 import {
   authenticate,
   canEditBrand,
@@ -220,6 +221,7 @@ function bannerOverlay(form: FormData) {
     ctaHref: text(form, "ctaHref"),
     ctaAltLabel: text(form, "ctaAltLabel"),
     ctaAltHref: text(form, "ctaAltHref"),
+    style: bannerStyleFromForm(form),
   };
 }
 

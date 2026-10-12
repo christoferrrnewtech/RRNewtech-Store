@@ -1,7 +1,14 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
-type Variant = "primary" | "secondary" | "outline" | "secondaryDark" | "inverse" | "ghost";
+type Variant =
+  | "primary"
+  | "secondary"
+  | "outline"
+  | "secondaryDark"
+  | "inverse"
+  | "ghost"
+  | "custom";
 type Size = "sm" | "md" | "lg";
 
 const base =
@@ -18,6 +25,9 @@ const variants: Record<Variant, string> = {
   // White button with brand-blue text — for use on dark/blue panels.
   inverse: "bg-white text-brand-700 hover:bg-brand-50",
   ghost: "text-fg hover:text-brand-600",
+  // Colors come from the caller as CSS variables (--btn-fg, --btn-bg, --btn-hover) — for buttons
+  // whose colors an admin picks, like the hero's.
+  custom: "bg-[var(--btn-bg)] text-[var(--btn-fg)] hover:bg-[var(--btn-hover)]",
 };
 
 const sizes: Record<Size, string> = {

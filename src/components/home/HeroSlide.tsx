@@ -3,13 +3,26 @@ import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
 import type { Banner } from "@/lib/content";
+import {
+  BODY_SIZE_CLASSES,
+  HEADING_SIZE_CLASSES,
+  type ButtonColors,
+} from "@/lib/banner-style";
+import type { CSSProperties } from "react";
+
+/** Hands an admin-picked button palette to the `custom` button variant. */
+function buttonVars(c: ButtonColors): CSSProperties {
+  return { "--btn-fg": c.text, "--btn-bg": c.background, "--btn-hover": c.hover } as CSSProperties;
+}
 
 /**
- * One full-bleed hero slide: photo, dark scrim, and the banner's copy laid over it.
+ * One full-bleed hero slide: photo with the banner's copy laid directly over it.
  *
  * The copy is real text rather than pixels baked into the image — it stays sharp, reflows on a
  * phone, and is indexable. Every field is optional: a banner with only an image renders as a plain
  * photo, which is what the ones saved before the overlay existed do.
+ *
+ * Colors and sizes come from `banner.style`, which the admin sets per slide.
  *
  * Shared by the single-banner and carousel paths so the two can't drift apart.
  */
@@ -28,6 +41,7 @@ export function HeroSlide({
   const hasCopy = Boolean(banner.eyebrow || banner.heading || banner.body);
   const primaryCta = banner.ctaLabel && banner.ctaHref;
   const altCta = banner.ctaAltLabel && banner.ctaAltHref;
+  const { style } = banner;
 
   const content = (
     <>
@@ -41,44 +55,57 @@ export function HeroSlide({
           className="object-cover"
         />
       ) : (
-        // No artwork yet — a brand-blue field still reads as a designed hero.
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-700 to-brand-900" />
-      )}
-
-      {/* Scrim. Weighted to the left, where the copy sits, so white text keeps its contrast over
-          whatever photo an admin uploads while the right side of the image stays visible. */}
-      {hasCopy && (
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-gradient-to-r from-brand-900/95 via-brand-900/75 to-brand-900/25"
-        />
+        // No artwork yet — a pale brand-blue field still reads as a designed hero, and keeps the
+        // blue copy legible.
+        <div className="absolute inset-0 bg-gradient-to-br from-brand-50 to-brand-100" />
       )}
 
       {hasCopy && (
         <Container className="relative flex min-h-[520px] flex-col justify-center py-20 lg:min-h-[620px]">
           <div className="max-w-2xl">
             {banner.eyebrow && (
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-300">
+              <p
+                className="text-xs font-semibold uppercase tracking-[0.18em]"
+                style={{ color: style.eyebrowColor }}
+              >
                 {banner.eyebrow}
               </p>
             )}
             {banner.heading && (
-              <Heading className="mt-5 font-[family-name:var(--font-display)] text-4xl font-bold leading-[1.05] text-white sm:text-5xl lg:text-6xl">
+              <Heading
+                className={`mt-5 font-[family-name:var(--font-display)] font-bold leading-[1.05] ${HEADING_SIZE_CLASSES[style.headingSize]}`}
+                style={{ color: style.headingColor }}
+              >
                 {banner.heading}
               </Heading>
             )}
             {banner.body && (
-              <p className="mt-5 max-w-xl text-base text-white/75 lg:text-lg">{banner.body}</p>
+              <p
+                className={`mt-5 max-w-xl ${BODY_SIZE_CLASSES[style.bodySize]}`}
+                style={{ color: style.bodyColor }}
+              >
+                {banner.body}
+              </p>
             )}
             {(primaryCta || altCta) && (
               <div className="mt-9 flex flex-wrap gap-3">
                 {primaryCta && (
-                  <LinkButton href={banner.ctaHref!} variant="inverse" size="lg">
+                  <LinkButton
+                    href={banner.ctaHref!}
+                    variant="custom"
+                    size="lg"
+                    style={buttonVars(style.cta)}
+                  >
                     {banner.ctaLabel}
                   </LinkButton>
                 )}
                 {altCta && (
-                  <LinkButton href={banner.ctaAltHref!} variant="secondaryDark" size="lg">
+                  <LinkButton
+                    href={banner.ctaAltHref!}
+                    variant="custom"
+                    size="lg"
+                    style={buttonVars(style.ctaAlt)}
+                  >
                     {banner.ctaAltLabel}
                   </LinkButton>
                 )}
@@ -90,7 +117,7 @@ export function HeroSlide({
     </>
   );
 
-  const frame = "relative min-h-[520px] w-full overflow-hidden bg-brand-900 lg:min-h-[620px]";
+  const frame = "relative min-h-[520px] w-full overflow-hidden bg-brand-50 lg:min-h-[620px]";
 
   // A slide with its own CTAs is already clickable in the places that matter; wrapping it in a
   // second link would nest interactive elements. So `href` only makes the *whole* slide a link on
