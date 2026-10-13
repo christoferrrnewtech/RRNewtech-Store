@@ -585,12 +585,18 @@ function ProductRow({
               defaultValue={row.summary ?? ""}
               placeholder="Short one-line summary (optional)"
             />
+            {/* Uncontrolled on purpose. React 19 calls form.reset() after every action, and a
+                controlled <select value> never sets `defaultSelected`, so the reset silently
+                flipped every select to "— No category —" while state (and the summary line) still
+                showed the old one. The next save then posted "" and wiped the tags. With
+                defaultValue the reset restores the saved value. The subcategory select re-mounts
+                per category so its default follows the category's options. */}
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-xs font-medium text-muted">Category</span>
                 <select
                   name="productCategory"
-                  value={catValue}
+                  defaultValue={catValue}
                   onChange={(e) => setCategory(row.key, e.target.value || undefined)}
                   className={selectClass}
                 >
@@ -605,8 +611,9 @@ function ProductRow({
               <label className="block">
                 <span className="text-xs font-medium text-muted">Subcategory</span>
                 <select
+                  key={catValue}
                   name="productSubcategory"
-                  value={subValue}
+                  defaultValue={subValue}
                   onChange={(e) => setSubcategory(row.key, e.target.value || undefined)}
                   className={selectClass}
                 >
