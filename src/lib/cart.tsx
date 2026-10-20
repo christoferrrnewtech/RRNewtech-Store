@@ -178,6 +178,13 @@ type CartContextValue = {
    * and the hydration that followed put the cart straight back.
    */
   hydrated: boolean;
+  /**
+   * Whether the browser thinks a customer is signed in — the same hint `openCart` gates on, so
+   * the header only advertises a count for a cart the visitor can actually open. After sign-out
+   * localStorage still holds the last customer's lines (the next sign-in reconciles them away);
+   * this is what keeps them from showing in the header meanwhile. Re-read on every navigation.
+   */
+  signedIn: boolean;
   isOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
@@ -306,9 +313,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
    */
   const pathname = usePathname();
   const [maybeSignedIn, setMaybeSignedIn] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
   useEffect(() => {
+    const hint = hasCustomerSessionHint();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- cookies and localStorage are unreadable during SSR, so this cannot be initial state
-    setMaybeSignedIn(hasCustomerSessionHint() || readLocal(OWNER_KEY) !== "");
+    setSignedIn(hint);
+    setMaybeSignedIn(hint || readLocal(OWNER_KEY) !== "");
   }, [pathname]);
 
   // Reconcile with the stored cart, after hydration and again if the visitor signs in. The hint is
@@ -502,6 +512,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     count,
     subtotal,
     hydrated,
+    signedIn,
     isOpen,
     openCart,
     closeCart,

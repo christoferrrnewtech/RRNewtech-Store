@@ -51,12 +51,16 @@ export default async function HomePage({
 }) {
   const { category, sort, q, brand, min, max } = await searchParams;
 
-  // The filterable catalog moved to /shop. Anything already linking a filter at the root — a
-  // bookmark, an indexed URL, a link the old CatalogFilters pushed — is forwarded there rather than
-  // landing on a marketing page that silently ignores it. A keyword search still belongs here.
-  if (!q?.trim() && (category || brand || min || max || sort)) {
+  // The filterable catalog moved to /shop. Anything already linking a filter or search at the root —
+  // a bookmark, an indexed URL, a link the old CatalogFilters or SearchBar pushed — is forwarded
+  // there rather than landing on a marketing page that silently ignores it. The search in
+  // particular has to go: the results list below reads the legacy seed catalog, not the brand
+  // products the store actually sells.
+  if (q?.trim() || category || brand || min || max || sort) {
     const forwarded = new URLSearchParams(
-      Object.entries({ category, brand, min, max, sort }).filter(([, v]) => v) as [string, string][],
+      Object.entries({ q: q?.trim(), category, brand, min, max, sort }).filter(
+        ([, v]) => v,
+      ) as [string, string][],
     );
     redirect(`/shop?${forwarded}`);
   }

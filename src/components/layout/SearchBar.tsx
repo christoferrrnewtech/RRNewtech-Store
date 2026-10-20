@@ -1,12 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 
 /**
- * Catalog search box. Submitting navigates to /?q=<term> so the shop page filters
- * server-side. Seeded from the current URL's `q` on mount (avoids useSearchParams so the
- * layout-level header doesn't force a Suspense boundary on otherwise-static pages).
+ * Catalog search box. Submitting navigates to /shop?q=<term>, which filters the brand catalog
+ * server-side. Follows the URL's `q`, so the box empties when the search is cleared and shows the
+ * term when a search link is opened directly. useSearchParams is safe in this layout-level header
+ * because the storefront renders dynamically (see the store layout's `dynamic` export).
  */
 export function SearchBar({
   className,
@@ -20,17 +21,18 @@ export function SearchBar({
   productCount?: number;
 }) {
   const router = useRouter();
-  const [term, setTerm] = useState("");
+  const urlTerm = useSearchParams().get("q") ?? "";
+  const [term, setTerm] = useState(urlTerm);
 
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("q");
-    if (q) setTerm(q);
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the URL is the source of truth; typing edits a local draft of it
+    setTerm(urlTerm);
+  }, [urlTerm]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const q = term.trim();
-    router.push(q ? `/?q=${encodeURIComponent(q)}` : "/");
+    router.push(q ? `/shop?q=${encodeURIComponent(q)}` : "/shop");
     onSubmitted?.();
   }
 

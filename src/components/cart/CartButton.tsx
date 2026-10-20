@@ -8,7 +8,9 @@ import { useCart } from "@/lib/cart";
  *          Squared like every other control; only the count chip stays circular.
  */
 export function CartButton({ variant = "icon" }: { variant?: "icon" | "pill" }) {
-  const { count, openCart } = useCart();
+  const { count: itemCount, signedIn, openCart } = useCart();
+  // A signed-out visitor can't open the cart, so don't advertise what's left in it.
+  const count = signedIn ? itemCount : 0;
 
   const label = `Open cart${count ? `, ${count} item${count === 1 ? "" : "s"}` : ""}`;
 

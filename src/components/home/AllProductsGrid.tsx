@@ -24,9 +24,14 @@ function interleaveByBrand<T extends { brandSlug: string }>(items: T[]): T[] {
   return out;
 }
 
+/** Lowercased, accent-folded, so "ácido" finds "acido" and the reverse. */
+function normalize(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
 /**
  * The flat product grid — every product across all published brands, narrowed by the optional
- * category/brand/price filters and reordered by `sort`. Each card shows its brand + category.
+ * keyword search and category/brand/price filters and reordered by `sort`. Each card shows its brand + category.
  * Renders four rows up front and reveals more as the reader scrolls (see LoadMoreGrid).
  *
  * The section shell, heading and filter row are owned by the parent (HomeCatalog), which also
@@ -36,6 +41,7 @@ export async function AllProductsGrid({
   category,
   sub,
   brand,
+  q,
   min,
   max,
   sort,
@@ -48,6 +54,10 @@ export async function AllProductsGrid({
   /** Narrows to one subcategory within `category` — the category page's chips. */
   sub?: string;
   brand?: string;
+  /** Keyword search. Every word must appear somewhere in the product's name, brand, category,
+   *  summary or highlights — so "intraoral scanner" doesn't match every scanner AND every intraoral
+   *  camera, which is what an any-word match would do. */
+  q?: string;
   min?: number;
   max?: number;
   sort?: CatalogSort;
@@ -77,11 +87,42 @@ export async function AllProductsGrid({
   // Nothing published yet — the parent's empty state would be misleading, so say nothing at all.
   if (items.length === 0) return null;
 
+  // Resolve "Category · Subcategory" labels for the card eyebrow from the admin-managed taxonomy.
+  // Built before filtering because the search matches on them too.
+  const catName = new Map(categories.map((c) => [c.slug, c.name]));
+  const subName = new Map(
+    categories.flatMap((c) => c.subcategories.map((s) => [`${c.slug}/${s.slug}`, s.name])),
+  );
+  const labelFor = (category?: string, subcategory?: string): string | undefined => {
+    if (!category) return undefined;
+    const cn = catName.get(category);
+    if (!cn) return undefined;
+    const sn = subcategory ? subName.get(`${category}/${subcategory}`) : undefined;
+    return sn ? `${cn} · ${sn}` : cn;
+  };
+
   if (mix) items = interleaveByBrand(items);
 
   if (category) items = items.filter((it) => it.product.category === category);
   if (sub) items = items.filter((it) => it.product.subcategory === sub);
   if (brand) items = items.filter((it) => it.brandSlug === brand);
+
+  const words = q ? normalize(q).split(/\s+/).filter(Boolean) : [];
+  if (words.length > 0) {
+    items = items.filter((it) => {
+      const p = it.product;
+      const haystack = normalize(
+        [
+          p.name,
+          it.brandName,
+          labelFor(p.category, p.subcategory),
+          p.summary,
+          ...(p.highlights ?? []),
+        ].join(" "),
+      );
+      return words.every((w) => haystack.includes(w));
+    });
+  }
 
   // Bounds are inclusive — that's what people expect from numbers they typed themselves.
   if (min !== undefined || max !== undefined) {
@@ -137,19 +178,6 @@ export async function AllProductsGrid({
       </div>
     );
   }
-
-  // Resolve "Category · Subcategory" labels for the card eyebrow from the admin-managed taxonomy.
-  const catName = new Map(categories.map((c) => [c.slug, c.name]));
-  const subName = new Map(
-    categories.flatMap((c) => c.subcategories.map((s) => [`${c.slug}/${s.slug}`, s.name])),
-  );
-  const labelFor = (category?: string, subcategory?: string): string | undefined => {
-    if (!category) return undefined;
-    const cn = catName.get(category);
-    if (!cn) return undefined;
-    const sn = subcategory ? subName.get(`${category}/${subcategory}`) : undefined;
-    return sn ? `${cn} · ${sn}` : cn;
-  };
 
   return (
     <>

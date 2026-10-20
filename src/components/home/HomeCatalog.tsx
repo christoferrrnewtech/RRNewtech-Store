@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { AllProductsGrid } from "@/components/home/AllProductsGrid";
 import { CatalogFilters } from "@/components/home/CatalogFilters";
@@ -30,12 +31,15 @@ export async function HomeCatalog({
   min,
   max,
   sort,
+  q,
 }: {
   category?: string;
   brand?: string;
   min?: string;
   max?: string;
   sort?: string;
+  /** Keyword search from the header search bar. */
+  q?: string;
 }) {
   const [categoryList, brandList] = await Promise.all([
     getCategoriesWithProducts().catch(() => []),
@@ -55,6 +59,19 @@ export async function HomeCatalog({
   const activeMin = bound(min);
   const activeMax = bound(max);
   const activeSort = sort && SORTS.has(sort) ? (sort as CatalogSort) : undefined;
+  // Capped so a pasted essay can't become the page heading.
+  const query = q?.trim().slice(0, 100) ?? "";
+
+  // Dropping the search keeps whatever else is filtered.
+  const clearSearchHref = (() => {
+    const kept = new URLSearchParams(
+      Object.entries({ brand: activeBrand, min, max, sort: activeSort }).filter(
+        ([, v]) => v,
+      ) as [string, string][],
+    );
+    const qs = kept.toString();
+    return qs ? `/shop?${qs}` : "/shop";
+  })();
 
   // Mix brands together unless the visitor asked for a specific ordering — a brand filter or an
   // explicit sort IS the requested order, so interleaving would fight it.
@@ -65,11 +82,23 @@ export async function HomeCatalog({
       <Container className="pb-14 pt-6">
         <div className="mb-6">
           <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold text-fg lg:text-4xl">
-            Shop
+            {query ? `Results for “${query}”` : "Shop"}
           </h1>
-          <p className="mt-2 max-w-2xl text-muted">
-            Filter by category, brand or price to find what your clinic needs.
-          </p>
+          {query ? (
+            <p className="mt-2 max-w-2xl text-muted">
+              Matching product names, brands and categories.{" "}
+              <Link
+                href={clearSearchHref}
+                className="font-semibold text-brand-700 hover:text-brand-800"
+              >
+                Clear search
+              </Link>
+            </p>
+          ) : (
+            <p className="mt-2 max-w-2xl text-muted">
+              Filter by category, brand or price to find what your clinic needs.
+            </p>
+          )}
         </div>
 
         {/* `minmax(0,1fr)` on the grid column, not `1fr`: a track's default `min-width: auto` won't
@@ -89,11 +118,37 @@ export async function HomeCatalog({
             <AllProductsGrid
               category={activeCategory}
               brand={activeBrand}
+              q={query}
               min={activeMin}
               max={activeMax}
               sort={activeSort}
               mix={mix}
               toolbar={<CatalogToolbar min={activeMin} max={activeMax} sort={activeSort} />}
+              emptyState={
+                query ? (
+                  <div className="rounded-2xl border border-line bg-bg px-6 py-14 text-center">
+                    <p className="font-semibold text-fg">No products match “{query}”.</p>
+                    <p className="mt-1 text-sm text-muted">
+                      Try a different keyword, or ask us — we can source items that aren&apos;t
+                      listed yet.
+                    </p>
+                    <div className="mt-5 flex flex-wrap justify-center gap-3">
+                      <Link
+                        href={clearSearchHref}
+                        className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-fg hover:bg-elevated"
+                      >
+                        Clear search
+                      </Link>
+                      <Link
+                        href="/contact"
+                        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+                      >
+                        Talk to a sales agent
+                      </Link>
+                    </div>
+                  </div>
+                ) : undefined
+              }
               gridClassName="grid grid-cols-2 gap-4 md:grid-cols-3"
             />
           </div>

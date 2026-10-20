@@ -30,9 +30,10 @@ export default async function ShopPage({
     min?: string;
     max?: string;
     sort?: string;
+    q?: string;
   }>;
 }) {
-  const { category, brand, min, max, sort } = await searchParams;
+  const { category, brand, min, max, sort, q } = await searchParams;
 
   // A category has one address: /categories/<slug>. `?category=` was a second URL for the same view
   // — forward it, carrying the other filters, so links already in the wild still land right.
@@ -54,7 +55,7 @@ export default async function ShopPage({
         </nav>
       </Container>
 
-      <HomeCatalog category={category} brand={brand} min={min} max={max} sort={sort} />
+      <HomeCatalog category={category} brand={brand} min={min} max={max} sort={sort} q={q} />
     </>
   );
 }
