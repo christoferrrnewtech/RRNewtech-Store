@@ -2,9 +2,17 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { FormMessage, Honeypot, SubmitButton } from "@/components/ui/FormControls";
+import {
+  EmailInput,
+  FormMessage,
+  Honeypot,
+  PhoneInput,
+  RequiredMark,
+  SubmitButton,
+} from "@/components/ui/FormControls";
 import { sendInquiryAction } from "@/app/(store)/actions";
 import type { ActionState } from "@/lib/form-data";
+import { MAX_FULL_NAME, MAX_ORGANIZATION } from "@/lib/customer-fields";
 
 /**
  * Contact / sales inquiry form. Submits to `sendInquiryAction`, which records the message in
@@ -52,11 +60,15 @@ export function ContactForm({
           below sm — side-by-side inputs on a phone leave neither wide enough to read. */}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className={label}>
-          Full name
+          <span>
+            Full name
+            <RequiredMark />
+          </span>
           <input
             required
             name="name"
             autoComplete="name"
+            maxLength={MAX_FULL_NAME}
             defaultValue={customer?.name ?? ""}
             className={field}
             placeholder="Juan dela Cruz"
@@ -70,37 +82,44 @@ export function ContactForm({
           <input
             name="clinic"
             autoComplete="organization"
+            maxLength={MAX_ORGANIZATION}
             className={field}
             placeholder="Optional"
           />
         </label>
         <label className={label}>
-          Email
-          <input
+          <span>
+            Email
+            <RequiredMark />
+          </span>
+          <EmailInput
             required
-            type="email"
             name="email"
-            autoComplete="email"
             defaultValue={customer?.email ?? ""}
             className={field}
             placeholder="you@email.com"
           />
         </label>
         <label className={label}>
-          Mobile number
-          <input
+          <span>
+            Mobile number
+            <RequiredMark />
+          </span>
+          <PhoneInput
+            required
             name="phone"
-            type="tel"
-            autoComplete="tel"
             defaultValue={customer?.phone ?? ""}
             className={field}
-            placeholder="09xx xxx xxxx"
+            placeholder="0917-123-4567"
           />
         </label>
       </div>
 
       <label className={label}>
-        What do you need?
+        <span>
+          What do you need?
+          <RequiredMark />
+        </span>
         <textarea
           required
           name="message"

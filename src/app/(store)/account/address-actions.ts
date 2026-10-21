@@ -29,11 +29,10 @@ import { listOrdersForCustomer } from "@/lib/orders";
 import { deriveAddresses } from "@/lib/addresses";
 import { isKnownLocation } from "@/lib/locations";
 import { toAddressLabel } from "@/lib/address-book";
-import { normalizePhone } from "@/lib/customer-fields";
+import { MAX_NAME, normalizePhone } from "@/lib/customer-fields";
 import { cappedText, text, type ActionState } from "@/lib/form-data";
 
 /** Same caps as checkout — an address stored here is an address that will be posted from there. */
-const MAX_NAME = 100;
 const MAX_ADDRESS_FIELD = 200;
 /** Firestore auto-ids are 20 chars; the cap is the usual boundary discipline. */
 const MAX_ID = 64;

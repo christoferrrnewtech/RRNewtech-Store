@@ -75,11 +75,18 @@ import {
 } from "@/lib/pay-window";
 import { SITE, SITE_URL } from "@/lib/constants";
 import { cappedText, text, type ActionState } from "@/lib/form-data";
+import {
+  looksLikeEmail,
+  MAX_FULL_NAME,
+  MAX_NAME,
+  MAX_ORGANIZATION,
+  normalizePhone,
+} from "@/lib/customer-fields";
 
-/** Field caps. Generous for a real customer, small enough that abuse can't bloat a document. */
-const MAX_NAME = 100;
-const MAX_EMAIL = 200;
-const MAX_PHONE = 40;
+/**
+ * Field caps. Generous for a real customer, small enough that abuse can't bloat a document. Names,
+ * email and phone take theirs from `customer-fields.ts`, shared with the forms' `maxLength`.
+ */
 const MAX_MESSAGE = 2000;
 const MAX_ADDRESS_FIELD = 200;
 /** More lines than any genuine clinic order, and a hard ceiling on repricing work per request. */
@@ -95,11 +102,6 @@ const MAX_ORDER_ID = 64;
  */
 function isBot(form: FormData): boolean {
   return text(form, "company").length > 0;
-}
-
-/** Good enough to catch typos and obvious junk. Real deliverability is proven by replying. */
-function looksLikeEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -337,14 +339,18 @@ export async function placeOrderAction(
   const customerSession = await getSessionCustomer();
 
   const customer = {
-    firstName: cappedText(form, "firstName", MAX_NAME),
-    lastName: cappedText(form, "lastName", MAX_NAME),
+    // Uncapped here so an over-long name is REJECTED below rather than quietly truncated — the
+    // form's maxLength stops a person typing past it, so only a scripted POST ever trips that.
+    firstName: text(form, "firstName"),
+    lastName: text(form, "lastName"),
     // Lower-cased before storage. Mail delivery is case-insensitive in practice, and this is the
     // key /account matches a customer's own orders on — Firestore `==` is case-sensitive, so
     // "Test@gmail.com" stored against "test@gmail.com" queried would hide a real order from the
     // person who placed it. Registration lower-cases too, so both sides agree.
-    email: cappedText(form, "email", MAX_EMAIL).toLowerCase(),
-    phone: cappedText(form, "phone", MAX_PHONE),
+    // Length is part of `looksLikeEmail`, so this is never stored over MAX_EMAIL.
+    email: text(form, "email").toLowerCase(),
+    // Canonical 09XXXXXXXXX, or "" when it isn't a PH mobile number.
+    phone: normalizePhone(text(form, "phone")),
     // What links this order to an account. See OrderCustomer.userId, and the two-key lookup in
     // `listOrdersForCustomer` that reads it back.
     userId: customerSession?.uid,
@@ -360,8 +366,13 @@ export async function placeOrderAction(
   };
 
   if (!customer.firstName || !customer.lastName) return { error: "Enter your first and last name." };
+  if (customer.firstName.length > MAX_NAME || customer.lastName.length > MAX_NAME) {
+    return { error: `First and last name can be up to ${MAX_NAME} characters each.` };
+  }
   if (!looksLikeEmail(customer.email)) return { error: "Enter a valid email address." };
-  if (!customer.phone) return { error: "Enter a phone number so we can confirm your order." };
+  if (!customer.phone) {
+    return { error: "Enter a valid mobile number, e.g. 0917-123-4567, so we can confirm your order." };
+  }
   if (!shipping.address || !shipping.barangay || !shipping.city || !shipping.region || !shipping.postal) {
     return { error: "Complete every required part of your delivery address." };
   }
@@ -764,17 +775,23 @@ export async function sendInquiryAction(
   // but no `ref`, so TrackInquiry fires no conversion for it.
   if (isBot(form)) redirect(inquirySentPath(kind));
 
-  const name = cappedText(form, "name", MAX_NAME);
+  // Uncapped so an over-long name is rejected rather than truncated — see placeOrderAction.
+  const name = text(form, "name");
   // Lower-cased for the same reason as an order's — see placeOrderAction.
-  const email = cappedText(form, "email", MAX_EMAIL).toLowerCase();
-  const phone = cappedText(form, "phone", MAX_PHONE);
+  const email = text(form, "email").toLowerCase();
+  // Required, and must be a real PH mobile number — stored canonical 09XXXXXXXXX.
+  const phone = normalizePhone(text(form, "phone"));
   // `clinic`, not `company` — that name is the honeypot's, and isBot() above would treat anything
   // typed into it as a bot and silently discard the inquiry. Optional: left "" when not filled.
-  const clinic = cappedText(form, "clinic", MAX_NAME);
+  const clinic = cappedText(form, "clinic", MAX_ORGANIZATION);
   const message = cappedText(form, "message", MAX_MESSAGE);
 
   if (!name) return { error: "Enter your name." };
+  if (name.length > MAX_FULL_NAME) {
+    return { error: `Your name can be up to ${MAX_FULL_NAME} characters.` };
+  }
   if (!looksLikeEmail(email)) return { error: "Enter a valid email address." };
+  if (!phone) return { error: "Enter a valid mobile number, e.g. 0917-123-4567." };
   if (!message) return { error: "Add a message so we know how to help." };
 
   // Assigned inside the try, used after it — see placeOrderAction on why redirect() can't go inside.

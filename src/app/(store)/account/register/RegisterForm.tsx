@@ -2,14 +2,24 @@
 
 import { useActionState } from "react";
 import { registerAction } from "@/app/(store)/account/actions";
-import { FormMessage, Honeypot, SubmitButton } from "@/components/ui/FormControls";
-import { Field, ImageInput, PasswordInput, TextInput } from "@/components/account/fields";
 import {
-  MAX_EMAIL,
+  EmailInput,
+  FormMessage,
+  Honeypot,
+  PhoneInput,
+  SubmitButton,
+} from "@/components/ui/FormControls";
+import {
+  Field,
+  fieldClass,
+  ImageInput,
+  PasswordInput,
+  TextInput,
+} from "@/components/account/fields";
+import {
   MAX_NAME,
   MAX_PASSWORD,
   MIN_PASSWORD,
-  PHONE_PATTERN,
   PRC_IMAGE_ACCEPT,
   PRC_PATTERN,
 } from "@/lib/customer-fields";
@@ -53,25 +63,19 @@ export function RegisterForm() {
       </div>
 
       <Field label="Email address" hint="We'll send a confirmation link here." required>
-        <TextInput
+        <EmailInput
           name="email"
-          type="email"
-          autoComplete="email"
-          maxLength={MAX_EMAIL}
+          className={fieldClass}
           required
           placeholder="you@clinic.ph"
         />
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Mobile number" hint="09XX-XXX-XXXX or 09XXXXXXXXX" required>
-          <TextInput
+        <Field label="Mobile number" hint="09XX-XXX-XXXX or +63 9XX XXX XXXX" required>
+          <PhoneInput
             name="phone"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            pattern={PHONE_PATTERN}
-            maxLength={13}
+            className={fieldClass}
             required
             placeholder="0917-123-4567"
           />

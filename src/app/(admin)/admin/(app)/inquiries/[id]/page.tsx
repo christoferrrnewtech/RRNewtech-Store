@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getInquiry } from "@/lib/inquiries";
+import { formatPhone } from "@/lib/customer-fields";
 import { INQUIRY_KIND_LABELS, INQUIRY_STATUS_LABELS } from "@/lib/inquiry-status";
 import { StatusBadge, formatWhen } from "@/components/admin/Queue";
 import { inquiryTone } from "../tone";
@@ -112,7 +113,7 @@ export default async function AdminInquiryPage({
                   label: "Phone",
                   value: phone ? (
                     <a href={`tel:${phone}`} className="font-medium text-brand-700 hover:underline">
-                      {inquiry.phone}
+                      {formatPhone(inquiry.phone)}
                     </a>
                   ) : (
                     <span className="text-muted">Not given</span>

@@ -13,7 +13,7 @@ import {
 } from "@/app/(store)/account/address-actions";
 import { ADDRESS_LABELS, ADDRESS_LABEL_NAMES, type CustomerAddress } from "@/lib/address-book";
 import { addressLines } from "@/lib/addresses";
-import { formatPhone } from "@/lib/customer-fields";
+import { formatPhone, MAX_NAME } from "@/lib/customer-fields";
 import type { ActionState } from "@/lib/form-data";
 
 /**
@@ -294,6 +294,7 @@ function AddressForm({
             <input
               required
               name="firstName"
+              maxLength={MAX_NAME}
               className={field}
               defaultValue={address?.firstName ?? defaults.firstName}
             />
@@ -302,6 +303,7 @@ function AddressForm({
             <input
               required
               name="lastName"
+              maxLength={MAX_NAME}
               className={field}
               defaultValue={address?.lastName ?? defaults.lastName}
             />

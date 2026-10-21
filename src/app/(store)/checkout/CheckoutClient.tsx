@@ -5,7 +5,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
-import { FormMessage, Honeypot, SubmitButton } from "@/components/ui/FormControls";
+import {
+  EmailInput,
+  FormMessage,
+  Honeypot,
+  PhoneInput,
+  SubmitButton,
+} from "@/components/ui/FormControls";
 import { useCart } from "@/lib/cart";
 import { trackInitiateCheckout } from "@/lib/analytics";
 import { formatPHP } from "@/lib/format";
@@ -22,7 +28,7 @@ import {
 } from "@/app/(store)/actions";
 import { ADDRESS_LABEL_NAMES, type CustomerAddress } from "@/lib/address-book";
 import { addressLines } from "@/lib/addresses";
-import { formatPhone } from "@/lib/customer-fields";
+import { formatPhone, MAX_NAME } from "@/lib/customer-fields";
 import type { ActionState } from "@/lib/form-data";
 
 const field =
@@ -384,11 +390,12 @@ export function CheckoutClient({
                 inputs pick up the new defaults — see `selectAddress`. */}
             <section key={`contact:${addressId}`}>
               <h2 className="text-sm font-bold uppercase tracking-wide text-brand-600">Contact</h2>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {/* `items-start`: one field's error line must not push its neighbour's input out of
+                  line with it, which the stretch + `mt-auto` in Field would otherwise do. */}
+              <div className="mt-3 grid items-start gap-3 sm:grid-cols-2">
                 <Field label="Email">
-                  <input
+                  <EmailInput
                     required
-                    type="email"
                     name="email"
                     className={field}
                     placeholder="you@email.com"
@@ -399,13 +406,12 @@ export function CheckoutClient({
                     defaultValue={customer?.email ?? ""}
                   />
                 </Field>
-                <Field label="Phone">
-                  <input
+                <Field label="Mobile number">
+                  <PhoneInput
                     required
                     name="phone"
                     className={field}
-                    placeholder="09xx xxx xxxx"
-                    inputMode="tel"
+                    placeholder="0917-123-4567"
                     defaultValue={formatPhone(selected?.phone ?? customer?.phone ?? "")}
                   />
                 </Field>
@@ -422,6 +428,8 @@ export function CheckoutClient({
                     <input
                       required
                       name="firstName"
+                      autoComplete="given-name"
+                      maxLength={MAX_NAME}
                       className={field}
                       placeholder="Juan"
                       defaultValue={selected?.firstName ?? customer?.firstName ?? ""}
@@ -431,6 +439,8 @@ export function CheckoutClient({
                     <input
                       required
                       name="lastName"
+                      autoComplete="family-name"
+                      maxLength={MAX_NAME}
                       className={field}
                       placeholder="dela Cruz"
                       defaultValue={selected?.lastName ?? customer?.lastName ?? ""}

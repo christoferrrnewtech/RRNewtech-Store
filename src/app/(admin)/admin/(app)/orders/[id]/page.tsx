@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getOrder, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from "@/lib/orders";
 import { canRenewPayment, isPayWindowOpen } from "@/lib/pay-window";
 import { formatPHP } from "@/lib/format";
+import { formatPhone } from "@/lib/customer-fields";
 import { StatusBadge, formatWhen } from "@/components/admin/Queue";
 import { DetailList, PageHeader, Panel } from "@/components/admin/Panel";
 import { orderTone, paymentTone } from "../tone";
@@ -231,7 +232,7 @@ export default async function AdminOrderPage({
                       href={`tel:${order.customer.phone.replace(/\s/g, "")}`}
                       className="font-medium text-brand-700 hover:underline"
                     >
-                      {order.customer.phone}
+                      {formatPhone(order.customer.phone)}
                     </a>
                   ) : (
                     "—"
