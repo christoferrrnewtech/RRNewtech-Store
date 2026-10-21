@@ -7,6 +7,9 @@
  * render" crash instead of a message. The server re-encodes every upload to a max-1600px WebP
  * anyway (`storeUpload` in the admin actions), so resizing to the same bound first loses nothing.
  *
+ * The browser's copy is encoded LOSSLESSLY so the server's quality-90 WebP is the only lossy step.
+ * A lossy pass here stacked a second round of artifacts on every product photo.
+ *
  * Client-only: uses createImageBitmap and <canvas>.
  */
 
@@ -65,14 +68,13 @@ async function shrink(file: File): Promise<File> {
     return file;
   }
 
-  // Browsers that can't encode WebP silently hand back PNG, which can be larger than the original.
-  // Fall back to JPEG there, on white: product shots are shown on white, and JPEG has no alpha.
-  let blob = await draw(canvas, ctx, bitmap, "image/webp");
-  if (blob?.type !== "image/webp") blob = await draw(canvas, ctx, bitmap, "image/jpeg", "#fff");
+  // WebP at quality 1 is lossless in Chromium. Browsers that can't encode WebP hand back PNG instead,
+  // which is lossless too — just larger, and the size check below then keeps the original.
+  const blob = await draw(canvas, ctx, bitmap, "image/webp");
   bitmap.close();
 
   if (!blob || blob.size >= file.size) return file;
-  const ext = blob.type === "image/webp" ? "webp" : "jpg";
+  const ext = blob.type === "image/webp" ? "webp" : "png";
   const base = file.name.replace(/\.[^.]+$/, "") || "image";
   return new File([blob], `${base}.${ext}`, { type: blob.type });
 }
@@ -82,13 +84,8 @@ function draw(
   ctx: CanvasRenderingContext2D,
   bitmap: ImageBitmap,
   type: string,
-  background?: string,
 ): Promise<Blob | null> {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (background) {
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve) => canvas.toBlob(resolve, type, 0.85));
+  return new Promise((resolve) => canvas.toBlob(resolve, type, 1));
 }

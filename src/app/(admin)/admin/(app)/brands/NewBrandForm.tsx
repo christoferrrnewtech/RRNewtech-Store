@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { createBrandAction } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
 import { Field, FormMessage, ImageInput, SubmitButton, TextInput } from "@/components/admin/Form";
+import { IMAGE_SPECS } from "@/lib/image-specs";
 import { Panel } from "@/components/admin/Panel";
 
 /** The "Add a brand" panel the Brands page opens inline. */
@@ -30,7 +31,12 @@ export function NewBrandForm() {
             <TextInput name="name" required placeholder="e.g. Dentium" />
           </Field>
           <Field label="Logo" hint="Optional. You can add it later." group>
-            <ImageInput name="logo" shape="logo" hint="PNG, JPG or WebP · up to 5 MB" />
+            <ImageInput
+              name="logo"
+              shape="logo"
+              hint="PNG, JPG or WebP · up to 5 MB"
+              spec={IMAGE_SPECS.logo}
+            />
           </Field>
         </div>
       </Panel>

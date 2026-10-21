@@ -46,7 +46,7 @@ export async function BrandShowcase() {
                 aria-label={b.name}
                 className="relative flex h-28 items-center justify-center rounded-2xl border border-line bg-surface p-6 transition-shadow hover:shadow-md"
               >
-                <Image src={b.logo} alt={b.name} fill sizes="300px" className="object-contain p-6" />
+                <Image src={b.logo} alt={b.name} fill quality={85} sizes="300px" className="object-contain p-6" />
               </Link>
             </li>
           ))}

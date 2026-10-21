@@ -28,6 +28,10 @@ const nextConfig: NextConfig = {
       // Admin-uploaded images (banners, brand logos/heroes, gallery) served from Firebase Storage.
       { protocol: "https", hostname: "firebasestorage.googleapis.com" },
     ],
+    // 75 (Next's default) for product listing cards and small thumbnails; 85 for banners, brand
+    // imagery, category tiles and product detail pages, where 75 visibly softens the image.
+    // Next 16 rejects any `quality` prop not listed here.
+    qualities: [75, 85],
   },
 };
 

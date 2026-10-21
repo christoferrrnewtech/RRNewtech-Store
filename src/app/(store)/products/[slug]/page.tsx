@@ -77,6 +77,7 @@ export default async function ProductPage({
                 src={logo}
                 alt={product.brand}
                 fill
+                quality={85}
                 sizes="(max-width: 1024px) 100vw, 500px"
                 className="object-contain p-12"
                 priority
@@ -86,6 +87,7 @@ export default async function ProductPage({
                 src={productImageUrl(product, 900)}
                 alt={product.name}
                 fill
+                quality={85}
                 sizes="(max-width: 1024px) 100vw, 500px"
                 className="object-cover"
                 priority

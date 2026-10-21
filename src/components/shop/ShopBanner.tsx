@@ -20,6 +20,7 @@ export async function ShopBanner() {
         width={1489}
         height={551}
         priority
+        quality={85}
         sizes="100vw"
         className="h-auto w-full"
       />

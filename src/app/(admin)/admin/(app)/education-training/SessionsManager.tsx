@@ -18,6 +18,7 @@ import {
   TextArea,
   Select,
 } from "@/components/admin/Form";
+import { IMAGE_SPECS } from "@/lib/image-specs";
 import { FormSection, PageHeader, Panel } from "@/components/admin/Panel";
 import { sessionHref, type Session } from "@/components/education/Sessions";
 import type { LinkOption } from "@/lib/content";
@@ -691,6 +692,7 @@ function SessionForm({
                   removeName="removeImage"
                   removeLabel="Remove the current photo"
                   minEdge={RECOMMENDED_EDGE}
+                  spec={IMAGE_SPECS.session}
                   hint="Any image · up to 5 MB · at least 200px on the short side"
                 />
               </div>

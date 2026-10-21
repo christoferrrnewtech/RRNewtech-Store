@@ -16,6 +16,7 @@ import {
 import Image from "next/image";
 import type { ActionState } from "@/lib/form-data";
 import { FormMessage, ImageInput, SubmitButton, TextInput } from "@/components/admin/Form";
+import { IMAGE_SPECS } from "@/lib/image-specs";
 import type { StoreCategory, Subcategory } from "@/lib/content";
 
 export function CategoriesManager({ categories }: { categories: StoreCategory[] }) {
@@ -280,8 +281,9 @@ function CategoryImageForm({ category }: { category: StoreCategory }) {
         <ImageInput
           name="image"
           current={category.image}
+          spec={IMAGE_SPECS.category}
           removeName="remove"
-          hint="Wide shot, about 16:10 · up to 5 MB"
+          hint="PNG, JPG or WebP · up to 5 MB"
         />
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">

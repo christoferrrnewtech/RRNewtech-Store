@@ -26,6 +26,7 @@ import {
   TextArea,
   TextInput,
 } from "@/components/admin/Form";
+import { IMAGE_SPECS } from "@/lib/image-specs";
 import { FormSection, PageHeader, Panel } from "@/components/admin/Panel";
 import { HeroSlide } from "@/components/home/HeroSlide";
 import {
@@ -255,9 +256,10 @@ function EditPanel({ banner, index }: { banner: Banner; index: number }) {
             <ImageInput
               name="image"
               current={banner.image}
+              spec={IMAGE_SPECS.banner}
               stacked
               aspect="aspect-[1489/551]"
-              hint="About 2.7:1 fits best · PNG, JPG or WebP · up to 5 MB"
+              hint="PNG, JPG or WebP · up to 5 MB"
             />
           </FormSection>
           <BasicsFields banner={banner} />
@@ -304,9 +306,10 @@ function AddPanel() {
           <ImageInput
             name="image"
             required
+            spec={IMAGE_SPECS.banner}
             stacked
             aspect="aspect-[1489/551]"
-            hint="About 2.7:1 fits best · PNG, JPG or WebP · up to 5 MB"
+            hint="PNG, JPG or WebP · up to 5 MB"
           />
         </FormSection>
         <BasicsFields />

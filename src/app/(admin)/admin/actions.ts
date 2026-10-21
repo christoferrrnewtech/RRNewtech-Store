@@ -97,6 +97,15 @@ const MAX_NOTE = 2000;
  */
 const REJECTED_FORMATS = new Set(["svg"]);
 
+/** Default resize bound: nothing outside a banner is ever shown wider than ~1000px. */
+const MAX_IMAGE_BOX = { width: 1600, height: 1600 };
+/**
+ * Full-width banners (homepage/shop slides, brand hero) span the whole screen, so 1600px is enlarged
+ * on wide and high-DPI displays. The box is 2.7:1 — the 1489×551 banner frame — so a correctly
+ * shaped banner keeps up to ~3000px; `fit: "inside"` never crops or changes the ratio either way.
+ */
+const BANNER_IMAGE_BOX = { width: 3000, height: 1110 };
+
 /**
  * Minimum shorter edge for an upload. Every surface that displays these renders them hundreds of
  * pixels wide, and `withoutEnlargement` means a tiny source stays tiny — a 46×46 file was once
@@ -119,16 +128,20 @@ function revalidateStorefront(slug?: string) {
  * Upload an image to Firebase Storage and return a public download URL.
  * Returns "" when no file was supplied (an unchanged image field).
  *
- * Whatever goes in comes out as WebP: downscaled to a max 1600px edge and re-encoded at quality 80,
- * so banners and logos land at tens of KB instead of multi-MB. Uses Firebase's download-token URL
- * rather than `makePublic()`: it works with uniform bucket-level access and doesn't expose the
- * whole bucket.
+ * Whatever goes in comes out as WebP: downscaled to fit `box` (1600px square by default; banners
+ * pass BANNER_IMAGE_BOX) and re-encoded at quality 90, so files land at tens or hundreds of KB
+ * instead of multi-MB. Uses Firebase's download-token URL rather than `makePublic()`: it works
+ * with uniform bucket-level access and doesn't expose the whole bucket.
  *
  * Validation is decode-first rather than a MIME allowlist — whatever sharp can actually read is
  * accepted. An allowlist rejected valid files the browser had labelled with a blank or wrong type,
  * and told the user nothing useful when it did.
  */
-async function storeUpload(file: FormDataEntryValue | null, prefix: string): Promise<string> {
+async function storeUpload(
+  file: FormDataEntryValue | null,
+  prefix: string,
+  box: { width: number; height: number } = MAX_IMAGE_BOX,
+): Promise<string> {
   if (!(file instanceof File) || file.size === 0) return "";
   if (file.size > MAX_UPLOAD_BYTES) throw new Error("Image must be 5 MB or smaller.");
 
@@ -160,8 +173,8 @@ async function storeUpload(file: FormDataEntryValue | null, prefix: string): Pro
   // orientation so phone photos aren't saved sideways.
   const compressed = await image
     .rotate()
-    .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
-    .webp({ quality: 80 })
+    .resize({ ...box, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 90 })
     .toBuffer();
 
   const bucket = getBucket();
@@ -232,7 +245,7 @@ export async function addBannerAction(
   await requireAdmin();
 
   try {
-    const image = await storeUpload(form.get("image"), "banner");
+    const image = await storeUpload(form.get("image"), "banner", BANNER_IMAGE_BOX);
     if (!image) return { error: "Choose an image for the banner." };
     await addBanner({
       image,
@@ -256,7 +269,7 @@ export async function updateBannerAction(
   const id = text(form, "id");
 
   try {
-    const uploaded = await storeUpload(form.get("image"), "banner");
+    const uploaded = await storeUpload(form.get("image"), "banner", BANNER_IMAGE_BOX);
     const patch: Partial<Omit<Banner, "id" | "order">> = {
       alt: text(form, "alt"),
       href: text(form, "href"),
@@ -672,7 +685,7 @@ export async function saveBrandHeroAction(_prev: ActionState, form: FormData) {
   return saveBrandSection(
     form,
     async (brand) => {
-      const uploaded = await storeUpload(form.get("heroImage"), `hero-${brand.slug}`);
+      const uploaded = await storeUpload(form.get("heroImage"), `hero-${brand.slug}`, BANNER_IMAGE_BOX);
       if (uploaded) brand.heroImage = uploaded;
       if (form.get("remove") === "1") brand.heroImage = undefined;
     },

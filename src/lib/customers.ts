@@ -159,7 +159,7 @@ export async function uploadPrcIdImage(file: File, uid: string): Promise<string>
       fit: "inside",
       withoutEnlargement: true,
     })
-    .webp({ quality: 82 })
+    .webp({ quality: 90 })
     .toBuffer();
 
   const path = `prc-ids/${uid}/${Date.now()}-${crypto.randomBytes(4).toString("hex")}.webp`;

@@ -6,6 +6,7 @@ import { saveBrandProductsAction, } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
 import { shrinkImages, uploadBytes, UPLOAD_BUDGET_BYTES } from "@/lib/shrink-images";
 import { FormMessage, ImageInput, SubmitButton, TextArea, TextInput } from "@/components/admin/Form";
+import { IMAGE_SPECS } from "@/lib/image-specs";
 import type { Brand, BrandProduct, StoreCategory } from "@/lib/content";
 import { formatPHP } from "@/lib/format";
 import { Section } from "./Section";
@@ -537,6 +538,7 @@ function ProductRow({
           {/* One `productImageFile` per row, posted even when empty, so files stay row-aligned. */}
           <ImageInput
             name="productImageFile"
+            spec={IMAGE_SPECS.product}
             shape="square"
             current={row.image}
             hint="Main photo · shown on cards and the product page"
@@ -781,6 +783,7 @@ function ProductRow({
               <div className="mt-2">
                 <ImageInput
                   name={`productGalleryFiles_${row.id}`}
+                  spec={IMAGE_SPECS.product}
                   multiple
                   shape="square"
                   hint="Add more photos for the product page"

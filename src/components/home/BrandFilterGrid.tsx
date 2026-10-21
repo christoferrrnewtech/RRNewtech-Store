@@ -75,6 +75,7 @@ export function BrandFilterGrid({ brands }: { brands: BrandCard[] }) {
                 src={b.logo}
                 alt={b.name}
                 fill
+                quality={85}
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 400px"
                 className="object-contain p-8 transition-transform duration-300 group-hover:scale-[1.03]"
               />

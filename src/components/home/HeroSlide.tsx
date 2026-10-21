@@ -51,6 +51,7 @@ export function HeroSlide({
           alt={banner.alt}
           fill
           priority={priority}
+          quality={85}
           sizes="100vw"
           className="object-cover"
         />

@@ -26,6 +26,7 @@ import {
   TextArea,
   TextInput,
 } from "@/components/admin/Form";
+import { IMAGE_SPECS } from "@/lib/image-specs";
 import { Panel } from "@/components/admin/Panel";
 import type { Brand } from "@/lib/content";
 import { BRAND_GROUPS } from "@/lib/constants";
@@ -133,10 +134,11 @@ function HeroSection({ brand }: { brand: Brand }) {
         <input type="hidden" name="slug" value={brand.slug} />
         <ImageInput
           name="heroImage"
+          spec={IMAGE_SPECS.brandHero}
           current={brand.heroImage}
           removeName="remove"
           removeLabel="Remove the current hero"
-          hint="1489 × 551 (2.7:1) fits the band exactly · up to 5 MB"
+          hint="PNG, JPG or WebP · up to 5 MB"
         />
         <SaveBar state={state} />
       </form>
@@ -152,6 +154,7 @@ function LogoSection({ brand }: { brand: Brand }) {
         <input type="hidden" name="slug" value={brand.slug} />
         <ImageInput
           name="logo"
+          spec={IMAGE_SPECS.logo}
           shape="logo"
           current={brand.logo}
           required
@@ -243,7 +246,12 @@ function GallerySection({ brand }: { brand: Brand }) {
         )}
 
         <Field label="Add images" hint="Select one or more. PNG, JPG or WebP · up to 5 MB each." group>
-          <ImageInput name="newImages" multiple hint="New images are added after the ones above." />
+          <ImageInput
+            name="newImages"
+            multiple
+            hint="New images are added after the ones above."
+            spec={IMAGE_SPECS.brandGallery}
+          />
         </Field>
 
         <SaveBar state={state} label="Save gallery" />

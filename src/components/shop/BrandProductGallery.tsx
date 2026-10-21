@@ -97,6 +97,7 @@ export function BrandProductGallery({ images, alt }: { images: GalleryImg[]; alt
           src={main.src}
           alt={alt}
           fill
+          quality={85}
           sizes="(max-width: 1024px) 100vw, 500px"
           className={main.contain ? "object-contain p-12" : "object-cover"}
           priority

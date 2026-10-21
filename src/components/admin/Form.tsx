@@ -3,6 +3,7 @@
 import { useFormStatus } from "react-dom";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ActionState } from "@/lib/form-data";
+import type { ImageSpec } from "@/lib/image-specs";
 
 /** Submit button that disables and relabels itself while its form is pending. */
 export function SubmitButton({
@@ -121,6 +122,7 @@ export function ImageInput({
   stacked = false,
   aspect,
   minEdge,
+  spec,
 }: {
   name: string;
   /** URL of the image already saved, if any. */
@@ -142,6 +144,8 @@ export function ImageInput({
    * is otherwise accepted silently and then stretched blurry across a card, with no hint why.
    */
   minEdge?: number;
+  /** Recommended upload size, shown as a line with an (i) explaining it. See IMAGE_SPECS. */
+  spec?: ImageSpec;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [picked, setPicked] = useState<{ url: string; name: string }[]>([]);
@@ -265,6 +269,15 @@ export function ImageInput({
               ? `${picked.length} images selected`
               : hint}
         </p>
+        {/* Outside the hint line: that one is swapped for the file name once a file is picked. */}
+        {spec && (
+          <p className="flex items-center text-xs text-muted">
+            <span>
+              Best size: <span className="font-semibold text-fg">{spec.size}</span>
+            </span>
+            <InfoTip text={spec.tip} />
+          </p>
+        )}
         {minEdge !== undefined && dims && shown && (
           <p className={`text-xs ${small ? "font-semibold text-danger" : "text-muted"}`}>
             {dims.w} × {dims.h} px

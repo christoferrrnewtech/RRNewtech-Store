@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { saveAboutAction } from "@/app/(admin)/admin/actions";
 import type { ActionState } from "@/lib/form-data";
 import { Field, ImageInput, RepeatableText, SaveBar, TextInput } from "@/components/admin/Form";
+import { IMAGE_SPECS } from "@/lib/image-specs";
 import { FormSection, Panel } from "@/components/admin/Panel";
 import type { AboutContent } from "@/lib/content";
 
@@ -63,6 +64,7 @@ export function AboutEditor({ content }: { content: AboutContent }) {
                 current={content.image || undefined}
                 stacked
                 aspect="aspect-[4/3]"
+                spec={IMAGE_SPECS.about}
                 removeName="removeImage"
                 removeLabel="Use the placeholder instead"
                 hint="PNG, JPG or WebP · up to 5 MB"

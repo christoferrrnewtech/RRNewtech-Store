@@ -59,7 +59,7 @@ export default async function BrandPage({
           structure across every brand page. */}
       <section className="relative aspect-[1489/551] w-full overflow-hidden bg-brand-900">
         {brand.heroImage ? (
-          <Image src={brand.heroImage} alt="" fill sizes="100vw" className="object-cover" priority />
+          <Image src={brand.heroImage} alt="" fill quality={85} sizes="100vw" className="object-cover" priority />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-brand-700 to-brand-900">
             <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-400/20 blur-3xl" />
@@ -89,6 +89,7 @@ export default async function BrandPage({
                 src={brand.logo}
                 alt={brand.name}
                 fill
+                quality={85}
                 sizes="96px"
                 className="object-contain p-2.5"
                 priority={!brand.heroImage}
@@ -157,6 +158,7 @@ export default async function BrandPage({
                       src={img.src}
                       alt={img.caption ?? ""}
                       fill
+                      quality={85}
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 380px"
                       className="object-cover"
                     />
