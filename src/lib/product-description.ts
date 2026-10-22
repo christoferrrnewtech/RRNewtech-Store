@@ -7,12 +7,65 @@
  * This turns those conventions back into structure at display time. Every rule is narrow and
  * anything unmatched falls through to a paragraph, i.e. exactly the old output — so copy that
  * doesn't follow a convention is never mangled.
+ *
+ * Links use the markdown form `[View the brochure](https://…)`: inline within a line they render as
+ * a text link, and a line holding nothing but a link renders as a button.
  */
+
+export type DescriptionLink = { text: string; href: string };
 
 export type DescriptionBlock =
   | { type: "heading"; text: string }
   | { type: "paragraph"; text: string }
-  | { type: "list"; items: string[] };
+  | { type: "list"; items: string[] }
+  /** Lines that are nothing but a link, shown as buttons ("View the brochure"). */
+  | { type: "links"; items: DescriptionLink[] };
+
+/** A text run inside a line: plain text, or a `[label](url)` link. */
+export type InlineSegment = { type: "text"; text: string } | ({ type: "link" } & DescriptionLink);
+
+/**
+ * `[label](url)` — the label is what shoppers see, the url is where it goes. A space between the
+ * two halves is tolerated, since "[label] (url)" is an easy slip to make when typing one by hand.
+ */
+const LINK = /\[([^\]\n]+)\][ \t]*\(\s*([^)\s]+)\s*\)/g;
+const LINK_ONLY = /^\[([^\]\n]+)\][ \t]*\(\s*([^)\s]+)\s*\)$/;
+
+/**
+ * The href to use for a link the admin typed, or null if it isn't one we'll render. Only web,
+ * mail and phone links (and on-site paths) are allowed, so a `javascript:` url can't sneak in.
+ * A bare "www." address gets https:// since that's how people usually paste them.
+ */
+export function safeHref(url: string): string | null {
+  const value = url.trim();
+  if (/^https?:\/\/\S+$/i.test(value)) return value;
+  if (/^www\.\S+$/i.test(value)) return `https://${value}`;
+  if (/^(?:mailto|tel):\S+$/i.test(value)) return value;
+  if (/^\/(?!\/)\S*$/.test(value)) return value;
+  return null;
+}
+
+/** Splits a line into text and links. Anything whose url we won't render stays exactly as typed. */
+export function parseInline(text: string): InlineSegment[] {
+  const segments: InlineSegment[] = [];
+  let last = 0;
+  for (const match of text.matchAll(LINK)) {
+    const start = match.index ?? 0;
+    if (start > last) segments.push({ type: "text", text: text.slice(last, start) });
+    const href = safeHref(match[2]);
+    segments.push(
+      href ? { type: "link", text: match[1], href } : { type: "text", text: match[0] },
+    );
+    last = start + match[0].length;
+  }
+  if (last < text.length) segments.push({ type: "text", text: text.slice(last) });
+  return segments;
+}
+
+/** The line as plain text — links reduced to their labels — for places that can't show a link. */
+export function stripLinks(text: string): string {
+  return text.replace(LINK, (whole, label: string, url: string) => (safeHref(url) ? label : whole));
+}
 
 /** Leading bullet glyph plus its optional emoji variation selector, e.g. "✔️ ", "• ", "- ". */
 const BULLET = /^(?:[✔✓•●▪‣·*+]|[-–—])️?\s+/u;
@@ -73,6 +126,17 @@ export function parseDescription(
     const bare = BARE_LABEL.exec(line);
     if (bare) {
       pushHeading(bare[1].trim());
+      continue;
+    }
+
+    // A line that is only a link becomes a button; consecutive ones sit together in a row.
+    const linkOnly = LINK_ONLY.exec(line);
+    const linkHref = linkOnly && safeHref(linkOnly[2]);
+    if (linkOnly && linkHref) {
+      const link = { text: linkOnly[1].trim(), href: linkHref };
+      const last = blocks[blocks.length - 1];
+      if (last?.type === "links") last.items.push(link);
+      else blocks.push({ type: "links", items: [link] });
       continue;
     }
 

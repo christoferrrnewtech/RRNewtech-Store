@@ -46,7 +46,7 @@ import { rememberOrderAddress } from "@/lib/customer-addresses";
 import { getAllProducts } from "@/lib/catalog";
 import { getBrandBySlug } from "@/lib/content";
 import { brandProductHref, brandProductSlugify, productImageUrl } from "@/lib/products";
-import { parseDescription } from "@/lib/product-description";
+import { parseDescription, stripLinks } from "@/lib/product-description";
 import { clampQuantity } from "@/lib/cart-item";
 import {
   createCheckoutSession,
@@ -160,7 +160,7 @@ function lineDescription(
   if (fromSummary) return fromSummary;
 
   const paragraph = parseDescription(description, name).find((b) => b.type === "paragraph");
-  return paragraph ? clean(paragraph.text) : "";
+  return paragraph ? clean(stripLinks(paragraph.text)) : "";
 }
 
 /**

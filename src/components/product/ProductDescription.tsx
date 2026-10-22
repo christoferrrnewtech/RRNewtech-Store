@@ -1,4 +1,100 @@
-import { parseDescription } from "@/lib/product-description";
+import { parseDescription, parseInline } from "@/lib/product-description";
+
+/** Off-site links open in a new tab so the shopper keeps their place on the product page. */
+function linkTarget(href: string) {
+  return /^https?:\/\//i.test(href) ? { target: "_blank", rel: "noopener noreferrer" } : {};
+}
+
+/** A line's text with any `[label](url)` links rendered as real links. */
+function InlineText({ text }: { text: string }) {
+  return parseInline(text).map((seg, i) =>
+    seg.type === "link" ? (
+      <a
+        key={i}
+        href={seg.href}
+        {...linkTarget(seg.href)}
+        className="font-medium text-brand-600 underline underline-offset-2 hover:text-brand-700"
+      >
+        {seg.text}
+      </a>
+    ) : (
+      seg.text
+    ),
+  );
+}
+
+/** Icon paths (24×24, stroked) for the kinds of link a card can hold. */
+const LINK_ICONS = {
+  // Document — brochures, spec sheets, Drive folders: most of what gets linked.
+  web: "M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5zM14 3v5h5M9 13h6M9 17h6",
+  mail: "M4 6h16v12H4zM4 7l8 6 8-6",
+  tel: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z",
+};
+
+/** The small grey line under a card's title, telling the shopper where the link goes. */
+function linkHint(href: string): { icon: keyof typeof LINK_ICONS; hint?: string } {
+  if (/^mailto:/i.test(href)) return { icon: "mail", hint: "Opens your email app" };
+  if (/^tel:/i.test(href)) return { icon: "tel", hint: "Tap to call" };
+  if (/^https?:\/\//i.test(href)) {
+    try {
+      const host = new URL(href).hostname.replace(/^www\./, "");
+      return { icon: "web", hint: `Opens in a new tab · ${host}` };
+    } catch {
+      return { icon: "web", hint: "Opens in a new tab" };
+    }
+  }
+  return { icon: "web" };
+}
+
+/**
+ * A line that is only a link ("View the brochure") — a tinted card rather than a plain button, so
+ * it reads as a resource to open and doesn't get lost in the description or compete with the solid
+ * blue Add to cart button.
+ */
+function LinkCard({ text, href }: { text: string; href: string }) {
+  const { icon, hint } = linkHint(href);
+  return (
+    <a
+      href={href}
+      {...linkTarget(href)}
+      className="group flex items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-4 transition-colors hover:border-brand-600 hover:bg-brand-100"
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d={LINK_ICONS[icon]}
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold leading-snug text-fg group-hover:text-brand-700">
+          {text}
+        </span>
+        {hint && <span className="block truncate text-sm text-muted">{hint}</span>}
+      </span>
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        className="shrink-0 text-brand-600 transition-transform group-hover:translate-x-0.5"
+        aria-hidden="true"
+      >
+        <path
+          d="M5 12h14M13 6l6 6-6 6"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </a>
+  );
+}
 
 /**
  * The body of the "Product details" section, shared by the brand PDP and the catalog PDP.
@@ -29,8 +125,18 @@ export function ProductDescription({
                 i === 0 ? "" : "pt-4",
               ].join(" ")}
             >
-              {block.text}
+              <InlineText text={block.text} />
             </h3>
+          );
+        }
+
+        if (block.type === "links") {
+          return (
+            <div key={i} className="grid gap-3 sm:grid-cols-2">
+              {block.items.map((link) => (
+                <LinkCard key={`${link.href}|${link.text}`} {...link} />
+              ))}
+            </div>
           );
         }
 
@@ -55,14 +161,20 @@ export function ProductDescription({
                       strokeLinejoin="round"
                     />
                   </svg>
-                  {item}
+                  <span>
+                    <InlineText text={item} />
+                  </span>
                 </li>
               ))}
             </ul>
           );
         }
 
-        return <p key={i}>{block.text}</p>;
+        return (
+          <p key={i}>
+            <InlineText text={block.text} />
+          </p>
+        );
       })}
     </div>
   );

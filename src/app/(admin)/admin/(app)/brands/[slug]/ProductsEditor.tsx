@@ -670,6 +670,11 @@ function ProductRow({
                 rows={4}
                 placeholder="Full description. One paragraph per line."
               />
+              <span className="mt-1 block text-xs text-muted-light">
+                To add a link, type <code>[Text to show](https://your-link)</code> — e.g.{" "}
+                <code>[Click here to view the brochure](https://…)</code>. On its own line it shows
+                as a highlighted card; inside a sentence it shows as a text link. Opens in a new tab.
+              </span>
             </label>
             <label className="block">
               <span className="text-xs font-medium text-muted">Highlights</span>

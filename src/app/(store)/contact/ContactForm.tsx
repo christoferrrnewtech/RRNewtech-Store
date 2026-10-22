@@ -125,8 +125,14 @@ export function ContactForm({
           name="message"
           rows={5}
           className={field}
-          defaultValue={product ? `I'd like a quote for ${product.name}.\n\n` : ""}
-          placeholder="Products, quantities, or the equipment you are planning for…"
+          // Deliberately left empty, even from a product page: a prefilled line let visitors send
+          // the request untouched, which told sales nothing beyond the product the hidden fields
+          // already attach. The placeholder names it instead, as a prompt rather than an answer.
+          placeholder={
+            product
+              ? `Quantity, configuration, or anything you'd like to know about ${product.name}…`
+              : "Products, quantities, or the equipment you are planning for…"
+          }
         />
       </label>
 
