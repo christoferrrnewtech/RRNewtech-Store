@@ -3,8 +3,24 @@ import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
 import type { Banner } from "@/lib/content";
-import { BODY_SIZE_PX, HEADING_SIZE_PX, scaled, type ButtonColors } from "@/lib/banner-style";
-import type { CSSProperties } from "react";
+import {
+  BODY_SIZE_PX,
+  HEADING_SIZE_PX,
+  bannerLines,
+  scaled,
+  type ButtonColors,
+} from "@/lib/banner-style";
+import { Fragment, type CSSProperties } from "react";
+
+/** Copy with each `<br>` (or newline) rendered as a real line break. */
+function Lines({ text }: { text: string }) {
+  return bannerLines(text).map((line, i) => (
+    <Fragment key={i}>
+      {i > 0 && <br />}
+      {line}
+    </Fragment>
+  ));
+}
 
 /**
  * An admin-picked button palette for the `custom` button variant, plus padding, text and corners
@@ -101,7 +117,7 @@ export function HeroSlide({
                   marginTop: scaled(20, 4),
                 }}
               >
-                {banner.heading}
+                <Lines text={banner.heading} />
               </Heading>
             )}
             {banner.body && (
@@ -113,7 +129,7 @@ export function HeroSlide({
                   marginTop: scaled(20, 4),
                 }}
               >
-                {banner.body}
+                <Lines text={banner.body} />
               </p>
             )}
             {(primaryCta || altCta) && (

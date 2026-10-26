@@ -33,6 +33,7 @@ import {
   BANNER_STYLE_DEFAULTS,
   TEXT_SIZE_LABELS,
   TEXT_SIZES,
+  bannerLines,
   bannerStyleFromForm,
   type ButtonColors,
   type TextSize,
@@ -212,7 +213,7 @@ function SlideRow({
             Slide {index + 1}
           </span>
           <span className="block truncate text-xs text-muted">
-            {banner.heading || banner.alt || "No alt text"}
+            {(banner.heading && bannerLines(banner.heading).join(" ")) || banner.alt || "No alt text"}
           </span>
         </span>
       </button>
@@ -504,7 +505,7 @@ function OverlayFields({ banner }: { banner?: Banner }) {
           </Field>
         </div>
 
-        <Field label="Heading" hint="Keep it short — it's set very large.">
+        <Field label="Heading" hint="Keep it short — it's set very large. Type <br> to start a new line.">
           <TextInput
             name="heading"
             defaultValue={banner?.heading}
@@ -520,7 +521,7 @@ function OverlayFields({ banner }: { banner?: Banner }) {
           </Field>
         </div>
 
-        <Field label="Body" hint="One or two sentences.">
+        <Field label="Body" hint="One or two sentences. Type <br> or press Enter to start a new line.">
           <TextArea name="body" rows={3} defaultValue={banner?.body} />
         </Field>
         <div className="grid gap-5 sm:grid-cols-2">

@@ -37,6 +37,15 @@ export const HEADING_SIZE_PX: Record<TextSize, number> = { sm: 48, md: 60, lg: 7
 /** Body font size at the reference width, per preset. */
 export const BODY_SIZE_PX: Record<TextSize, number> = { sm: 16, md: 18, lg: 20, xl: 24 };
 
+/**
+ * Overlay copy split into lines. Admins break a line by typing `<br>` (any of `<br>`, `<br/>`,
+ * `<br />`) or, in the body's textarea, pressing Enter. The copy is still rendered as text — the
+ * tag is never parsed as HTML.
+ */
+export function bannerLines(text: string): string[] {
+  return text.split(/<br\s*\/?>|\r?\n/i).map((line) => line.trim());
+}
+
 export type ButtonColors = {
   text: string;
   background: string;
