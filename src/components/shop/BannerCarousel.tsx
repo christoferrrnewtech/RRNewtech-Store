@@ -11,7 +11,8 @@ const AUTOPLAY_MS = 5000;
  * Storefront hero carousel: auto-advances (~5s), pauses on hover, and skips autoplay under
  * prefers-reduced-motion. Manual control is the row of bars at bottom-left — no arrows, since each
  * slide's own CTAs are the thing to click and floating arrows fought them for attention. Slides
- * share a min-height so differing image sizes don't shift the layout. Rendered only for 2+ banners;
+ * stack in one grid cell, so the section takes the tallest slide's height and doesn't jump between
+ * slides. Rendered only for 2+ banners;
  * StoreHero handles the 0/1 cases.
  */
 export function BannerCarousel({ banners }: { banners: Banner[] }) {
@@ -34,7 +35,7 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
     <section
       aria-roledescription="carousel"
       aria-label="Promotions"
-      className="relative w-full overflow-hidden bg-brand-50"
+      className="@container relative w-full overflow-hidden bg-brand-50"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
@@ -60,8 +61,10 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
         ))}
       </div>
 
-      {/* Indicators — bars, aligned with the copy above them rather than centered. */}
-      <Container className="pointer-events-none absolute inset-x-0 bottom-8">
+      {/* Indicators — bars, aligned with the copy above them rather than centered. The offset
+          scales with the slide like its copy does, so it stays inside the copy's bottom padding
+          instead of landing on the buttons of a phone-sized slide. */}
+      <Container className="pointer-events-none absolute inset-x-0 bottom-[clamp(6px,2.222cqw,32px)]">
         <div className="pointer-events-auto flex gap-2">
           {banners.map((b, i) => (
             <button

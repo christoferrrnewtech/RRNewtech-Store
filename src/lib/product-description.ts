@@ -45,6 +45,55 @@ export function safeHref(url: string): string | null {
   return null;
 }
 
+/**
+ * How a link opens in the on-page PDF viewer instead of a new tab. `src` is what the viewer loads:
+ * Drive files go through our own route (Drive sends no CORS headers, so the browser can't fetch
+ * them directly); a direct PDF link is loaded as-is.
+ */
+export type DocumentViewer = { kind: "drive" | "pdf"; src: string };
+
+/** Drive file links: `/file/d/<id>/view`, `/open?id=<id>`, `/uc?id=<id>&export=download`. */
+const DRIVE_FILE = /^\/file\/(?:u\/\d+\/)?d\/([\w-]{10,})/;
+export const DRIVE_ID = /^[\w-]{10,}$/;
+
+function parseHref(href: string): URL | null {
+  try {
+    // The base only resolves on-site paths like "/files/brochure.pdf"; it's never used as a src.
+    const url = new URL(href, "https://site.invalid");
+    return /^https?:$/.test(url.protocol) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The Drive file id a link points at, or null if it isn't a Drive file link. */
+export function driveFileId(href: string): string | null {
+  const url = parseHref(href);
+  if (url?.hostname !== "drive.google.com") return null;
+  const id = DRIVE_FILE.exec(url.pathname)?.[1] ?? url.searchParams.get("id");
+  return id && DRIVE_ID.test(id) ? id : null;
+}
+
+/** The viewer for a (safe) href, or null if it's not a document we can show on the page. */
+export function documentViewer(href: string): DocumentViewer | null {
+  const url = parseHref(href);
+  if (!url) return null;
+
+  if (url.hostname === "drive.google.com") {
+    const id = driveFileId(href);
+    return id ? { kind: "drive", src: `/api/documents/drive/${id}` } : null;
+  }
+
+  // Firebase Storage puts the object path in one percent-encoded segment (…/o/docs%2Fspec.pdf).
+  let path = url.pathname;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // Malformed escapes — test the raw path.
+  }
+  return /\.pdf$/i.test(path) ? { kind: "pdf", src: href } : null;
+}
+
 /** Splits a line into text and links. Anything whose url we won't render stays exactly as typed. */
 export function parseInline(text: string): InlineSegment[] {
   const segments: InlineSegment[] = [];

@@ -1,22 +1,52 @@
-import { parseDescription, parseInline } from "@/lib/product-description";
+import type { ReactNode } from "react";
+import { documentViewer, parseDescription, parseInline } from "@/lib/product-description";
+import { DocumentButton } from "./DocumentButton";
 
 /** Off-site links open in a new tab so the shopper keeps their place on the product page. */
 function linkTarget(href: string) {
   return /^https?:\/\//i.test(href) ? { target: "_blank", rel: "noopener noreferrer" } : {};
 }
 
+/** A description link. PDFs and Drive files open in the on-page viewer; anything else is a plain link.
+ *  `className` must work on a <button> as well as an <a>. */
+function DescriptionLink({
+  href,
+  title,
+  className,
+  children,
+}: {
+  href: string;
+  title: string;
+  className: string;
+  children: ReactNode;
+}) {
+  const viewer = documentViewer(href);
+  if (viewer) {
+    return (
+      <DocumentButton viewer={viewer} title={title} className={className}>
+        {children}
+      </DocumentButton>
+    );
+  }
+  return (
+    <a href={href} {...linkTarget(href)} className={className}>
+      {children}
+    </a>
+  );
+}
+
 /** A line's text with any `[label](url)` links rendered as real links. */
 function InlineText({ text }: { text: string }) {
   return parseInline(text).map((seg, i) =>
     seg.type === "link" ? (
-      <a
+      <DescriptionLink
         key={i}
         href={seg.href}
-        {...linkTarget(seg.href)}
+        title={seg.text}
         className="font-medium text-brand-600 underline underline-offset-2 hover:text-brand-700"
       >
         {seg.text}
-      </a>
+      </DescriptionLink>
     ) : (
       seg.text
     ),
@@ -35,6 +65,12 @@ const LINK_ICONS = {
 function linkHint(href: string): { icon: keyof typeof LINK_ICONS; hint?: string } {
   if (/^mailto:/i.test(href)) return { icon: "mail", hint: "Opens your email app" };
   if (/^tel:/i.test(href)) return { icon: "tel", hint: "Tap to call" };
+  const viewer = documentViewer(href);
+  if (viewer?.kind === "drive") return { icon: "web", hint: "Opens a preview · Google Drive" };
+  if (viewer) {
+    const host = /^https?:\/\//i.test(href) ? new URL(href).hostname.replace(/^www\./, "") : "";
+    return { icon: "web", hint: host ? `PDF · Opens a preview · ${host}` : "PDF · Opens a preview" };
+  }
   if (/^https?:\/\//i.test(href)) {
     try {
       const host = new URL(href).hostname.replace(/^www\./, "");
@@ -49,15 +85,15 @@ function linkHint(href: string): { icon: keyof typeof LINK_ICONS; hint?: string 
 /**
  * A line that is only a link ("View the brochure") — a tinted card rather than a plain button, so
  * it reads as a resource to open and doesn't get lost in the description or compete with the solid
- * blue Add to cart button.
+ * blue Add to cart button. PDFs and Drive files open in the on-page viewer rather than a new tab.
  */
 function LinkCard({ text, href }: { text: string; href: string }) {
   const { icon, hint } = linkHint(href);
   return (
-    <a
+    <DescriptionLink
       href={href}
-      {...linkTarget(href)}
-      className="group flex items-center gap-4 rounded-2xl border border-brand-200 bg-brand-50 p-4 transition-colors hover:border-brand-600 hover:bg-brand-100"
+      title={text}
+      className="group flex w-full items-center gap-4 rounded-2xl text-left border border-brand-200 bg-brand-50 p-4 transition-colors hover:border-brand-600 hover:bg-brand-100"
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -92,7 +128,7 @@ function LinkCard({ text, href }: { text: string; href: string }) {
           strokeLinejoin="round"
         />
       </svg>
-    </a>
+    </DescriptionLink>
   );
 }
 

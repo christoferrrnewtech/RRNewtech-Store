@@ -15,20 +15,27 @@ export const TEXT_SIZE_LABELS: Record<TextSize, string> = {
   xl: "Extra large",
 };
 
-/** Each preset still steps up from phone to desktop, so a big heading doesn't overflow a phone. */
-export const HEADING_SIZE_CLASSES: Record<TextSize, string> = {
-  sm: "text-3xl sm:text-4xl lg:text-5xl",
-  md: "text-4xl sm:text-5xl lg:text-6xl",
-  lg: "text-5xl sm:text-6xl lg:text-7xl",
-  xl: "text-5xl sm:text-7xl lg:text-8xl",
-};
+/**
+ * Banner width the overlay is designed at. The slide is a fixed 2.7:1 at every screen size, so its
+ * copy scales with the slide's width (`cqw`) from this reference rather than stepping at
+ * breakpoints — the text keeps the same place on the artwork on a phone as on a desktop.
+ */
+const REFERENCE_WIDTH = 1440;
 
-export const BODY_SIZE_CLASSES: Record<TextSize, string> = {
-  sm: "text-sm lg:text-base",
-  md: "text-base lg:text-lg",
-  lg: "text-lg lg:text-xl",
-  xl: "text-xl lg:text-2xl",
-};
+/**
+ * `px` at the reference width, scaled with the slide's width; never above `px` (big monitors keep
+ * desktop-sized text) or below `minPx` (so it stays readable on a phone). Needs an `@container`
+ * ancestor whose width is the slide's.
+ */
+export function scaled(px: number, minPx: number): string {
+  return `clamp(${minPx}px, ${((px / REFERENCE_WIDTH) * 100).toFixed(3)}cqw, ${px}px)`;
+}
+
+/** Heading font size at the reference width, per preset. */
+export const HEADING_SIZE_PX: Record<TextSize, number> = { sm: 48, md: 60, lg: 72, xl: 96 };
+
+/** Body font size at the reference width, per preset. */
+export const BODY_SIZE_PX: Record<TextSize, number> = { sm: 16, md: 18, lg: 20, xl: 24 };
 
 export type ButtonColors = {
   text: string;

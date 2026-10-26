@@ -673,7 +673,9 @@ function ProductRow({
               <span className="mt-1 block text-xs text-muted-light">
                 To add a link, type <code>[Text to show](https://your-link)</code> — e.g.{" "}
                 <code>[Click here to view the brochure](https://…)</code>. On its own line it shows
-                as a highlighted card; inside a sentence it shows as a text link. Opens in a new tab.
+                as a highlighted card; inside a sentence it shows as a text link. PDF and Google Drive PDF
+                links open in a view-only viewer on the page (Drive files must be shared as
+                &ldquo;Anyone with the link&rdquo;); other links open in a new tab.
               </span>
             </label>
             <label className="block">

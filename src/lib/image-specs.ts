@@ -10,7 +10,7 @@ export type ImageSpec = { size: string; tip: string };
 export const IMAGE_SPECS = {
   banner: {
     size: "2978 × 1102 px (2.7:1)",
-    tip: "Saved up to 3000 × 1110 at 90% quality. The homepage trims the sides on smaller screens, so keep text and products near the centre. Export as JPG to stay under 5 MB.",
+    tip: "Saved up to 3000 × 1110 at 90% quality. Shown whole at 2.7:1 on every screen, so this shape isn't cropped; the slide's text scales down with it on phones. Export as JPG to stay under 5 MB.",
   },
   brandHero: {
     size: "2978 × 1102 px (2.7:1)",
