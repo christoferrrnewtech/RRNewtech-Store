@@ -9,8 +9,9 @@ const AUTOPLAY_MS = 5000;
 
 /**
  * Storefront hero carousel: auto-advances (~5s), pauses on hover, and skips autoplay under
- * prefers-reduced-motion. Manual control is the row of bars at bottom-left — no arrows, since each
- * slide's own CTAs are the thing to click and floating arrows fought them for attention. Slides
+ * prefers-reduced-motion. Manual control is the row of bars at bottom-left plus prev/next arrows on
+ * the slide edges. With a mouse the arrows only appear while the carousel is hovered, so they don't
+ * compete with each slide's own CTAs; on touch screens (no hover) they're always shown. Slides
  * stack in one grid cell, so the section takes the tallest slide's height and doesn't jump between
  * slides. Rendered only for 2+ banners;
  * StoreHero handles the 0/1 cases.
@@ -19,8 +20,11 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const count = banners.length;
+  const prev = () => setIndex((i) => (i - 1 + count) % count);
+  const next = () => setIndex((i) => (i + 1) % count);
 
-  // Autoplay, unless paused (hover/focus) or the user prefers reduced motion.
+  // Autoplay, unless paused (hover/focus) or the user prefers reduced motion. Keyed on `index` too,
+  // so a manual change gives the new slide its full interval instead of flipping away early.
   const reduced = useRef(false);
   useEffect(() => {
     reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -29,13 +33,13 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
     if (paused || reduced.current) return;
     const t = setInterval(() => setIndex((i) => (i + 1) % count), AUTOPLAY_MS);
     return () => clearInterval(t);
-  }, [paused, count]);
+  }, [paused, count, index]);
 
   return (
     <section
       aria-roledescription="carousel"
       aria-label="Promotions"
-      className="@container relative w-full overflow-hidden bg-brand-50"
+      className="group @container relative w-full overflow-hidden bg-brand-50"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
@@ -61,6 +65,10 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
         ))}
       </div>
 
+      {/* Prev/next arrows, vertically centered on the slide edges and sized with the slide. */}
+      <ArrowButton direction="prev" onClick={prev} />
+      <ArrowButton direction="next" onClick={next} />
+
       {/* Indicators — bars, aligned with the copy above them rather than centered. The offset
           scales with the slide like its copy does, so it stays inside the copy's bottom padding
           instead of landing on the buttons of a phone-sized slide. */}
@@ -82,5 +90,41 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
         </div>
       </Container>
     </section>
+  );
+}
+
+function ArrowButton({
+  direction,
+  onClick,
+}: {
+  direction: "prev" | "next";
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={direction === "prev" ? "Previous banner" : "Next banner"}
+      className={[
+        "absolute top-1/2 grid size-[clamp(24px,2.778cqw,44px)] -translate-y-1/2 place-items-center rounded-full bg-white/80 text-brand-600 shadow-sm transition hover:bg-white",
+        "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100",
+        direction === "prev"
+          ? "left-[clamp(4px,1.111cqw,16px)]"
+          : "right-[clamp(4px,1.111cqw,16px)]",
+      ].join(" ")}
+    >
+      <svg
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden
+        className={["size-[60%]", direction === "next" ? "rotate-180" : ""].join(" ")}
+      >
+        <path
+          fillRule="evenodd"
+          d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    </button>
   );
 }
