@@ -16,7 +16,7 @@ export const TEXT_SIZE_LABELS: Record<TextSize, string> = {
 };
 
 /**
- * Banner width the overlay is designed at. The slide is a fixed 2.7:1 at every screen size, so its
+ * Banner width the overlay is designed at. The slide is a fixed shape at every screen size, so its
  * copy scales with the slide's width (`cqw`) from this reference rather than stepping at
  * breakpoints — the text keeps the same place on the artwork on a phone as on a desktop.
  */

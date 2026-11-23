@@ -253,16 +253,7 @@ function EditPanel({ banner, index }: { banner: Banner; index: number }) {
         <form action={action} onChange={onFormChange} className="space-y-6">
           <input type="hidden" name="id" value={banner.id} />
           <SlidePreview banner={draft} />
-          <FormSection title="Image">
-            <ImageInput
-              name="image"
-              current={banner.image}
-              spec={IMAGE_SPECS.banner}
-              stacked
-              aspect="aspect-[1489/551]"
-              hint="PNG, JPG or WebP · up to 5 MB"
-            />
-          </FormSection>
+          <ImageFields banner={banner} />
           <BasicsFields banner={banner} />
           <OverlayFields banner={banner} />
           <SaveBar state={state} label="Save slide" />
@@ -303,21 +294,48 @@ function AddPanel() {
     <Panel title="Add a slide" description="It appears at the top of the storefront right away.">
       <form action={action} onChange={onFormChange} className="space-y-6">
         <SlidePreview banner={draft} />
-        <FormSection title="Image">
-          <ImageInput
-            name="image"
-            required
-            spec={IMAGE_SPECS.banner}
-            stacked
-            aspect="aspect-[1489/551]"
-            hint="PNG, JPG or WebP · up to 5 MB"
-          />
-        </FormSection>
+        <ImageFields />
         <BasicsFields />
         <OverlayFields />
         <SaveBar state={state} label="Add slide" pendingLabel="Adding…" />
       </form>
     </Panel>
+  );
+}
+
+/** The main artwork, plus the optional phone-only one that replaces it under 768px. */
+function ImageFields({ banner }: { banner?: Banner }) {
+  return (
+    <FormSection
+      title="Images"
+      description="Phones always show a 2.16:1 slide. Without a phone image, they show the main image with its left and right edges trimmed to fit."
+    >
+      <Field label="Main image" hint="Tablets and desktops, and phones when there's no phone image." group>
+        <ImageInput
+          name="image"
+          current={banner?.image}
+          required={!banner}
+          spec={IMAGE_SPECS.banner}
+          stacked
+          aspect="aspect-[1489/551]"
+          hint="PNG, JPG or WebP · up to 5 MB"
+        />
+      </Field>
+      <Field label="Phone image (optional)" hint="Shown instead on screens under 768px wide." group>
+        <div className="max-w-sm">
+          <ImageInput
+            name="mobileImage"
+            current={banner?.mobileImage}
+            spec={IMAGE_SPECS.bannerMobile}
+            stacked
+            aspect="aspect-[1191/551]"
+            hint="PNG, JPG or WebP · up to 5 MB"
+            removeName="removeMobileImage"
+            removeLabel="Remove the phone image (phones show the main image, trimmed)"
+          />
+        </div>
+      </Field>
+    </FormSection>
   );
 }
 
@@ -342,15 +360,14 @@ function BasicsFields({ banner }: { banner?: Banner }) {
  */
 function useDraftBanner(base: Banner) {
   const [draft, setDraft] = useState(base);
-  // The picked file's blob URL, reused while the same file stays picked and revoked when it changes.
-  const picked = useRef<{ file: File; url: string } | null>(null);
+  // Each picked file's blob URL, by field — reused while the same file stays picked and revoked
+  // when it changes.
+  const picked = useRef(new Map<string, { file: File; url: string }>());
 
-  useEffect(
-    () => () => {
-      if (picked.current) URL.revokeObjectURL(picked.current.url);
-    },
-    [],
-  );
+  useEffect(() => {
+    const urls = picked.current;
+    return () => urls.forEach((p) => URL.revokeObjectURL(p.url));
+  }, []);
 
   function onFormChange(e: FormEvent<HTMLFormElement>) {
     const form = e.currentTarget;
@@ -362,20 +379,26 @@ function useDraftBanner(base: Banner) {
         const v = data.get(key);
         return typeof v === "string" && v.trim() ? v.trim() : undefined;
       };
-
-      let image = base.image;
-      const file = data.get("image");
-      if (file instanceof File && file.size > 0) {
-        if (picked.current?.file !== file) {
-          if (picked.current) URL.revokeObjectURL(picked.current.url);
-          picked.current = { file, url: URL.createObjectURL(file) };
+      /** The picked file's blob URL for `key`, or undefined when none is picked. */
+      const pickedUrl = (key: string) => {
+        const file = data.get(key);
+        const prev = picked.current.get(key);
+        if (!(file instanceof File) || file.size === 0) return undefined;
+        if (prev?.file !== file) {
+          if (prev) URL.revokeObjectURL(prev.url);
+          picked.current.set(key, { file, url: URL.createObjectURL(file) });
         }
-        image = picked.current.url;
-      }
+        return picked.current.get(key)!.url;
+      };
+
+      const mobileImage =
+        pickedUrl("mobileImage") ??
+        (data.get("removeMobileImage") === "1" ? undefined : base.mobileImage);
 
       setDraft({
         ...base,
-        image,
+        image: pickedUrl("image") ?? base.image,
+        mobileImage,
         eyebrow: str("eyebrow"),
         heading: str("heading"),
         body: str("body"),
@@ -391,44 +414,84 @@ function useDraftBanner(base: Banner) {
   return [draft, onFormChange] as const;
 }
 
-/** Desktop width the preview is laid out at, then scaled down to fit the panel. */
+/** Widths the previews are laid out at, then scaled down to fit the panel. */
 const PREVIEW_WIDTH = 1440;
+/** A typical phone (iPhone 12–15). */
+const PHONE_PREVIEW_WIDTH = 390;
 
 /**
- * The real storefront slide, drawn at desktop width and shrunk to fit. Clicks are swallowed so a
- * stray click on a button doesn't navigate away from unsaved edits — but hover still works, which
- * is how the buttons' highlight color gets checked.
+ * The real storefront slide, drawn at desktop and phone width and shrunk to fit. Clicks are
+ * swallowed so a stray click on a button doesn't navigate away from unsaved edits — but hover
+ * still works, which is how the buttons' highlight color gets checked.
  */
 function SlidePreview({ banner }: { banner: Banner }) {
-  const frame = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.5);
-
-  useEffect(() => {
-    const el = frame.current;
-    if (!el) return;
-    const observer = new ResizeObserver(([entry]) =>
-      setScale(entry.contentRect.width / PREVIEW_WIDTH),
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-wider text-brand-700">Preview</p>
       <p className="mt-1 text-sm text-muted">
         Updates as you edit. Hover the buttons to see their highlight color.
       </p>
+      <div className="mt-3 space-y-4">
+        <ScaledSlide
+          banner={banner}
+          layout="desktop"
+          width={PREVIEW_WIDTH}
+          caption="Desktop and tablet"
+        />
+        <ScaledSlide
+          banner={banner}
+          layout="phone"
+          width={PHONE_PREVIEW_WIDTH}
+          caption={
+            banner.mobileImage
+              ? "Phone · phone image, 2.16:1"
+              : "Phone · no phone image, so the main image is trimmed to 2.16:1"
+          }
+          className="max-w-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** One preview: the slide laid out at `width` px, zoomed to the frame's actual width. */
+function ScaledSlide({
+  banner,
+  layout,
+  width,
+  caption,
+  className = "",
+}: {
+  banner: Banner;
+  layout: "desktop" | "phone";
+  width: number;
+  caption: string;
+  className?: string;
+}) {
+  const frame = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.5);
+
+  useEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setScale(entry.contentRect.width / width));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [width]);
+
+  return (
+    <figure className={className}>
       <div
         ref={frame}
         onClickCapture={(e) => e.preventDefault()}
-        className="mt-3 overflow-hidden rounded-xl border border-line"
+        className="overflow-hidden rounded-xl border border-line"
       >
-        <div style={{ width: PREVIEW_WIDTH, zoom: scale }}>
-          <HeroSlide banner={banner} headingLevel="h2" />
+        <div style={{ width, zoom: scale }}>
+          <HeroSlide banner={banner} headingLevel="h2" layout={layout} />
         </div>
       </div>
-    </div>
+      <figcaption className="mt-1.5 text-xs text-muted">{caption}</figcaption>
+    </figure>
   );
 }
 

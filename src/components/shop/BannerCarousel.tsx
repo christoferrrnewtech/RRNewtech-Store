@@ -6,13 +6,15 @@ import { HeroSlide } from "@/components/home/HeroSlide";
 import type { Banner } from "@/lib/content";
 
 const AUTOPLAY_MS = 5000;
+/** Horizontal travel a touch needs before it counts as a swipe rather than a tap. */
+const SWIPE_PX = 40;
 
 /**
  * Storefront hero carousel: auto-advances (~5s), pauses on hover, and skips autoplay under
- * prefers-reduced-motion. Manual control is the row of bars at bottom-left plus prev/next arrows on
- * the slide edges. With a mouse the arrows only appear while the carousel is hovered, so they don't
- * compete with each slide's own CTAs; on touch screens (no hover) they're always shown. Slides
- * stack in one grid cell, so the section takes the tallest slide's height and doesn't jump between
+ * prefers-reduced-motion. Manual control is the row of bars at bottom-left, plus prev/next arrows
+ * on the slide edges with a mouse or a horizontal swipe on touch screens. The arrows only appear
+ * while the carousel is hovered, so they don't compete with each slide's own CTAs, and aren't
+ * rendered at all for touch (`pointer-fine:grid`) — swiping covers it there. Slides stack in one grid cell, so the section takes the tallest slide's height and doesn't jump between
  * slides. Rendered only for 2+ banners;
  * StoreHero handles the 0/1 cases.
  */
@@ -35,11 +37,38 @@ export function BannerCarousel({ banners }: { banners: Banner[] }) {
     return () => clearInterval(t);
   }, [paused, count, index]);
 
+  // Swipe: compare where the finger lifted with where it landed. Autoplay holds while a finger is
+  // down so the slide can't change under it. A mostly-vertical drag is the page scrolling, not a
+  // swipe — `touch-action: pan-y` hands those to the browser and keeps horizontal ones for us.
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStart.current = { x: t.clientX, y: t.clientY };
+    setPaused(true);
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    setPaused(false);
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    if (Math.abs(dx) < SWIPE_PX || Math.abs(dx) < Math.abs(t.clientY - start.y)) return;
+    if (dx < 0) next();
+    else prev();
+  };
+
   return (
     <section
       aria-roledescription="carousel"
       aria-label="Promotions"
-      className="group @container relative w-full overflow-hidden bg-brand-50"
+      className="group @container relative w-full touch-pan-y overflow-hidden bg-brand-50"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={() => {
+        touchStart.current = null;
+        setPaused(false);
+      }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
@@ -106,8 +135,8 @@ function ArrowButton({
       onClick={onClick}
       aria-label={direction === "prev" ? "Previous banner" : "Next banner"}
       className={[
-        "absolute top-1/2 grid size-[clamp(24px,2.778cqw,44px)] -translate-y-1/2 place-items-center rounded-full bg-white/80 text-brand-600 shadow-sm transition hover:bg-white",
-        "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100",
+        "absolute top-1/2 hidden size-[clamp(24px,2.778cqw,44px)] -translate-y-1/2 place-items-center rounded-full bg-white/80 text-brand-600 shadow-sm transition hover:bg-white",
+        "pointer-fine:grid pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100",
         direction === "prev"
           ? "left-[clamp(4px,1.111cqw,16px)]"
           : "right-[clamp(4px,1.111cqw,16px)]",
