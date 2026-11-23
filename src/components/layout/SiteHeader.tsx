@@ -148,6 +148,12 @@ export function SiteHeader({
             </div>
           </Container>
 
+          {/* Search (mobile) — its own row under the logo rather than tucked in the drawer, so the
+              store's main action is one tap away on a phone too. */}
+          <Container className="pb-3 lg:hidden">
+            <SearchBar className="w-full" productCount={productCount} />
+          </Container>
+
           {/* Row 2 — nav strip (desktop). Text-only and left-aligned: the search field above is
               already busy, and icons on both rows made the header shout. */}
           <nav className="hidden border-t border-line lg:block" aria-label="Primary">
@@ -226,8 +232,6 @@ export function SiteHeader({
         {mobileOpen && (
           <nav className="border-t border-line lg:hidden" aria-label="Mobile">
             <Container className="flex flex-col gap-1 py-4">
-              <SearchBar className="mb-2 w-full" onSubmitted={closeAll} productCount={productCount} />
-
               {navItems.map((item) => {
                 const Icon = NAV_ICONS[item.icon];
                 if (item.menu) {

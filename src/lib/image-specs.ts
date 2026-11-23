@@ -10,7 +10,11 @@ export type ImageSpec = { size: string; tip: string };
 export const IMAGE_SPECS = {
   banner: {
     size: "2978 × 1102 px (2.7:1)",
-    tip: "Saved up to 3000 × 1110 at 90% quality. Shown whole at 2.7:1 on every screen, so this shape isn't cropped; the slide's text scales down with it on phones. Export as JPG to stay under 5 MB.",
+    tip: "Saved up to 3000 × 1110 at 90% quality. Shown whole at 2.7:1 on tablets and desktops. Phones use a 2.16:1 slide: without a phone image, this one fills it with about 10% trimmed off the left and right, so keep logos and key artwork inside the middle 80%. Export as JPG to stay under 5 MB.",
+  },
+  bannerMobile: {
+    size: "2382 × 1102 px (2.16:1)",
+    tip: "Optional. Replaces the main image on phones (under 768px wide), shown whole in the 2.16:1 phone slide. Leave it empty and phones show the main image with its left and right edges trimmed to fit. Export as JPG to stay under 5 MB.",
   },
   brandHero: {
     size: "2978 × 1102 px (2.7:1)",

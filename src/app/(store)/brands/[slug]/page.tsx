@@ -52,9 +52,9 @@ export default async function BrandPage({
 
   return (
     <>
-      {/* Full-bleed brand band, flush under the sticky header. Shares the storefront hero's
-          1489/551 box (see BannerCarousel) so a brand page opens at the same height as the
-          landing page — the earlier fixed heights showed only ~half of a typical hero upload.
+      {/* Full-bleed brand band, flush under the sticky header. Uses the 1489/551 upload
+          shape, so the artwork is shown whole — the earlier fixed heights showed only ~half of a
+          typical hero upload.
           Brands with no artwork get the brand gradient at that same height, keeping one
           structure across every brand page. */}
       <section className="relative aspect-[1489/551] w-full overflow-hidden bg-brand-900">

@@ -108,6 +108,11 @@ export type Brand = {
 export type Banner = {
   id: string;
   image: string;
+  /**
+   * Optional phone-only artwork (2382×1102, 2.16:1), shown below md in place of `image`. When it's
+   * missing, phones show `image` in the same 2.16:1 slide, with its left and right edges trimmed.
+   */
+  mobileImage?: string;
   alt: string;
   href: string;
   order: number;
@@ -217,6 +222,7 @@ function toBanner(id: string, v: Record<string, unknown>): Banner {
   return {
     id,
     image: String(v.image ?? ""),
+    mobileImage: opt(v.mobileImage),
     alt: String(v.alt ?? ""),
     href: String(v.href ?? ""),
     order: typeof v.order === "number" ? v.order : 0,

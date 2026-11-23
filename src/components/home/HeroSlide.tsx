@@ -1,4 +1,4 @@
-import Image from "next/image";
+import Image, { getImageProps } from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { LinkButton } from "@/components/ui/Button";
@@ -37,6 +37,57 @@ function buttonStyle(c: ButtonColors): CSSProperties {
   } as CSSProperties;
 }
 
+type SlideLayout = "responsive" | "phone" | "desktop";
+
+/** Tailwind's `md` and up, where the main artwork takes over from the phone one. */
+const DESKTOP_QUERY = "(min-width: 768px)";
+
+/**
+ * The slide's shape: 2.16:1 (1191×551) on phones, 2.7:1 (1489×551) from md up, whichever image is
+ * shown. Spelled out in full so Tailwind sees the classes.
+ */
+function aspectClass(layout: SlideLayout) {
+  if (layout === "desktop") return "aspect-[1489/551]";
+  if (layout === "phone") return "aspect-[1191/551]";
+  return "aspect-[1191/551] md:aspect-[1489/551]";
+}
+
+/**
+ * The slide's artwork. With a phone image on the storefront this is a `<picture>`, so the browser
+ * downloads only the one it shows; otherwise a single image.
+ */
+function SlideImage({
+  banner,
+  priority,
+  layout,
+}: {
+  banner: Banner;
+  priority: boolean;
+  layout: SlideLayout;
+}) {
+  const common = { fill: true, priority, quality: 85, sizes: "100vw" } as const;
+  const mobile = banner.mobileImage;
+
+  if (!mobile || layout !== "responsive") {
+    const src = mobile && layout === "phone" ? mobile : banner.image;
+    return <Image {...common} src={src} alt={banner.alt} className="object-cover" />;
+  }
+
+  const {
+    props: { srcSet: desktopSrcSet },
+  } = getImageProps({ ...common, src: banner.image, alt: banner.alt });
+  const { props } = getImageProps({ ...common, src: mobile, alt: banner.alt });
+
+  return (
+    // Positioned so it fills the frame instead of taking a grid cell of its own.
+    <picture className="absolute inset-0">
+      <source media={DESKTOP_QUERY} srcSet={desktopSrcSet} sizes={common.sizes} />
+      {/* getImageProps supplies the optimized src, srcSet and loading attributes. */}
+      <img {...props} alt={banner.alt} className="object-cover" />
+    </picture>
+  );
+}
+
 /**
  * One full-bleed hero slide: photo with the banner's copy laid directly over it.
  *
@@ -46,11 +97,12 @@ function buttonStyle(c: ButtonColors): CSSProperties {
  *
  * Colors and sizes come from `banner.style`, which the admin sets per slide.
  *
- * The slide is locked to 2.7:1 (1489×551, the shape admins are told to upload), so the banner is
- * shown whole and only scales — it used to fill a fixed 520/620px height and lost its sides or
- * top/bottom depending on the screen. The copy scales with it (see `scaled`), down to a readable
- * floor on phones. If a long overlay still outgrows the 2.7:1 box, the frame grows to fit it and
- * the image covers the taller frame rather than the text being clipped.
+ * From md up the slide is 2.7:1 (1489×551) and shows the main image whole. On phones it's 2.16:1
+ * (1191×551) so the hero isn't a thin strip: it shows the slide's phone image, made for that shape,
+ * or — without one — the main image as uploaded, which `object-cover` trims ~10% off each side of.
+ * It used to fill a fixed 520/620px height and lost different parts depending on the screen. The copy scales with the slide (see
+ * `scaled`), down to a readable floor on phones. If a long overlay still outgrows the box, the
+ * frame grows to fit it and the image covers the taller frame rather than the text being clipped.
  *
  * Shared by the single-banner and carousel paths so the two can't drift apart.
  */
@@ -58,12 +110,18 @@ export function HeroSlide({
   banner,
   priority = false,
   headingLevel = "h1",
+  layout = "responsive",
 }: {
   banner: Banner;
   /** True for the first slide — it's the LCP element. */
   priority?: boolean;
   /** Slides after the first aren't the page's h1. */
   headingLevel?: "h1" | "h2";
+  /**
+   * Which artwork and shape to use. `responsive` (the storefront) switches at md by viewport;
+   * `phone`/`desktop` pin one, so the admin can preview both on one desktop screen.
+   */
+  layout?: SlideLayout;
 }) {
   const Heading = headingLevel;
   const hasCopy = Boolean(banner.eyebrow || banner.heading || banner.body);
@@ -75,19 +133,12 @@ export function HeroSlide({
 
   const content = (
     <>
-      {/* Sets the 2.7:1 height. Not positioned, so the image's `fill` covers the whole frame —
-          identical to this box unless overlay copy has made the frame taller. */}
-      <div className="col-start-1 row-start-1 aspect-[1489/551] w-full" />
+      {/* Sets the height to the shown artwork's shape. Not positioned, so the image's `fill`
+          covers the whole frame — identical to this box unless overlay copy has made the frame
+          taller. */}
+      <div className={`col-start-1 row-start-1 w-full ${aspectClass(layout)}`} />
       {banner.image ? (
-        <Image
-          src={banner.image}
-          alt={banner.alt}
-          fill
-          priority={priority}
-          quality={85}
-          sizes="100vw"
-          className="object-cover"
-        />
+        <SlideImage banner={banner} priority={priority} layout={layout} />
       ) : (
         // No artwork yet — a pale brand-blue field still reads as a designed hero, and keeps the
         // blue copy legible.

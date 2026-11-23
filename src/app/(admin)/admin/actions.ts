@@ -247,8 +247,10 @@ export async function addBannerAction(
   try {
     const image = await storeUpload(form.get("image"), "banner", BANNER_IMAGE_BOX);
     if (!image) return { error: "Choose an image for the banner." };
+    const mobileImage = await storeUpload(form.get("mobileImage"), "banner-mobile", BANNER_IMAGE_BOX);
     await addBanner({
       image,
+      ...(mobileImage && { mobileImage }),
       alt: text(form, "alt"),
       href: text(form, "href"),
       ...bannerOverlay(form),
@@ -276,6 +278,15 @@ export async function updateBannerAction(
       ...bannerOverlay(form),
     };
     if (uploaded) patch.image = uploaded;
+    // A new phone image wins over the remove box; removing stores "", which reads back as "none",
+    // so phones fall back to the main image.
+    const mobileUploaded = await storeUpload(
+      form.get("mobileImage"),
+      "banner-mobile",
+      BANNER_IMAGE_BOX,
+    );
+    if (mobileUploaded) patch.mobileImage = mobileUploaded;
+    else if (form.get("removeMobileImage") === "1") patch.mobileImage = "";
     await updateBanner(id, patch);
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not save the banner." };
